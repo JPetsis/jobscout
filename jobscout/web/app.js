@@ -9,6 +9,8 @@
 let ALL = [];                 // every match, unfiltered
 let STATS = {};               // header numbers
 const F = { q: '', band: 'all', source: 'all', status: 'new' };
+let CURRENT = null;           // posting shown in the detail pane
+let POLL = null;              // scan poll timer
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -34,6 +36,7 @@ async function boot() {
     fillSources(sources || []);
     renderStats();
     wireFilters();
+    wirePanes();
     render();
   } catch (e) {
     fail(e);
@@ -45,6 +48,16 @@ function fail(e) {
   box.hidden = false;
   $('empty-msg').innerHTML = '<span class="err">Could not load matches:\n' +
     String(e && e.message ? e.message : e) + '</span>';
+}
+
+async function reload() {
+  const [matches, stats] = await Promise.all([
+    pywebview.api.matches(400), pywebview.api.stats(),
+  ]);
+  ALL = matches || [];
+  STATS = stats || {};
+  renderStats();
+  render();
 }
 
 /* ---------- header ---------- */
@@ -67,6 +80,7 @@ function renderStats() {
 function fillSources(list) {
   const sel = $('source');
   for (const s of list) {
+    if (sel.querySelector('option[value="' + s.source + '"]')) continue;
     const o = document.createElement('option');
     o.value = s.source;
     o.textContent = s.source + ' (' + s.count + ')';
@@ -122,7 +136,7 @@ function render() {
   for (const r of rows) frag.appendChild(card(r, strongTh));
   grid.appendChild(frag);
 
-  $('footer-note').textContent = ALL.length + ' loaded · click a card to open the ad · ' +
+  $('footer-note').textContent = ALL.length + ' loaded · click a card for details · ' +
     'S / A / X to triage';
 }
 
@@ -162,7 +176,7 @@ function card(r, strongTh) {
   if (reasons.length) c.appendChild(why);
 
   c.appendChild(actions(r, c));
-  c.addEventListener('click', () => openPosting(r));
+  c.addEventListener('click', () => openDetail(r));
   return c;
 }
 
@@ -199,15 +213,323 @@ async function setStatus(r, status, cardEl) {
   if (F.status !== 'all') render();
 }
 
-function openPosting(r) {
-  if (r.url) pywebview.api.open_url(r.url);
+/* ---------- panes ---------- */
+
+function wirePanes() {
+  $('scrim').addEventListener('click', closePanes);
+  $('detail-close').addEventListener('click', closePanes);
+  $('settings-close').addEventListener('click', closePanes);
+  $('detail-open').addEventListener('click', () => {
+    if (CURRENT && CURRENT.url) pywebview.api.open_url(CURRENT.url);
+  });
+  $('detail-refresh').addEventListener('click', () => {
+    if (CURRENT) openDetail(CURRENT, true);
+  });
+  $('settings-btn').addEventListener('click', openSettings);
+  $('scan-btn').addEventListener('click', startScan);
+  $('scan-cancel').addEventListener('click', () => pywebview.api.cancel_scan());
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePanes();
+  });
+}
+
+function closePanes() {
+  $('detail').hidden = true;
+  $('settings').hidden = true;
+  $('scrim').hidden = true;
+}
+
+/* ---------- detail ---------- */
+
+async function openDetail(r, refresh) {
+  CURRENT = r;
+  $('detail').hidden = false;
+  $('settings').hidden = true;
+  $('scrim').hidden = false;
+  $('detail-title').textContent = r.title || '(untitled)';
+
+  const body = $('detail-body');
+  body.textContent = '';
+  body.appendChild(el('p', 'loading', refresh ? 'Re-fetching the full text…' : 'Loading…'));
+
+  let d = null;
+  try {
+    d = await pywebview.api.detail(r.id, !!refresh);
+  } catch (e) {
+    body.textContent = '';
+    body.appendChild(el('p', 's-err', 'Could not load this posting: ' + String(e)));
+    return;
+  }
+  renderDetail(d || r);
+}
+
+function renderDetail(d) {
+  const body = $('detail-body');
+  body.textContent = '';
+
+  const dl = el('dl', 'd-meta');
+  const put = (label, value) => {
+    if (!value) return;
+    dl.appendChild(el('dt', null, label));
+    dl.appendChild(el('dd', null, String(value)));
+  };
+  put('Company', d.company);
+  put('Location', d.location);
+  put('Score', d.score != null ? Math.round(d.score) : null);
+  put('Source', d.source);
+  put('Posted', (d.posted_at || '').slice(0, 10));
+  const sal = d.salary && (d.salary.text || d.salary.raw);
+  put('Salary', sal);
+  if (d.liveness && d.liveness.status) {
+    put('Liveness', d.liveness.status +
+      (d.liveness.note ? ' → ' + d.liveness.note : '') +
+      (d.liveness.checked_at ? ' · checked ' + d.liveness.checked_at.slice(0, 10) : ''));
+  }
+  if (d.status) put('Status', d.status);
+  body.appendChild(dl);
+
+  const why = el('div', 'd-why');
+  for (const [label, pts] of (d.reasons || [])) {
+    why.appendChild(el('span', null, label + ' +' + pts));
+  }
+  if (why.childNodes.length) body.appendChild(why);
+
+  const desc = el('div', 'd-desc');
+  desc.textContent = d.description || '(no description available)';
+  body.appendChild(desc);
+}
+
+/* ---------- settings ---------- */
+
+let SAVE_TIMER = null;
+
+async function openSettings() {
+  $('settings').hidden = false;
+  $('detail').hidden = true;
+  $('scrim').hidden = false;
+  const body = $('settings-body');
+  body.textContent = '';
+  body.appendChild(el('p', 'loading', 'Loading…'));
+
+  let rows;
+  try {
+    rows = await pywebview.api.settings();
+  } catch (e) {
+    body.textContent = '';
+    body.appendChild(el('p', 's-err', 'Could not read config.yaml: ' + String(e)));
+    return;
+  }
+  body.textContent = '';
+
+  // group by the `group` field, keeping the order api.SETTINGS declares
+  const groups = new Map();
+  for (const r of rows) {
+    if (!groups.has(r.group)) groups.set(r.group, []);
+    groups.get(r.group).push(r);
+  }
+  for (const [name, items] of groups) {
+    const g = el('section', 's-group');
+    g.appendChild(el('h3', null, name));
+    for (const r of items) g.appendChild(settingRow(r));
+    body.appendChild(g);
+  }
+}
+
+function settingRow(r) {
+  const wrap = el('div', 's-row');
+  const isBool = r.kind === 'bool';
+  const label = el('label', null, r.label);
+  label.htmlFor = 'set-' + r.key;
+  wrap.appendChild(label);
+  wrap.appendChild(el('p', 's-help', r.help));
+
+  let input;
+  if (isBool) {
+    const line = el('div', 's-check');
+    input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = r.value === true;
+    line.appendChild(input);
+    line.appendChild(document.createTextNode('enabled'));
+    wrap.appendChild(line);
+  } else if (r.kind === 'str_int_map') {
+    // one `name: weight` per line -- matches how the config file reads
+    input = document.createElement('textarea');
+    input.value = Object.entries(r.value || {}).map(([k, v]) => k + ': ' + v).join('\n');
+    input.spellcheck = false;
+    wrap.appendChild(input);
+  } else if (r.kind === 'str_list') {
+    input = document.createElement('textarea');
+    input.value = (r.value || []).join('\n');
+    input.spellcheck = false;
+    wrap.appendChild(input);
+  } else {
+    input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    input.value = r.value != null ? r.value : '';
+    wrap.appendChild(input);
+  }
+  input.id = 'set-' + r.key;
+
+  const note = el('span', 's-saved', '');
+  const err = el('div', 's-err', '');
+  err.hidden = true;
+
+  const collect = () => {
+    if (isBool) return input.checked;
+    if (r.kind === 'str_list') {
+      return input.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    }
+    if (r.kind === 'str_int_map') {
+      const out = {};
+      for (const line of input.value.split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        const i = t.lastIndexOf(':');
+        if (i < 0) throw new Error('expected  name: weight');
+        const k = t.slice(0, i).trim();
+        const v = Number(t.slice(i + 1).trim());
+        if (!k) throw new Error('expected  name: weight');
+        if (!isFinite(v)) throw new Error('weight for "' + k + '" is not a number');
+        out[k] = v;
+      }
+      return out;
+    }
+    const v = Number(input.value);
+    if (!isFinite(v)) throw new Error('not a number');
+    return v;
+  };
+
+  const save = async () => {
+    err.hidden = true;
+    let value;
+    try {
+      value = collect();
+    } catch (e) {
+      err.textContent = e.message;
+      err.hidden = false;
+      return;
+    }
+    try {
+      const res = await pywebview.api.save_setting(r.key, value);
+      r.value = value;
+      note.textContent = res && res.changed ? 'saved' : '';
+      if (note.textContent) setTimeout(() => { note.textContent = ''; }, 1600);
+      // strictness changes rescore the list on next scan; refresh the header
+      STATS = await pywebview.api.stats();
+      renderStats();
+    } catch (e) {
+      err.textContent = String(e && e.message ? e.message : e);
+      err.hidden = false;
+    }
+  };
+
+  if (isBool) {
+    input.addEventListener('change', save);
+  } else {
+    // debounce: a textarea fires on every keystroke
+    input.addEventListener('input', () => {
+      clearTimeout(SAVE_TIMER);
+      SAVE_TIMER = setTimeout(save, 700);
+    });
+    input.addEventListener('blur', () => {
+      clearTimeout(SAVE_TIMER);
+      save();
+    });
+  }
+  wrap.appendChild(note);
+  wrap.appendChild(err);
+  return wrap;
+}
+
+/* ---------- scan ---------- */
+
+async function startScan() {
+  const btn = $('scan-btn');
+  btn.disabled = true;
+  $('scan-bar').hidden = false;
+  $('scan-label').textContent = 'starting…';
+  $('scan-fill').style.width = '0';
+
+  // Scan only what you are looking at: with a source selected, refresh just
+  // that one instead of all 25. Cleared filter means scan everything.
+  const only = F.source === 'all' ? '' : F.source;
+  let res;
+  try {
+    res = await pywebview.api.start_scan(only);
+  } catch (e) {
+    $('scan-label').textContent = 'scan failed: ' + String(e);
+    btn.disabled = false;
+    return;
+  }
+  if (!res || !res.started) {
+    $('scan-label').textContent = (res && res.reason) || 'could not start';
+    btn.disabled = false;
+    return;
+  }
+  clearInterval(POLL);
+  POLL = setInterval(pollScan, 600);
+}
+
+async function pollScan() {
+  let p;
+  try {
+    p = await pywebview.api.scan_progress();
+  } catch (e) {
+    clearInterval(POLL);
+    $('scan-label').textContent = 'scan failed: ' + String(e);
+    $('scan-btn').disabled = false;
+    return;
+  }
+  for (const e of (p.events || [])) applyScanEvent(e);
+
+  if (p.error) {
+    clearInterval(POLL);
+    $('scan-label').textContent = 'scan failed: ' + p.error;
+    $('scan-btn').disabled = false;
+    return;
+  }
+  if (!p.running) {
+    clearInterval(POLL);
+    const s = p.summary;
+    if (s) {
+      $('scan-fill').style.width = '100%';
+      $('scan-label').textContent =
+        s.new + ' new · ' + s.matches + ' matches this run' +
+        (s.cancelled ? '  (cancelled early)' : '');
+    }
+    $('scan-btn').disabled = false;
+    await reload();
+    setTimeout(() => { $('scan-bar').hidden = true; }, 6000);
+  }
+}
+
+function applyScanEvent(e) {
+  if (e.kind === 'start') {
+    $('scan-label').textContent = 'run #' + e.run_id + ' · ' + e.count + ' sources';
+  } else if (e.kind === 'source_start') {
+    $('scan-fill').style.width = Math.round((e.index / e.of) * 100) + '%';
+    $('scan-label').textContent = 'fetching ' + e.name + ' (' + (e.index + 1) + '/' + e.of + ')';
+  } else if (e.kind === 'source_done') {
+    $('scan-fill').style.width = Math.round(((e.index + 1) / e.of) * 100) + '%';
+    $('scan-label').textContent = e.name + ': ' + e.fetched + ' fetched · ' +
+      e.new + ' new · ' + e.matches + ' matches';
+  } else if (e.kind === 'rescored') {
+    $('scan-label').textContent = 'profile changed — rescored ' + e.total + ' postings';
+  } else if (e.kind === 'cancelled') {
+    $('scan-label').textContent = 'cancelling after ' + e.after + ' of ' + e.of + ' sources';
+  }
 }
 
 /* keyboard: s / a / x triage the first visible card that is still "new".
  * The id lookup matters -- the first VISIBLE row is not always the first card
  * in the DOM, so querying '.card' would act on the wrong posting. */
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if ($('settings').hidden === false || $('detail').hidden === false) return;
   const key = e.key.toLowerCase();
   if (!'sax'.includes(key)) return;
   const target = visible().find((r) => r.status === 'new');

@@ -239,6 +239,29 @@ def test_get_value_reads_scalars_lists_and_mappings():
     assert cfgwrite.get_value(SAMPLE, "sources.enabled") == ["xing", "stepstone"]
 
 
+def test_get_value_ignores_inline_trailing_comments():
+    """The bug this guards: `min_score: 6   # below this ...` read back as the
+    STRING '6   # below this ...' instead of 6, so the settings screen rendered
+    an empty number box for every annotated value."""
+    text = ("preferences:\n"
+            "  min_score: 6            # below this a posting is stored\n"
+            "  max_age_days: 21        # days\n"
+            "  country_allow: [de, at]  # two-letter codes\n"
+            "  title_terms:\n"
+            "    - software          # the trade\n"
+            "    - entwickler\n"
+            "  stack_preferred:\n"
+            "    php: 3              # wanted most\n"
+            "  stack_needs_title_match: true   # narrow the net\n")
+    assert cfgwrite.get_value(text, "preferences.min_score") == 6
+    assert isinstance(cfgwrite.get_value(text, "preferences.min_score"), int)
+    assert cfgwrite.get_value(text, "preferences.max_age_days") == 21
+    assert cfgwrite.get_value(text, "preferences.country_allow") == ["de", "at"]
+    assert cfgwrite.get_value(text, "preferences.title_terms") == ["software", "entwickler"]
+    assert cfgwrite.get_value(text, "preferences.stack_preferred") == {"php": 3}
+    assert cfgwrite.get_value(text, "preferences.stack_needs_title_match") is True
+
+
 def test_get_value_missing_returns_none():
     assert cfgwrite.get_value(SAMPLE, "preferences.nope") is None
     assert cfgwrite.get_value(SAMPLE, "nothing.here") is None

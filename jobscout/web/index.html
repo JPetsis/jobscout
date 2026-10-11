@@ -14,7 +14,18 @@
     <h1>jobscout</h1>
   </div>
   <div class="stats" id="stats"><span class="muted">loading…</span></div>
+  <div class="bar-actions">
+    <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
+    <button id="settings-btn" class="ghost" title="Edit your profile: titles, skills, locations, strictness">Settings</button>
+  </div>
 </header>
+
+<!-- scan progress: replaces the stats line while a scan runs -->
+<div id="scan-bar" class="scanbar" hidden role="status" aria-live="polite">
+  <span class="scan-label" id="scan-label">starting…</span>
+  <div class="track"><div class="fill" id="scan-fill"></div></div>
+  <button id="scan-cancel" class="ghost small">Cancel</button>
+</div>
 
 <section class="filters">
   <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">
@@ -23,8 +34,8 @@
     <button data-v="strong">Strong</button>
     <button data-v="match">Matches</button>
   </div>
-  <select id="source"><option value="all">All sources</option></select>
-  <select id="status">
+  <select id="source" aria-label="Source"><option value="all">All sources</option></select>
+  <select id="status" aria-label="Status">
     <option value="new">New</option>
     <option value="saved">Saved</option>
     <option value="applied">Applied</option>
@@ -43,6 +54,37 @@
 <footer class="foot">
   <span class="muted" id="footer-note"></span>
 </footer>
+
+<!-- detail pane -->
+<aside id="detail" class="pane" hidden aria-labelledby="detail-title">
+  <div class="pane-head">
+    <h2 id="detail-title">Posting</h2>
+    <div class="pane-tools">
+      <button id="detail-open" class="ghost small">Open ad</button>
+      <button id="detail-refresh" class="ghost small" title="Re-fetch the full text from the source">Refresh</button>
+      <button id="detail-close" class="ghost small" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="pane-body" id="detail-body"></div>
+</aside>
+
+<!-- settings pane -->
+<aside id="settings" class="pane wide" hidden aria-labelledby="settings-title">
+  <div class="pane-head">
+    <h2 id="settings-title">Settings</h2>
+    <div class="pane-tools">
+      <button id="settings-close" class="ghost small" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="pane-body" id="settings-body"></div>
+  <div class="pane-foot">
+    <span class="muted" id="settings-note">
+      Saved straight to config.yaml. Your comments in that file are kept.
+    </span>
+  </div>
+</aside>
+
+<div id="scrim" class="scrim" hidden></div>
 
 <script src="app.js"></script>
 </body>

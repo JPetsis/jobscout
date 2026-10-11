@@ -193,6 +193,14 @@ def get_value(text: str, dotted: str):
 
 
 def _parse_inline(raw: str):
+    """Parse one value, ignoring any inline trailing comment.
+
+    Without the comment strip, a documented line like
+    `min_score: 6            # below this a posting is stored` reads back as the
+    STRING '6    # below this...' rather than the number 6 — which is how the
+    settings screen ended up rendering an empty box for every annotated value.
+    """
+    raw = _split_trailing_comment(raw)[0].strip()
     if raw.startswith("[") and raw.endswith("]"):
         inner = raw[1:-1].strip()
         if not inner:
