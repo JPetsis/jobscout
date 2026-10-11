@@ -163,9 +163,17 @@ class JsApi:
         return {"ok": bool(url)}
 
 
+WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
+
+
 def _check_backend() -> None:
-    """pywebview has NO default Linux backend: fail with a fixable message."""
+    """Fail with a fixable message when the OS renderer is missing.
+
+    Every platform needs one specific thing that a plain `pip install` does not
+    guarantee. Finding out at launch with a real message beats a blank window.
+    """
     if sys.platform.startswith("linux"):
+        # pywebview has NO default Linux backend.
         ok = False
         for mod in ("qtpy", "gi"):
             try:
@@ -180,6 +188,43 @@ def _check_backend() -> None:
                 '    pip install "pywebview[qt]"\n'
                 "(GTK also works but PyGObject must be compiled against system "
                 "GTK headers.)")
+
+    if sys.platform == "win32":
+        # WebView2 ships with Windows 11 and 10 1803+, but NOT with Windows
+        # Server or LTSC images, where the user has to install it once.
+        if not _has_webview2():
+            raise SystemExit(
+                "jobscout-app needs the Microsoft Edge WebView2 runtime, which "
+                "is not installed on this machine.\n"
+                "It is a one-time install (it is already present on Windows 11 "
+                "and on Windows 10 1803+):\n"
+                f"    {WEBVIEW2_URL}\n"
+                "Choose the Evergreen Bootstrapper, then start jobscout again.")
+
+
+def _has_webview2() -> bool:
+    """Is the WebView2 runtime present? Checks the machine and user scopes."""
+    try:
+        import winreg                                  # noqa: PLC0415
+    except ImportError:                                # not Windows after all
+        return True
+    # this branch only ever runs on Windows; the module has these attributes
+    # there, so the static analyser on macOS is reporting a false positive
+    key = (r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients"
+           r"\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}")
+    hklm = winreg.HKEY_LOCAL_MACHINE                          # type: ignore[attr-defined]
+    hkcu = winreg.HKEY_CURRENT_USER                           # type: ignore[attr-defined]
+    read = winreg.KEY_READ                                    # type: ignore[attr-defined]
+    wow32 = getattr(winreg, "KEY_WOW64_32KEY", 0)
+    for root, access in ((hklm, read | wow32), (hkcu, read)):
+        try:
+            with winreg.OpenKey(root, key, 0, access) as k:   # type: ignore[attr-defined]
+                version, _ = winreg.QueryValueEx(k, "pv")     # type: ignore[attr-defined]
+                if version and version != "0.0.0.0":
+                    return True
+        except OSError:
+            continue
+    return False
 
 
 def main() -> int:

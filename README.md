@@ -44,11 +44,27 @@ uv run jobscout-app
 ```
 
 The window shows your stored matches as a card grid with a search box, a score
-band (all / strong / matches), and source and status filters; each card can be
-marked saved/applied/dismissed and opens the posting in your real browser. It
-reads `~/.jobscout/` (config + `jobscout.db`) and never writes the config — a
-missing `config.yaml` exits with the path it wanted. Scanning, digests and the
-terminal triage loop stay in the CLI (`jobscout scan`, `jobscout digest`,
+band (all / strong / matches), and source and status filters. Three things you
+can do without a terminal:
+
+- **Read a match.** Click a card for the full posting — salary, liveness, why it
+  scored, and the whole description, fetched live when the source only put a
+  teaser in the listing. `Save` / `Applied` / `Dismiss` write straight to the
+  database; `S` / `A` / `X` do the same from the keyboard.
+- **Scan.** The Scan button runs the identical scan loop the CLI runs, with a
+  progress bar and a Cancel button. With a source selected in the filter it
+  scans only that source.
+- **Edit your profile.** Settings is the profile a non-technical user needs:
+  the job titles you want, your skills and how much you care about each, the
+  countries and places you'll accept, and how strict the cutoffs are.
+
+Settings writes to `config.yaml` through `jobscout/cfgwrite.py`, which edits the
+file line by line. That matters: a `yaml.safe_load` / `safe_dump` round-trip
+leaves every value correct and silently deletes all 137 comment lines that
+document the file. A same-value save is a byte-identical no-op, and the values
+the window accepts are validated before they reach disk.
+
+Digests and the terminal triage loop stay in the CLI (`jobscout digest`,
 `jobscout triage`).
 
 ## Commands
