@@ -227,6 +227,35 @@ def _has_webview2() -> bool:
     return False
 
 
+def _show_fatal(webview, message: str) -> None:
+    """Show a startup failure in a window.
+
+    A windowed build has no console: `print()` and `SystemExit` go absolutely
+    nowhere, so a missing config file looked to the user like the app simply
+    refused to open. That is a dead end for the non-technical user this app is
+    for, and it is the first thing they would hit on a fresh machine.
+    """
+    import html as _html
+    body = _html.escape(message).replace("\n", "<br>")
+    webview.create_window(
+        "jobscout",
+        html=(
+            "<!doctype html><meta charset='utf-8'>"
+            "<style>body{margin:0;padding:28px;background:#16171a;color:#ececf0;"
+            "font:13.5px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}"
+            "h1{font-size:15px;margin:0 0 14px}"
+            "code{background:#232a3d;padding:2px 6px;border-radius:5px;"
+            "font-family:ui-monospace,Menlo,monospace}"
+            "pre{background:#232a3d;padding:12px;border-radius:8px;overflow-x:auto}"
+            ".m{color:#9a9aa2}</style>"
+            f"<h1>jobscout cannot start</h1><p>{body}</p>"
+            "<p class='m'>Set this up once, then open jobscout again.</p>"
+        ),
+        width=600, height=340,
+    )
+    webview.start()
+
+
 def main() -> int:
     _check_backend()
     try:
@@ -236,10 +265,17 @@ def main() -> int:
             "jobscout-app needs the desktop UI dependencies:\n"
             '    uv pip install -e ".[app]"') from None
 
+    try:
+        api_obj = JsApi()
+    except SystemExit as e:
+        # no console in a windowed build -- the message must be visible
+        _show_fatal(webview, str(e))
+        return 1
+
     webview.create_window(
         "jobscout",
         url=str(WEB / "index.html"),
-        js_api=JsApi(),
+        js_api=api_obj,
         width=1180,
         height=860,
         min_size=(820, 560),

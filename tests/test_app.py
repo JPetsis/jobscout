@@ -161,6 +161,84 @@ class _FakeConn:
         pass
 
 
+# --- first-run failures must be VISIBLE ------------------------------------
+
+def test_missing_config_shows_a_window_instead_of_exiting_silently(monkeypatch, tmp_path):
+    """A windowed build has no console. SystemExit from load_config used to go
+    nowhere, so a fresh machine looked like the app simply refused to open."""
+    calls = {}
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            calls["title"] = title
+            calls["html"] = kw.get("html", "")
+            calls["url"] = kw.get("url")
+
+        @staticmethod
+        def start(*a, **k):
+            calls["started"] = True
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+
+    def boom():
+        raise SystemExit("no config found at /home/x/.jobscout/config.yaml\n"
+                         "run: jobscout init")
+
+    monkeypatch.setattr(appmod, "JsApi", boom)
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    rc = appmod.main()
+    assert rc == 1
+    assert calls.get("started") is True           # a window was actually shown
+    assert calls["url"] is None                   # the error page, not the UI
+    assert "no config found" in calls["html"]
+    assert "jobscout init" in calls["html"]       # tells the user what to do
+    assert "cannot start" in calls["html"]
+
+
+def test_the_error_page_escapes_html(monkeypatch):
+    """The message contains a path; a path can contain angle brackets."""
+    calls = {}
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            calls["html"] = kw.get("html", "")
+
+        @staticmethod
+        def start(*a, **k):
+            pass
+
+    appmod._show_fatal(FakeWebview, "no config at <script>alert(1)</script>")
+    assert "<script>alert(1)</script>" not in calls["html"]
+    assert "&lt;script&gt;" in calls["html"]
+
+
+def test_happy_path_still_passes_the_api_object(monkeypatch, tmp_path):
+    """The config-missing guard must not swallow the normal startup path."""
+    calls = {}
+    sentinel = object()
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            calls["js_api"] = kw.get("js_api")
+            calls["url"] = kw.get("url")
+
+        @staticmethod
+        def start(*a, **k):
+            pass
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod, "JsApi", lambda: sentinel)
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    assert appmod.main() == 0
+    assert calls["js_api"] is sentinel
+    assert calls["url"].endswith("index.html")
+
+
 # --- threading sanity ------------------------------------------------------
 
 def test_two_connections_to_one_file_are_fine(tmp_path):
