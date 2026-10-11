@@ -30,6 +30,27 @@ uv run jobscout digest   # markdown digest in ~/.jobscout/reports/
 Or without uv: `python3.13 -m jobscout ...` works from the repo root (only PyYAML
 needed), and `pip install -e .` gives you the `jobscout` command.
 
+## Desktop app
+
+The same core in a native window: pywebview renders the front-end in WKWebView on
+macOS, WebView2 on Windows and Qt WebEngine on Linux, and that front-end is a
+client of `jobscout/api.py` — the window and the CLI show the same numbers,
+because there is only one rule engine.
+
+```bash
+uv sync --extra app    # pywebview; on Linux the extra also pulls its [qt] backend
+uv run jobscout init   # the window needs ~/.jobscout/config.yaml to exist
+uv run jobscout-app
+```
+
+The window shows your stored matches as a card grid with a search box, a score
+band (all / strong / matches), and source and status filters; each card can be
+marked saved/applied/dismissed and opens the posting in your real browser. It
+reads `~/.jobscout/` (config + `jobscout.db`) and never writes the config — a
+missing `config.yaml` exits with the path it wanted. Scanning, digests and the
+terminal triage loop stay in the CLI (`jobscout scan`, `jobscout digest`,
+`jobscout triage`).
+
 ## Commands
 
 Global flags: `--version`, `--no-color` (or `NO_COLOR=1`). Terminal output is
@@ -271,6 +292,8 @@ Run it whenever you like, or wire it to cron/launchd:
 jobscout/            # code (this repo)
 ├── jobscout/        # the package (Python + PyYAML)
 │   ├── sources/     # one module per job board
+│   ├── web/         # the window's HTML/CSS/JS (bundled as data)
+│   ├── app.py       # desktop shell (pywebview) -> jobscout-app
 │   ├── cli.py       # jobscout <command>
 │   ├── score.py     # the rule engine
 │   ├── salary.py    # pay parsing + formatting
@@ -279,6 +302,8 @@ jobscout/            # code (this repo)
 │   ├── triage.py    # the one-by-one review loop
 │   ├── digest.py    # markdown digest writer
 │   └── db.py        # sqlite storage + dedup
+├── packaging/       # PyInstaller spec + frozen-app entry point
+├── .github/         # CI: test gate + per-OS bundle matrix
 └── tests/           # pytest suite + real captured fixtures
 
 ~/.jobscout/         # your data (hidden folder, never in the repo)
@@ -300,3 +325,91 @@ salary parsing (ranges, currencies, periods, and the junk it must ignore: ids,
 headcounts, revenue figures, 401(k) plans), liveness checks (ATS API probes and
 page markers), the triage loop, company detection + config edits, and an
 end-to-end scan→digest run.
+
+## Building a distributable
+
+The desktop app is bundled with [PyInstaller](https://pyinstaller.org) from
+`packaging/jobscout.spec`. PyInstaller **cannot cross-compile** — a build can
+only produce artifacts for the OS and CPU it runs on — so a macOS build produces
+only macOS artifacts, and cross-platform output needs one runner per target. That
+is what the CI matrix below exists for.
+
+```bash
+uv sync --extra app
+uv pip install "pyinstaller>=6.22,<7"     # build tool, not a runtime dependency
+uv run --no-sync pyinstaller packaging/jobscout.spec
+```
+
+Output: `dist/jobscout/` (a onedir bundle; the executable inside it is
+`jobscout`) and, on macOS, `dist/jobscout.app`. `--noconfirm` overwrites an
+existing `dist/`, `--clean` drops the cached analysis in `build/`. The bundle is
+the window only — the `jobscout` CLI is not included in it.
+
+What the spec puts in, and why it matters:
+
+| bundled | reason |
+|---|---|
+| the `jobscout` package | the app itself |
+| `jobscout/web/*` (`index.html`, `app.js`, `styles.css`) | loaded from disk at runtime (`app.py`); miss it and the window is blank |
+| `geonamescache` data (`cities*.json`) | offline location resolution (`geo.py` tier 2) |
+| `certifi`'s CA bundle | the TLS context used for `europa.eu` sources |
+| `hiddenimports` for all 25 `jobscout.sources.*` adapters | they are imported by name at runtime, so static analysis cannot see them |
+| the pywebview backend for the build platform | also resolved by name at runtime (`webview/guilib.py`) |
+
+**Never bundled:** `~/.jobscout/config.yaml`, `~/.jobscout/jobscout.db` and
+`reports/` — user data lives in your home directory and a fresh install creates
+nothing, so run `jobscout init` once (see *Desktop app* above) before the first
+launch. The spec refuses to build if the source adapters and its own list drift
+apart, rather than shipping a bundle that loads no sources.
+
+### CI artifacts (`.github/workflows/build.yml`)
+
+| runner | artifact | notes |
+|---|---|---|
+| `macos-latest` | `jobscout-macos-arm64.zip` | Apple silicon, `.app` inside |
+| `macos-15-intel` | `jobscout-macos-x86_64.zip` | Intel, `.app` inside |
+| `ubuntu-22.04` | `jobscout-linux-x86_64.tar.gz` | x86_64 |
+| `ubuntu-24.04-arm` | `jobscout-linux-arm64.tar.gz` | arm64 |
+| `windows-latest` | `jobscout-windows-x86_64.zip` | x86_64 |
+
+Push a `v*` tag or start the workflow by hand (Actions → *build* → *Run
+workflow*): the test job runs first, then each runner builds natively and uploads
+its archive. Pull requests run the test job only, so they stay fast. Artifacts
+expire with the normal GitHub retention window and are rebuilt from source —
+they are not releases.
+
+### Installing an artifact
+
+**macOS** (first launch is blocked: these builds are unsigned, see below):
+
+```bash
+ditto -x -k jobscout-macos-arm64.zip .   # ditto, not unzip: keeps the .app intact
+mv jobscout.app /Applications/
+```
+
+Try to open it, get blocked, click **Done** (not "Move to Trash"), then
+**System Settings → Privacy & Security → scroll to Security → Open Anyway** and
+confirm with your password. Two things about that button: it only appears for
+roughly an hour after the failed launch and only for the most recently blocked
+app, so if it is missing, launch the app again to re-trigger the block. If macOS
+instead says the app *"is damaged and can't be opened"*, that is the quarantine
+flag, not a broken build — `xattr -cr /Applications/jobscout.app` clears it.
+Each re-download is a new copy, so the prompt comes back every time.
+
+**Windows:** unzip, run `jobscout.exe`; SmartScreen says "Windows protected your
+PC" → **More info** → **Run anyway**. Also every new download. WebView2 is
+required and is preinstalled on Windows 10 (1803+) and Windows 11; if the window
+never appears, the runtime is the first thing to check. On a clean Windows 11
+install Smart App Control can block unsigned executables with no "Run anyway"
+button at all — that is a Windows setting, not something the build can avoid.
+
+**Linux:** `tar -xzf jobscout-linux-x86_64.tar.gz && ./jobscout/jobscout`. No
+signing step exists there; the bundle expects the usual desktop libraries
+(X11/Wayland, a working graphics stack) and it is by far the largest artifact,
+because Qt WebEngine travels with it. The x86_64 build is built against glibc
+2.34 and the arm64 one against glibc 2.39 — that is the oldest arm64 Qt WebEngine
+wheel Qt publishes — so the arm64 tarball needs Ubuntu 24.04 or newer to run.
+
+**No code signing or notarization is wired into CI — that is deliberate.** macOS
+needs an Apple Developer ID and Windows needs a certificate; both are handled
+separately from this workflow, so the artifacts above are unsigned by design.

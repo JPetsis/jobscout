@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 
 from . import __version__
 from . import db as dbm
@@ -20,11 +20,12 @@ from . import liveness
 from . import salary as salmod
 from . import triage as triagemod
 from . import ui
-from .config import home, init_workspace, load_config, source_settings
+from . import scanner
+from .config import home, init_workspace, load_config
 from .http import FetchError, Fetcher
 from .models import Posting
-from .score import prefs_hash, reasons_text, score_posting
-from .sources import REGISTRY, iter_sources
+
+from .sources import REGISTRY
 
 STATUSES = ("new", "saved", "applied", "dismissed")
 
@@ -74,114 +75,66 @@ def cmd_config(args) -> int:
 
 
 def cmd_scan(args) -> int:
+    """Render a scan. The loop itself lives in `scanner.scan` so the desktop
+    app runs the identical code path — this function is only the view."""
     cfg = load_config()
     only = set(args.only.split(",")) if args.only else set()
     fetcher = _fetcher()
     conn = dbm.connect(cfg.root / "jobscout.db")
-    prev_run = dbm.get_run(conn)
-    new_hash = prefs_hash(cfg.prefs)
-    run_id = dbm.start_run(conn)
-    min_score = float(cfg.prefs.get("min_score", 6))
-    strong_th = float(cfg.prefs.get("strong_threshold", 12))
-    result = dbm.maybe_rescore(conn, cfg.prefs, prev_run)
-    if result:
-        total, changed = result
-        m, s = dbm.count_matches(conn, min_score, strong_th)
-        print(ui.bold("preferences changed") + f" since run #{prev_run['id']}: rescored {total} postings ({changed} changed)")
-        print(f"  your profile now matches {ui.cyan(str(m))} stored postings · {ui.gold(str(s))} strong")
+    quiet = args.quiet
 
-    stats = {"sources": {}, "requests": 0, "errors": [], "prefs_hash": new_hash}
-    matches = []
-    total_new = 0
-    n_sources = sum(1 for name in cfg.enabled if name in REGISTRY and (not only or name in only))
-    print(ui.bold(f"jobscout scan · run #{run_id}") + ui.dim(f"  ·  {n_sources} sources"))
-    for name, mod in iter_sources(cfg.enabled):
-        if only and name not in only:
-            continue
-        settings = source_settings(cfg, name)
-        before = fetcher.requests
-        try:
-            postings = mod.fetch(settings, fetcher)
-        except FetchError as e:
-            fetcher.errors.append(f"{name}: {e.message}")
-            postings = []
-        except Exception as e:  # a broken source must never kill the run
-            fetcher.errors.append(f"{name}: {type(e).__name__}: {e}")
-            postings = []
-        new_count = match_count = 0
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        for p in postings:
-            if not p.is_valid():
-                continue
-            salmod.fill(p)
-            sc = score_posting(cfg.prefs, p)
-            pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now)
-            if is_new:
-                new_count += 1
-                if not sc.filtered and dup is None and sc.score >= min_score:
-                    match_count += 1
-                    matches.append((pid, sc.score, p.title, p.company, p.location))
-        stats["sources"][name] = {
-            "fetched": len(postings),
-            "new": new_count,
-            "matches": match_count,
-            "requests": fetcher.requests - before,
-        }
-        # A source may declare its own post-scan housekeeping (e.g. himalayas
-        # pruning rows that can never be liveness-verified). Optional hook: a
-        # module without `prune_unverifiable` is simply skipped.
-        prune = getattr(mod, "prune_unverifiable", None)
-        if prune is not None:
-            try:
-                removed = prune(conn, {**settings, "prune_below_score": min_score})
-            except Exception as e:  # housekeeping must never kill the run
-                fetcher.errors.append(f"{name}: prune failed: {type(e).__name__}: {e}")
-                removed = 0
-            if removed:
-                stats["sources"][name]["pruned"] = removed
-                if not args.quiet:
-                    print(f"  {ui.dim(name)} {ui.dim('pruned')} {ui.red(str(removed))} "
-                          f"{ui.dim('unverifiable row(s), no publisher expiry')}")
-        total_new += new_count
-        if not args.quiet:
-            fetched_c = ui.dim(f"{len(postings):>4} fetched")
-            new_c = ui.green(f"{new_count:>3} new") if new_count else ui.dim(f"{new_count:>3} new")
-            mat_c = ui.cyan(f"{match_count:>3} matches") if match_count else ui.dim(f"{match_count:>3} matches")
-            print(f"  {name:<15s} {fetched_c}  {new_c}  {mat_c}")
+    def on_event(e: dict) -> None:
+        kind = e["kind"]
+        if kind == "rescored":
+            print(ui.bold("preferences changed") +
+                  f" since run #{e['previous_run']}: rescored {e['total']} postings "
+                  f"({e['changed']} changed)")
+            print(f"  your profile now matches {ui.cyan(str(e['matches']))} stored postings · "
+                  f"{ui.gold(str(e['strong']))} strong")
+        elif kind == "start":
+            print(ui.bold(f"jobscout scan · run #{e['run_id']}") +
+                  ui.dim(f"  ·  {e['count']} sources"))
+        elif kind == "pruned":
+            print(f"  {ui.dim(e['name'])} {ui.dim('pruned')} {ui.red(str(e['removed']))} "
+                  f"{ui.dim('unverifiable row(s), no publisher expiry')}")
+        elif kind == "source_done" and not quiet:
+            fetched_c = ui.dim(f"{e['fetched']:>4} fetched")
+            new_c = ui.green(f"{e['new']:>3} new") if e["new"] else ui.dim(f"{e['new']:>3} new")
+            mat_c = ui.cyan(f"{e['matches']:>3} matches") if e["matches"] else ui.dim(f"{e['matches']:>3} matches")
+            print(f"  {e['name']:<15s} {fetched_c}  {new_c}  {mat_c}")
 
-    verify_counts = _verify_on_scan(cfg, conn, fetcher, quiet=args.quiet)
+    def post_sources() -> dict | None:
+        # liveness verification must land inside the run, before it is closed
+        counts = _verify_on_scan(cfg, conn, fetcher, quiet=quiet)
+        return {"verified": counts} if counts else None
 
-    stats["requests"] = fetcher.requests
-    stats["errors"] = list(fetcher.errors)
-    if verify_counts:
-        stats["verified"] = verify_counts
-    dbm.finish_run(conn, run_id, stats)
-    m_all, s_all = dbm.count_matches(conn, min_score, strong_th)
+    summary = scanner.scan(cfg, conn, fetcher, only=only, on_event=on_event,
+                           post_sources=post_sources)
 
-    matches.sort(key=lambda x: -x[1])
-    if matches:
+    min_score, strong_th = summary["min_score"], summary["strong_threshold"]
+    if summary["matches_top"]:
         print("\n" + ui.rule())
         print(ui.bold("top new matches"))
-        for pid, sc, title, company, loc in matches[:8]:
+        for pid, sc, title, company, loc in summary["matches_top"][:8]:
             meta = " · ".join(x for x in (company[:30], loc[:26]) if x)
             badge = ui.score_text(f"{sc:5g}", sc, min_score, strong_th)
             tail = ui.dim("  " + meta) if meta else ""
             print(f"  {ui.dim(f'#{pid}')}  {badge}  {title[:58]}{tail}")
     print("\n" + ui.rule())
-    print(f"{ui.bold(str(total_new))} new · {ui.cyan(str(len(matches)))} matches this run · "
-          f"{m_all} matching overall · {ui.gold(str(s_all))} strong")
-    if fetcher.errors:
-        print(ui.red(f"{len(fetcher.errors)} source error(s)") + ui.dim("  — see the digest footer"))
-    unmarked = conn.execute(
-        "SELECT COUNT(*) n FROM postings WHERE status='new' AND filtered=0 AND dup_of IS NULL AND score >= ?",
-        (min_score,)).fetchone()["n"]
-    if unmarked:
-        print(ui.dim(f"next: jobscout triage   ({unmarked} unmarked matches)   ·   jobscout digest --all"))
+    print(f"{ui.bold(str(summary['new']))} new · {ui.cyan(str(summary['matches']))} matches this run · "
+          f"{summary['total_matches']} matching overall · {ui.gold(str(summary['strong']))} strong")
+    if summary["errors"]:
+        print(ui.red(f"{len(summary['errors'])} source error(s)") +
+              ui.dim("  — see the digest footer"))
+    if summary["cancelled"]:
+        print(ui.dim("scan cancelled — completed sources were saved"))
+    if summary["unmarked"]:
+        print(ui.dim(f"next: jobscout triage   ({summary['unmarked']} unmarked matches)   ·   "
+                     f"jobscout digest --all"))
     else:
-        print(ui.dim("next: jobscout digest --all    (everything matching)   ·   jobscout digest   (this run)"))
+        print(ui.dim("next: jobscout digest --all    (everything matching)   ·   "
+                     "jobscout digest   (this run)"))
     return 0
-
-
 def _print_top(top, min_score: float, strong_th: float) -> None:
     for pid, title, company, score in top:
         badge = ui.score_text(f"{score:5g}", score, min_score, strong_th)

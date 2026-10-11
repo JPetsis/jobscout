@@ -1,0 +1,109 @@
+name: build
+
+# PyInstaller cannot cross-compile: a runner builds only artifacts for its own
+# OS and CPU. That is why the matrix below names five native runners -- there is
+# no shortcut, and every artifact is produced on the platform it runs on.
+#
+# Triggers: a v* tag push or a manual run (Actions -> build -> Run workflow)
+# builds and uploads all five bundles. Pull requests run the test job only.
+#
+# setup-uv publishes only exact tags (there is no floating vNN alias from v8 on),
+# so the action is pinned to a release here and bumped deliberately.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Fast PR feedback, and the same gate the bundles have to pass.
+  test:
+    name: tests (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - name: install
+        run: uv sync
+      - name: pytest
+        run: uv run pytest
+
+  bundle:
+    name: bundle (${{ matrix.name }})
+    needs: test
+    # PRs are served by the test job; bundles are for tags and manual runs.
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest        # arm64
+            name: macos-arm64
+          - os: macos-15-intel      # x86_64
+            name: macos-x86_64
+          - os: ubuntu-22.04        # x86_64
+            name: linux-x86_64
+          - os: ubuntu-24.04-arm    # arm64
+            name: linux-arm64
+          - os: windows-latest      # x86_64
+            name: windows-x86_64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+
+      # The desktop app is the `app` extra. It brings pywebview plus its
+      # platform pieces: pythonnet on Windows, the pyobjc frameworks on macOS,
+      # and PyQt6 + Qt WebEngine through pywebview[qt] on Linux (the platform
+      # marker lives in pyproject.toml).
+      - name: install
+        run: uv sync --extra app --python "${{ env.PYTHON_VERSION }}"
+
+      # PyInstaller is a build tool, not a runtime dependency, so it is
+      # installed into the synced environment instead of declared in
+      # pyproject.toml. The `--no-sync` on the runs below keeps `uv run` from
+      # pruning it again.
+      - name: install pyinstaller
+        run: uv pip install "pyinstaller>=6.22,<7"
+
+      # A bundle is only ever built from a green tree.
+      - name: pytest
+        run: uv run --no-sync pytest
+
+      - name: build
+        run: >-
+          uv run --no-sync pyinstaller packaging/jobscout.spec
+          --noconfirm --distpath dist --workpath build
+
+      # Package by hand: an artifact-service zip does not preserve the symlinks
+      # inside a macOS .app, and macOS then reports the app as "damaged". ditto
+      # keeps the bundle intact.
+      - name: package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/jobscout.app "dist/jobscout-${{ matrix.name }}.zip"
+      - name: package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf "dist/jobscout-${{ matrix.name }}.tar.gz" -C dist jobscout
+      - name: package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/jobscout -DestinationPath "dist/jobscout-${{ matrix.name }}.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jobscout-${{ matrix.name }}
+          path: |
+            dist/jobscout-${{ matrix.name }}.zip
+            dist/jobscout-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
