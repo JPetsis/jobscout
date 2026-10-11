@@ -46,11 +46,15 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
 
     Excludes filtered rows and duplicates by default so the count in the window
     matches the count in the digest.
+
+    Holds dbm.LOCK: this runs on pywebview worker threads, and a read
+    interleaving with a concurrent `mark_posting` write is a real race.
     """
-    rows = dbm.list_postings(conn, min_score=min_score, status=status,
-                             source=source, limit=limit or 100000)
-    out = [posting_dict(r) for r in rows
-           if not r["filtered"] and r["dup_of"] is None]
+    with dbm.LOCK:
+        rows = dbm.list_postings(conn, min_score=min_score, status=status,
+                                 source=source, limit=limit or 100000)
+        out = [posting_dict(r) for r in rows
+               if not r["filtered"] and r["dup_of"] is None]
     out.sort(key=lambda r: r["score"], reverse=True)
     if limit:
         out = out[:limit]
@@ -58,7 +62,8 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
 
 
 def get_posting(conn, pid: int) -> dict | None:
-    row = dbm.get_posting(conn, pid)
+    with dbm.LOCK:
+        row = dbm.get_posting(conn, pid)
     return posting_dict(row) if row is not None else None
 
 
@@ -69,22 +74,26 @@ def mark_posting(conn, pid: int, status: str) -> dict:
     """
     if status not in VALID_STATUSES:
         raise ValueError(f"status must be one of {VALID_STATUSES!r}, got {status!r}")
-    dbm.set_status(conn, int(pid), status)
+    with dbm.LOCK:
+        dbm.set_status(conn, int(pid), status)
     return {"id": int(pid), "status": status}
 
 
 def source_counts(conn) -> list[dict]:
     """Per-source row counts, for the source filter dropdown."""
-    return [{"source": s, "count": n} for s, n in (dbm.counts(conn) or {}).items()]
+    with dbm.LOCK:
+        counts = dbm.counts(conn) or {}
+    return [{"source": s, "count": n} for s, n in counts.items()]
 
 
 def stats(conn, prefs: dict) -> dict:
     """Header numbers plus the score histogram used to calibrate thresholds."""
     min_score = float(prefs.get("min_score", 6))
     strong_th = float(prefs.get("strong_threshold", 10))
-    matches, strong = dbm.count_matches(conn, min_score, strong_th)
-    run = dbm.get_run(conn)
-    hist = [{"score": s, "count": n} for s, n in dbm.score_histogram(conn)]
+    with dbm.LOCK:
+        matches, strong = dbm.count_matches(conn, min_score, strong_th)
+        run = dbm.get_run(conn)
+        hist = [{"score": s, "count": n} for s, n in dbm.score_histogram(conn)]
     return {
         "matches": matches,
         "strong": strong,
