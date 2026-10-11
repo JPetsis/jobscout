@@ -88,7 +88,9 @@ jobs:
 
       # Package by hand: an artifact-service zip does not preserve the symlinks
       # inside a macOS .app, and macOS then reports the app as "damaged". ditto
-      # keeps the bundle intact.
+      # keeps the bundle intact. (It also preserves the extended attributes the
+      # first-run bypass depends on -- a plain archiver strips them, which is
+      # the failure the xattr -cr note in docs/INSTALL.md covers.)
       - name: package (macOS)
         if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent dist/jobscout.app "dist/jobscout-${{ matrix.name }}.zip"
@@ -101,9 +103,75 @@ jobs:
         run: Compress-Archive -Path dist/jobscout -DestinationPath "dist/jobscout-${{ matrix.name }}.zip"
 
       - uses: actions/upload-artifact@v7
+        id: upload-unsigned
         with:
           name: jobscout-${{ matrix.name }}
           path: |
             dist/jobscout-${{ matrix.name }}.zip
             dist/jobscout-${{ matrix.name }}.tar.gz
           if-no-files-found: error
+
+      # --- signing (Windows only) -------------------------------------------
+      # There is no free code-signing route on macOS: it needs a paid Apple
+      # Developer account. On Windows there IS one -- the SignPath Foundation
+      # signs OSS at no cost, which is what removes the SmartScreen warning
+      # instead of asking every user to click through it.
+      #
+      # Gated on the secrets existing, so it is a no-op until the SignPath
+      # application is approved and the secrets are set.
+      #
+      # NOT YET WIRED, and deliberately left that way rather than guessed at:
+      # this submits the unsigned artifact and writes the signed one to
+      # dist/signed, but the round-trip is not finished. Completing it needs
+      # (a) the signed .exe copied back over the packaged tree, (b) the zip
+      # rebuilt, and (c) the signed zip re-uploaded -- naming the artifact
+      # differently so users cannot pick the unsigned one by mistake. Those
+      # three steps depend on SignPath's own artifact configuration, which does
+      # not exist until the project is created, so they are left for the pass
+      # that has a real project to test against.
+      - name: sign (Windows / SignPath Foundation)
+        if: runner.os == 'Windows' && secrets.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signed
+        continue-on-error: true   # never fail a release because signing broke
+
+  # Tags get a GitHub release with every artifact attached, so a user lands on
+  # one page and picks their platform. Unsigned on purpose -- see
+  # docs/INSTALL.md for what each platform shows on first run.
+  release:
+    name: release
+    needs: bundle
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: list what will be published
+        run: find artifacts -type f | sort
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true          # a human publishes it, not the tag push
+          generate_release_notes: true
+          body: |
+            Unsigned builds. Each platform shows a first-run warning; the exact
+            sequence to get past it is in `docs/INSTALL.md`.
+
+            | platform | file |
+            |---|---|
+            | macOS (Apple Silicon) | `jobscout-macos-arm64.zip` |
+            | macOS (Intel) | `jobscout-macos-x86_64.zip` |
+            | Windows (x86_64) | `jobscout-windows-x86_64.zip` |
+            | Linux (x86_64) | `jobscout-linux-x86_64.tar.gz` |
+            | Linux (arm64) | `jobscout-linux-arm64.tar.gz` |
