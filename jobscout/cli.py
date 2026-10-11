@@ -1,0 +1,921 @@
+"""jobscout command line interface."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+from . import __version__
+from . import db as dbm
+from . import detail as detailmod
+from . import digest as digestmod
+from . import companies as companiesmod
+from . import discover
+from . import goals as goalsmod
+from . import liveness
+from . import salary as salmod
+from . import triage as triagemod
+from . import ui
+from .config import home, init_workspace, load_config, source_settings
+from .http import FetchError, Fetcher
+from .models import Posting
+from .score import prefs_hash, reasons_text, score_posting
+from .sources import REGISTRY, iter_sources
+
+STATUSES = ("new", "saved", "applied", "dismissed")
+
+
+def _local(ts: str) -> str:
+    try:
+        return datetime.fromisoformat(ts).astimezone().strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return ts or ""
+
+
+# ---------------------------------------------------------------- commands
+
+def cmd_init(args) -> int:
+    root = home()
+    created = init_workspace(root)
+    print(f"workspace: {root}")
+    if created:
+        for c in created:
+            print(f"  created {c}")
+    else:
+        print("  (already initialised)")
+    print("\nnext steps:")
+    print("  1. jobscout config --edit    (your roles, locations, sources)")
+    print("  2. jobscout scan")
+    print("  3. jobscout digest")
+    return 0
+
+
+def cmd_config(args) -> int:
+    cfg = load_config()
+    print(cfg.path)
+    if args.open:
+        if sys.platform == "darwin":
+            subprocess.run(["open", "-R", str(cfg.path)], check=False)
+        else:
+            print("(--open is macOS-only; use the path above)")
+    if args.edit:
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+        if editor:
+            subprocess.run([editor, str(cfg.path)], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", "-t", str(cfg.path)], check=False)
+        else:
+            print("(set $EDITOR to open automatically; use the path above)")
+    return 0
+
+
+def cmd_scan(args) -> int:
+    cfg = load_config()
+    only = set(args.only.split(",")) if args.only else set()
+    fetcher = _fetcher()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    prev_run = dbm.get_run(conn)
+    new_hash = prefs_hash(cfg.prefs)
+    run_id = dbm.start_run(conn)
+    min_score = float(cfg.prefs.get("min_score", 6))
+    strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    result = dbm.maybe_rescore(conn, cfg.prefs, prev_run)
+    if result:
+        total, changed = result
+        m, s = dbm.count_matches(conn, min_score, strong_th)
+        print(ui.bold("preferences changed") + f" since run #{prev_run['id']}: rescored {total} postings ({changed} changed)")
+        print(f"  your profile now matches {ui.cyan(str(m))} stored postings · {ui.gold(str(s))} strong")
+
+    stats = {"sources": {}, "requests": 0, "errors": [], "prefs_hash": new_hash}
+    matches = []
+    total_new = 0
+    n_sources = sum(1 for name in cfg.enabled if name in REGISTRY and (not only or name in only))
+    print(ui.bold(f"jobscout scan · run #{run_id}") + ui.dim(f"  ·  {n_sources} sources"))
+    for name, mod in iter_sources(cfg.enabled):
+        if only and name not in only:
+            continue
+        settings = source_settings(cfg, name)
+        before = fetcher.requests
+        try:
+            postings = mod.fetch(settings, fetcher)
+        except FetchError as e:
+            fetcher.errors.append(f"{name}: {e.message}")
+            postings = []
+        except Exception as e:  # a broken source must never kill the run
+            fetcher.errors.append(f"{name}: {type(e).__name__}: {e}")
+            postings = []
+        new_count = match_count = 0
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for p in postings:
+            if not p.is_valid():
+                continue
+            salmod.fill(p)
+            sc = score_posting(cfg.prefs, p)
+            pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now)
+            if is_new:
+                new_count += 1
+                if not sc.filtered and dup is None and sc.score >= min_score:
+                    match_count += 1
+                    matches.append((pid, sc.score, p.title, p.company, p.location))
+        stats["sources"][name] = {
+            "fetched": len(postings),
+            "new": new_count,
+            "matches": match_count,
+            "requests": fetcher.requests - before,
+        }
+        # A source may declare its own post-scan housekeeping (e.g. himalayas
+        # pruning rows that can never be liveness-verified). Optional hook: a
+        # module without `prune_unverifiable` is simply skipped.
+        prune = getattr(mod, "prune_unverifiable", None)
+        if prune is not None:
+            try:
+                removed = prune(conn, {**settings, "prune_below_score": min_score})
+            except Exception as e:  # housekeeping must never kill the run
+                fetcher.errors.append(f"{name}: prune failed: {type(e).__name__}: {e}")
+                removed = 0
+            if removed:
+                stats["sources"][name]["pruned"] = removed
+                if not args.quiet:
+                    print(f"  {ui.dim(name)} {ui.dim('pruned')} {ui.red(str(removed))} "
+                          f"{ui.dim('unverifiable row(s), no publisher expiry')}")
+        total_new += new_count
+        if not args.quiet:
+            fetched_c = ui.dim(f"{len(postings):>4} fetched")
+            new_c = ui.green(f"{new_count:>3} new") if new_count else ui.dim(f"{new_count:>3} new")
+            mat_c = ui.cyan(f"{match_count:>3} matches") if match_count else ui.dim(f"{match_count:>3} matches")
+            print(f"  {name:<15s} {fetched_c}  {new_c}  {mat_c}")
+
+    verify_counts = _verify_on_scan(cfg, conn, fetcher, quiet=args.quiet)
+
+    stats["requests"] = fetcher.requests
+    stats["errors"] = list(fetcher.errors)
+    if verify_counts:
+        stats["verified"] = verify_counts
+    dbm.finish_run(conn, run_id, stats)
+    m_all, s_all = dbm.count_matches(conn, min_score, strong_th)
+
+    matches.sort(key=lambda x: -x[1])
+    if matches:
+        print("\n" + ui.rule())
+        print(ui.bold("top new matches"))
+        for pid, sc, title, company, loc in matches[:8]:
+            meta = " · ".join(x for x in (company[:30], loc[:26]) if x)
+            badge = ui.score_text(f"{sc:5g}", sc, min_score, strong_th)
+            tail = ui.dim("  " + meta) if meta else ""
+            print(f"  {ui.dim(f'#{pid}')}  {badge}  {title[:58]}{tail}")
+    print("\n" + ui.rule())
+    print(f"{ui.bold(str(total_new))} new · {ui.cyan(str(len(matches)))} matches this run · "
+          f"{m_all} matching overall · {ui.gold(str(s_all))} strong")
+    if fetcher.errors:
+        print(ui.red(f"{len(fetcher.errors)} source error(s)") + ui.dim("  — see the digest footer"))
+    unmarked = conn.execute(
+        "SELECT COUNT(*) n FROM postings WHERE status='new' AND filtered=0 AND dup_of IS NULL AND score >= ?",
+        (min_score,)).fetchone()["n"]
+    if unmarked:
+        print(ui.dim(f"next: jobscout triage   ({unmarked} unmarked matches)   ·   jobscout digest --all"))
+    else:
+        print(ui.dim("next: jobscout digest --all    (everything matching)   ·   jobscout digest   (this run)"))
+    return 0
+
+
+def _print_top(top, min_score: float, strong_th: float) -> None:
+    for pid, title, company, score in top:
+        badge = ui.score_text(f"{score:5g}", score, min_score, strong_th)
+        tail = ui.dim("  · " + company[:30]) if company else ""
+        print(f"  {ui.dim(f'#{pid}')}  {badge}  {title[:58]}{tail}")
+
+
+def cmd_digest(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    min_score = float(cfg.prefs.get("min_score", 6))
+    strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    if args.all:
+        path, summary = digestmod.write_matches_digest(cfg, conn, top=args.top)
+        print(ui.bold("jobscout matches") + ui.dim(f"  →  {path}"))
+        print(f"{ui.cyan(str(summary['matches']))} match your profile · {ui.gold(str(summary['strong']))} strong")
+        _print_top(summary["top"], min_score, strong_th)
+        if args.open:
+            subprocess.run(["open", str(path)], check=False)
+        return 0
+    path, summary = digestmod.write_digest(cfg, conn, run_id=args.run, top=args.top)
+    print(ui.bold("jobscout digest") + ui.dim(f"  →  {path}"))
+    print(f"run #{summary['run_id']} · {ui.bold(str(summary['new']))} new · "
+          f"{ui.cyan(str(summary['matches']))} matches ({ui.gold(str(summary['strong']))} strong) · "
+          f"{summary['filtered']} filtered · {summary['dups']} duplicates")
+    _print_top(summary["top"], min_score, strong_th)
+    if args.open:
+        subprocess.run(["open", str(path)], check=False)
+    return 0
+
+
+def cmd_list(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    if args.filtered:
+        rows = dbm.list_postings(conn, only_filtered=True, exclude_filtered=False, limit=args.limit)
+        for r in rows:
+            rid = ui.dim(f"#{r['id']}")
+            src = ui.dim(f"  [{r['source']}]")
+            print(f"  {rid}  {r['title'][:56]}  {ui.red(r['filtered_reason'])}{src}")
+        print(ui.dim(f"\n{len(rows)} filtered · reasons show why they stay out of digests"))
+        return 0
+    min_score = args.min_score if args.min_score is not None else float(cfg.prefs.get("min_score", 6))
+    strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    goal = None if getattr(args, "all_goals", False) else _active_goal(cfg, getattr(args, "goal", None))
+    rows = dbm.list_postings(conn, min_score=min_score, status=args.status,
+                             source=args.source, limit=100000 if goal else args.limit)
+    if goal:
+        # a goal only narrows the base profile; it never resurrects a filtered row
+        rows = [r for r in rows if goalsmod.match(r, goal)][:args.limit]
+    if args.json:
+        print(json.dumps([dict(r) for r in rows], ensure_ascii=False, indent=2))
+        return 0
+    if not rows:
+        if goal:
+            print(ui.dim(f"nothing matches goal '{goal.name}' ({goal.describe()})"))
+            print(ui.dim(f"  {goal_note_full(goal)}"))
+            print(ui.dim(f"  see the full pool: jobscout list --all-goals"))
+        else:
+            print(ui.dim("nothing here — run `jobscout scan` first, or loosen the filters"))
+        return 0
+    for r in rows:
+        meta = " · ".join(x for x in (r["company"], r["location"], salmod.fmt_row(r)) if x)
+        marks = []
+        if goal:
+            marks.append(ui.cyan("🎯"))
+        if r["status"] != "new":
+            marks.append(ui.magenta(f"[{r['status']}]"))
+        if (r["verify_status"] or "") == "dead":
+            marks.append(ui.red("[dead]"))
+        status = " " + " ".join(marks) if marks else ""
+        rid = ui.dim(f"#{r['id']}")
+        badge = ui.score_text(f"{r['score']:5g}", r["score"], min_score, strong_th)
+        tail = ui.dim(f"  {meta[:62]}") if meta else ""
+        print(f"  {rid}  {badge}{status}  {r['title'][:58]}{tail}")
+    if goal:
+        print(ui.dim(f"\n{len(rows)} shown for goal '{goal.name}' · "
+                     f"`--all-goals` shows the full pool"))
+        return 0
+    print(ui.dim(f"\n{len(rows)} shown · min score {min_score:g} · strong ≥ {strong_th:g} · "
+                 f"`jobscout list --filtered` shows the rejects"))
+    return 0
+
+
+def cmd_show(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    row = dbm.get_posting(conn, args.id)
+    if row is None:
+        print(f"no posting #{args.id}")
+        return 1
+    desc = row["description"] or ""
+    if args.refresh or len(desc) < 400:
+        fetched = _fetch_detail(cfg, conn, row)
+        if fetched:
+            desc = fetched
+    if args.json:
+        try:
+            reasons = json.loads(row["reasons"] or "[]")
+        except ValueError:
+            reasons = []
+        print(json.dumps({
+            "id": row["id"], "title": row["title"], "company": row["company"],
+            "location": row["location"], "url": row["url"], "source": row["source"],
+            "posted_at": row["posted_at"], "status": row["status"], "score": row["score"],
+            "filtered": bool(row["filtered"]), "filtered_reason": row["filtered_reason"],
+            "reasons": reasons, "compensation": row["compensation"], "description": desc,
+            "salary": {"min": row["salary_min"], "max": row["salary_max"],
+                       "currency": row["salary_currency"], "period": row["salary_period"],
+                       "annual_max": row["salary_annual_max"], "raw": row["salary_raw"]},
+            "liveness": {"status": row["verify_status"], "note": row["verify_note"],
+                         "checked_at": row["verified_at"]},
+        }, ensure_ascii=False, indent=2))
+        return 0
+    min_score = float(cfg.prefs.get("min_score", 6))
+    strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    print(ui.bold(f"#{row['id']}  {row['title']}"))
+    badge = ui.score_text(f"score {row['score']:g}", row["score"], min_score, strong_th)
+    print("  " + badge + ui.dim(f" · {row['source']} · status {row['status']}"))
+    if row["filtered"]:
+        print("  " + ui.red(f"filtered: {row['filtered_reason']}"))
+    live = ""
+    if row["verify_status"]:
+        live = row["verify_status"]
+        if row["verify_note"]:
+            live += f" → {row['verify_note']}"
+        if row["verified_at"]:
+            live += f" · checked {row['verified_at'][:16].replace('T', ' ')}"
+    for label, value in (("company", row["company"]), ("location", row["location"]),
+                         ("posted", row["posted_at"]), ("salary", salmod.fmt_row(row)),
+                         ("compensation", row["compensation"]), ("liveness", live),
+                         ("url", row["url"])):
+        if value:
+            print("  " + ui.dim(f"{(label + ':'):<13s}") + str(value))
+    try:
+        reasons = json.loads(row["reasons"] or "[]")
+    except ValueError:
+        reasons = []
+    if reasons:
+        print("  " + ui.dim("why:".ljust(13)) + " · ".join(f"{lab} +{pts:g}" for lab, pts in reasons))
+    print("\n" + ui.rule() + "\n")
+    print(desc[:6000] if desc else ui.dim("(no description available)"))
+    return 0
+
+
+def _fetch_detail(cfg, conn, row) -> str | None:
+    mod = REGISTRY.get(row["source"])
+    fetcher = _fetcher()
+    p = Posting(source=row["source"], title=row["title"], company=row["company"],
+                location=row["location"], url=row["url"], external_id=row["external_id"])
+    desc = None
+    try:
+        fn = getattr(mod, "fetch_detail", None) if mod else None
+        if fn is not None:
+            desc = fn(p, fetcher)
+        elif row["url"].startswith("http"):
+            desc = detailmod.html_detail(row["url"], fetcher)
+    except Exception as e:
+        print(f"(detail fetch failed: {type(e).__name__}: {e})", file=sys.stderr)
+    if desc and len(desc) > len(row["description"] or ""):
+        dbm.set_description(conn, row["id"], desc)
+        return desc
+    return None
+
+
+def cmd_mark(args) -> int:
+    if args.status not in STATUSES:
+        print(f"status must be one of: {', '.join(STATUSES)}")
+        return 2
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    row = dbm.get_posting(conn, args.id)
+    if row is None:
+        print(f"no posting #{args.id}")
+        return 1
+    dbm.set_status(conn, args.id, args.status)
+    print(f"#{args.id} -> {args.status}")
+    return 0
+
+
+def _open_url(url: str) -> None:
+    if sys.platform == "darwin":
+        subprocess.run(["open", url], check=False)
+    else:
+        print(url)
+
+
+def _read_key() -> str:
+    """One keypress from a real terminal (no Enter needed)."""
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    return ch
+
+
+def _read_line() -> str:
+    line = input().strip()
+    return line[:1].lower() if line else ""
+
+
+def _flag(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "0", "false", "no", "off")
+    return bool(value)
+
+
+def _fetcher() -> Fetcher:
+    """Fetcher with certifi's CA bundle when available.
+
+    europa.eu (EURES) serves a GlobalSign chain that the macOS trust store does
+    not carry, so the default context refuses the connection. Prefer adding the
+    root over disabling verification; every other host works unchanged.
+    """
+    try:
+        import certifi
+        import ssl
+        return Fetcher(ssl_context=ssl.create_default_context(cafile=certifi.where()))
+    except ImportError as e:
+        # Do not fail silently: hosts like europa.eu will then error per request.
+        print(f"(certifi unavailable, TLS verification falls back to the system "
+              f"store: {e})", file=sys.stderr)
+        return Fetcher()
+
+
+def _row_expires(row) -> str:
+    """Publisher-declared expiry for a postings row, or "" if the store
+    predates the column. sqlite3.Row supports mapping access, but a plain
+    tuple or a narrower SELECT would not, so stay defensive."""
+    try:
+        return row["expires_at"] or ""
+    except (IndexError, KeyError, TypeError):
+        return ""
+
+
+def _verify_rows(conn, fetcher, rows, quiet: bool = False) -> tuple[dict, list]:
+    counts = {"ok": 0, "dead": 0, "unknown": 0}
+    dead = []
+    for r in rows:
+        # expires_at is a publisher-declared date, so sources behind a bot
+        # challenge still get a real verdict. The column may be absent on a
+        # store created before the migration, hence the .get fallback.
+        state, note = liveness.check(fetcher, r["url"], _row_expires(r))
+        dbm.update_verify(conn, r["id"], state, note)
+        counts[state] += 1
+        if state == "dead":
+            dead.append((r["id"], r["title"]))
+        if not quiet:
+            rid = ui.dim(f"#{r['id']}")
+            detail = ui.dim(f"  ({note})") if note else ""
+            paint = {"dead": ui.red, "ok": ui.green, "unknown": ui.dim}[state]
+            print(f"  {rid}  {paint(f'{state:>7s}')}  {r['title'][:52]}{detail}")
+    return counts, dead
+
+
+def _verify_on_scan(cfg, conn, fetcher, quiet: bool = False) -> dict | None:
+    prefs = cfg.prefs
+    if not _flag(prefs.get("verify_on_scan", True)):
+        return None
+    rows = dbm.postings_to_verify(
+        conn, statuses=("saved", "applied"),
+        max_age_days=int(float(prefs.get("verify_max_age_days", 3))),
+        limit=int(float(prefs.get("verify_per_scan", 15))))
+    if not rows:
+        return None
+    counts, dead = _verify_rows(conn, fetcher, rows, quiet=True)
+    if not quiet:
+        print("\n" + ui.bold("liveness") + ui.dim(f"  ·  checked {len(rows)} saved/applied  ·  ")
+              + ui.green(f"{counts['ok']} ok") + " · " + ui.red(f"{counts['dead']} dead")
+              + " · " + ui.dim(f"{counts['unknown']} unknown"))
+        for pid, title in dead:
+            print("  " + ui.red(f"⚠ #{pid} looks dead") + ui.dim(f"  {title[:56]}"))
+    return counts
+
+
+def cmd_verify(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    if args.recheck:
+        # Re-probe rows whose previous verdict was inconclusive. `--all` cannot
+        # do this: it orders by verified_at, so it hands you thousands of
+        # already-ok rows before reaching the ones you actually wanted to
+        # retry, and there is no way to name "unknown" today.
+        #
+        # `pending` is an alias for the empty string a never-verified row
+        # carries. Without it the query matches nothing and reports "nothing to
+        # verify", which is exactly the confusion it is meant to prevent.
+        raw = [s.strip() for s in args.recheck.split(",") if s.strip()]
+        states = [""] if "pending" in raw else []
+        states += [s for s in raw if s != "pending"]
+        if not states:
+            print(ui.dim("no states given"))
+            return 1
+        marks = ",".join("?" * len(states))
+        rows = conn.execute(
+            f"SELECT * FROM postings WHERE url <> '' AND COALESCE(verify_status,'') IN ({marks}) "
+            f"ORDER BY verified_at LIMIT ?", (*states, args.limit)).fetchall()
+    elif args.all:
+        rows = conn.execute("SELECT * FROM postings WHERE url <> '' ORDER BY verified_at LIMIT ?",
+                            (args.limit,)).fetchall()
+    else:
+        statuses = tuple(s.strip() for s in (args.status or "saved,applied").split(",") if s.strip())
+        rows = dbm.postings_to_verify(conn, statuses=statuses, max_age_days=0, limit=args.limit)
+    if not rows:
+        print(ui.dim("nothing to verify — no saved/applied postings yet "
+                     "(`jobscout mark <id> saved` marks one)"))
+        return 0
+    fetcher = _fetcher()
+    print(ui.bold(f"verifying {len(rows)} posting(s)"))
+    counts, dead = _verify_rows(conn, fetcher, rows, quiet=args.quiet)
+    print("\n" + ui.rule())
+    print(f"checked {len(rows)} · {ui.green(str(counts['ok']) + ' ok')} · "
+          f"{ui.red(str(counts['dead']) + ' dead')} · {counts['unknown']} unknown")
+    if dead:
+        print(ui.red("dead: ") + " ".join(f"#{i}" for i, _ in dead))
+        print(ui.dim("  dismiss with: jobscout mark <id> dismissed"))
+    return 0
+
+
+def cmd_triage(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    min_score = args.min_score if args.min_score is not None else float(cfg.prefs.get("min_score", 6))
+    strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    goal = None if getattr(args, "all_goals", False) else _active_goal(cfg, getattr(args, "goal", None))
+    rows = [r for r in dbm.list_postings(conn, min_score=min_score, status="new",
+                                         source=args.source, limit=100000 if goal else args.limit)
+            if not r["filtered"]]
+    if goal:
+        rows = [r for r in rows if goalsmod.match(r, goal)][:args.limit]
+    if not rows:
+        if goal:
+            print(ui.dim(f"no unmarked matches for goal '{goal.name}' ({goal.describe()})"))
+            print(ui.dim(f"  {goal_note_full(goal)}"))
+            print(ui.dim(f"  the full pool: jobscout triage --all-goals"))
+        else:
+            print(ui.dim("no unmarked matches to review — run `jobscout scan`, or see `jobscout list`"))
+        return 0
+    if goal:
+        print(ui.cyan(f"🎯 goal: {goal.name}") + ui.dim(f"  ({goal.describe()})")
+              + ui.dim(f"  ·  --all-goals for the full pool"))
+    if sys.stdin.isatty():
+        reader = _read_key
+        print(ui.dim("single keys · o or Enter = open · s = saved · a = applied · "
+                     "x = dismiss · n = next · q = quit"))
+    else:
+        reader = _read_line
+    counts = triagemod.run(rows, decide=lambda pid, st: dbm.set_status(conn, pid, st),
+                           opener=_open_url, reader=reader,
+                           min_score=min_score, strong_th=strong_th)
+    print("\n" + ui.rule())
+    print(triagemod.summary_text(counts))
+    if not counts["quit"]:
+        if goal:
+            left = sum(1 for r in dbm.list_postings(conn, min_score=min_score, status="new",
+                                                   limit=100000)
+                       if not r["filtered"] and goalsmod.match(r, goal))
+            if left:
+                print(ui.dim(f"{left} unmarked goal match(es) left — run `jobscout triage` again"))
+            else:
+                print(ui.dim("that was the last one for this goal · `jobscout goal off` "
+                             "returns to the full pool"))
+            return 0
+        left = conn.execute(
+            "SELECT COUNT(*) n FROM postings WHERE status='new' AND filtered=0 "
+            "AND dup_of IS NULL AND score >= ?", (min_score,)).fetchone()["n"]
+        if left:
+            print(ui.dim(f"{left} unmarked match(es) left — run `jobscout triage` again"))
+        else:
+            print(ui.dim("that was the last unmarked match · `jobscout list --status saved` "
+                         "shows your shortlist"))
+    return 0
+
+
+def cmd_discover(args) -> int:
+    """Point the liveness checker at a platform API instead of a walled page."""
+    conn = dbm.connect(load_config().root / "jobscout.db")
+    q = ("SELECT url FROM postings WHERE filtered=0 AND dup_of IS NULL "
+         "AND url IS NOT NULL AND url<>''")
+    params: list = []
+    if args.source:
+        q += " AND source=?"
+        params.append(args.source)
+    rows = [r["url"] for r in conn.execute(q + " LIMIT ?", (*params, args.limit))]
+    conn.close()
+
+    if not rows:
+        print(ui.dim("no URLs to test"))
+        return 0
+
+    results = [discover.probe(u) for u in rows]
+    ok = [r for r in results if r["ok"]]
+    for r in results:
+        mark = ui.green("ok  ") if r["ok"] else ui.dim("fail")
+        print(f"  {mark} {ui.dim((r['platform'] or '-')[:16].ljust(16))} "
+              f"{ui.dim((r.get('mode') or '-')[:10].ljust(10))} {r.get('why','')}")
+
+    by: dict[str, list[bool]] = {}
+    for r in results:
+        by.setdefault(r["platform"] or "unmatched", []).append(r["ok"])
+    print()
+    for plat, v in sorted(by.items(), key=lambda kv: -sum(kv[1])):
+        print(f"  {plat:<18} {sum(v)}/{len(v)}")
+
+    # Feed the per-item platforms we proved out into liveness, so a recheck
+    # stops probing the walled page. Membership platforms need no change: their
+    # branch already checks feed membership rather than fetching the page.
+    usable = sorted({r["platform"] for r in ok if r["mode"] == "per-item"})
+    if usable:
+        print()
+        print(ui.dim(f"per-item API verified for: {', '.join(usable)}"))
+    print(f"\n{len(ok)}/{len(results)} verifiable without touching a human check")
+    return 0
+
+
+def cmd_add_company(args) -> int:
+    cfg = load_config()
+    fetcher = _fetcher()
+    url = args.url if args.url.startswith("http") else "https://" + args.url
+    cands = companiesmod.detect("", url)
+    if not cands:
+        try:
+            status, body = fetcher.get(url)
+        except FetchError as e:
+            print(ui.red(f"could not fetch {url}: {e.message}"))
+            return 1
+        if status != 200:
+            print(ui.red(f"could not fetch {url} (HTTP {status})"))
+            return 1
+        cands = companiesmod.detect(body, url)
+    if not cands:
+        print(ui.red("no Greenhouse / Ashby / Lever / Workable / SmartRecruiters board "
+                     "found on that page"))
+        print(ui.dim("  hint: open the careers page, click into a role, and pass the URL "
+                     "of the job listing itself"))
+        return 1
+    print(ui.dim("candidates: ") + ", ".join(f"{s}/{t}" for s, t in cands))
+    for src, tok in cands:
+        ok, detail = companiesmod.validate(fetcher, src, tok)
+        mark = ui.green("ok") if ok else ui.red("no")
+        print(f"  {src:<15s} {tok:<24s} {mark}  {ui.dim(detail)}")
+        if ok:
+            status = companiesmod.add_token(cfg.path, src, tok)
+            if status == "exists":
+                print(ui.dim(f"already in your config: {src}/{tok}"))
+            else:
+                print(ui.bold(f"added {src}/{tok} to {cfg.path}") + ui.dim(f"  ({status})"))
+            enabled = companiesmod.enable_source(cfg.path, src)
+            if enabled == "added":
+                print(ui.dim(f"also enabled the `{src}` source (it was not in sources.enabled)"))
+            elif enabled == "missing":
+                print(ui.dim(f"note: no sources.enabled list found — make sure `{src}` is enabled"))
+            print(ui.dim(f"  take it in with: jobscout scan --only {src}"))
+            return 0
+    print(ui.red("none of the candidates validated — nothing added"))
+    return 1
+
+
+def cmd_rescore(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    total, changed = dbm.rescore_all(conn, cfg.prefs)
+    m, s = dbm.count_matches(conn, float(cfg.prefs.get("min_score", 6)),
+                             float(cfg.prefs.get("strong_threshold", 12)))
+    print(f"rescored {total} postings, {changed} changed")
+    print(f"matches under your current profile: {m} ({s} strong) — see: jobscout digest --all")
+    return 0
+
+
+def cmd_stats(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    print(ui.bold("postings per source"))
+    for src, n in dbm.counts(conn).items():
+        print(f"  {src:15s} {n:>5}")
+    status_rows = conn.execute("SELECT status, COUNT(*) n FROM postings GROUP BY status ORDER BY n DESC").fetchall()
+    print("\n" + ui.dim("status ") + " · ".join(f"{r['status']} {r['n']}" for r in status_rows))
+    hist = dbm.score_histogram(conn)
+    if hist:
+        min_score = float(cfg.prefs.get("min_score", 6))
+        strong_th = float(cfg.prefs.get("strong_threshold", 12))
+        m, s = dbm.count_matches(conn, min_score, strong_th)
+        print("\n" + ui.bold("score distribution") + ui.dim(
+            f"  ·  matches ≥ {min_score:g}: {m}   strong ≥ {strong_th:g}: {s}"))
+        for value, n in hist:
+            if value >= strong_th:
+                paint = ui.gold
+            elif value >= min_score:
+                paint = ui.cyan
+            else:
+                paint = ui.dim
+            print(f"  {value:>3}  {n:>4}  {paint('█' * max(1, round(n / 4)))}")
+    print("\n" + ui.bold("runs"))
+    for r in dbm.recent_runs(conn):
+        stats = {}
+        try:
+            stats = json.loads(r["stats"] or "{}")
+        except ValueError:
+            pass
+        news = sum(s.get("new", 0) for s in (stats.get("sources") or {}).values())
+        print(f"  #{r['id']:<4d} {_local(r['started_at'])} · {news} new · {stats.get('requests', 0)} requests"
+              + (f" · {len(stats.get('errors') or [])} errors" if stats.get("errors") else ""))
+    return 0
+
+
+def _active_goal(cfg, override=None):
+    """The active goal, or None. Goals are always optional."""
+    if override is not None:
+        if override == "":
+            return None
+        g = cfg.goals.get(override)
+        if g is None:
+            print(ui.red(f"no goal named '{override}' — see `jobscout goals`"))
+            return None
+        return g
+    if not cfg.active_goal:
+        return None
+    return cfg.goals.get(cfg.active_goal)
+
+
+def _goal_note(cfg, g) -> str:
+    return ui.dim(f"  goal: {g.name} ({g.describe()})") if g else ""
+
+
+def goal_note_full(g) -> str:
+    """One-line detail of what a goal actually requires, for the empty-state hint."""
+    bits = []
+    if g.kind == "location" and g.locations:
+        bits.append("location contains " + ", ".join(g.locations))
+    if g.kind == "salary" and g.salary_min:
+        bits.append(f"annualised salary ≥ {g.salary_min:,.0f} EUR")
+    if g.terms:
+        bits.append("text contains " + ", ".join(g.terms))
+    if g.min_score is not None:
+        bits.append(f"base score ≥ {g.min_score:g}")
+    return "; ".join(bits) or "no conditions set"
+
+
+def cmd_goals(args) -> int:
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    goals = cfg.goals
+    if not goals:
+        print(ui.dim("no goals defined — add a `goals:` block to your config"))
+        print(ui.dim("  each goal is ONE standalone target, e.g. austria / senior / "
+                     "a salary floor — not a combination"))
+        print(ui.dim("  example:\n"
+                     "    goals:\n"
+                     "      active: austria\n"
+                     "      austria:\n"
+                     "        kind: location\n"
+                     "        locations: [austria, österreich, wien, graz, linz]\n"
+                     "        label: Austria"))
+        return 0
+    counts = goalsmod.counts_by_goal(conn, goals)
+    active = cfg.active_goal
+    print(ui.bold("goals") + (ui.dim("  (one active at a time — it is the default view)")
+                              if active else ui.dim("  (none active — showing everything)")))
+    for name, g in goals.items():
+        mark = ui.cyan("→ ") if name == active else "  "
+        n = counts.get(name, 0)
+        onoff = "" if g.enabled else ui.dim(" (disabled)")
+        print(f"{mark}{ui.bold(name):<14} {g.describe()}{onoff}  {ui.dim(str(n) + ' match(es)')}")
+    print(ui.dim(f"\nactivate: jobscout goal use <name>   ·   deactivate: jobscout goal off"))
+    return 0
+
+
+def cmd_goal(args) -> int:
+    cfg = load_config()
+    if not cfg.goals:
+        print(ui.red("no goals defined — add a `goals:` block to your config first"))
+        return 1
+    # `jobscout goal use austria` and `jobscout goal austria` are both accepted
+    action = (args.action or "use").lower()
+    name = args.name
+    if action in ("use", "on", "set", "activate") and name is None and args.action != "use":
+        name, action = args.action, "use"     # bare `goal austria` form
+    if args.off or args.clear:
+        action, name = "off", None
+    if action == "off":
+        cfg.active_goal = ""
+    elif action in ("use", "on", "set", "activate"):
+        if not name:
+            print(ui.red("which goal? — `jobscout goal use <name>`, or `jobscout goals` to list"))
+            return 1
+        if name not in cfg.goals:
+            print(ui.red(f"no goal named '{name}' — see `jobscout goals`"))
+            return 1
+        cfg.active_goal = name
+    else:
+        print(ui.red(f"unknown action '{action}' — use `jobscout goal use <name>` or `jobscout goal off`"))
+        return 1
+    # persist: rewrite the `active:` key inside the goals block
+    text = cfg.path.read_text(encoding="utf-8")
+    if re.search(r"(?m)^goals:\s*$", text):
+        if cfg.active_goal:
+            if re.search(r"(?m)^\s*active:.*$", text):
+                text = re.sub(r"(?m)^(\s*)active:.*$",
+                              lambda m: f"{m.group(1)}active: {cfg.active_goal}", text, count=1)
+            else:
+                text = re.sub(r"(?m)^goals:\s*$",
+                              f"goals:\n  active: {cfg.active_goal}", text, count=1)
+        else:
+            if re.search(r"(?m)^\s*active:.*$", text):
+                text = re.sub(r"(?m)^(\s*)active:.*$", r"\1active: \"\"", text, count=1)
+    if action == "off":
+        print(ui.dim("goal mode off — showing the full pool again"))
+    else:
+        g = cfg.goals[cfg.active_goal]
+        print(ui.cyan(f"goal active: {g.name}") + ui.dim(f"  ({g.describe()})"))
+        print(ui.dim("list / triage now default to this goal; "
+                     "`--all-goals` shows the full pool"))
+    cfg.path.write_text(text, encoding="utf-8")
+    return 0
+
+
+# ---------------------------------------------------------------- main
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="jobscout",
+                                     description="local-first job search (no API keys, no accounts)")
+    parser.add_argument("--version", action="version", version=f"jobscout {__version__}")
+    parser.add_argument("--no-color", action="store_true",
+                        help="disable colored output (NO_COLOR is honored too)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("init", help="create ~/.jobscout with a default config")
+    p.set_defaults(fn=cmd_init)
+
+    p = sub.add_parser("config", help="print the config path (--open reveals it in Finder, --edit opens it)")
+    p.add_argument("--open", action="store_true")
+    p.add_argument("--edit", action="store_true")
+    p.set_defaults(fn=cmd_config)
+
+    p = sub.add_parser("scan", help="fetch all enabled sources, score, store new postings")
+    p.add_argument("--only", help="comma-separated source names to run (e.g. stepstone,xing)")
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(fn=cmd_scan)
+
+    p = sub.add_parser("digest", help="write a markdown digest for a run (default: latest)")
+    p.add_argument("--run", type=int, help="run id (default: latest)")
+    p.add_argument("--all", action="store_true",
+                   help="all stored matches under the current profile (not just the latest run)")
+    p.add_argument("--top", type=int, help="cap entries per section")
+    p.add_argument("--open", action="store_true", help="open the digest (macOS)")
+    p.set_defaults(fn=cmd_digest)
+
+    p = sub.add_parser("list", help="list stored matches")
+    p.add_argument("--min-score", type=float, dest="min_score")
+    p.add_argument("--status", choices=STATUSES)
+    p.add_argument("--source")
+    p.add_argument("--filtered", action="store_true",
+                   help="show postings that were filtered out, with reasons")
+    p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--goal", help="view this goal instead of the active one")
+    p.add_argument("--all-goals", action="store_true", dest="all_goals",
+                   help="ignore the active goal and show the full pool")
+    p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("goals", help="list defined goals with live match counts")
+    p.set_defaults(fn=cmd_goals)
+
+    p = sub.add_parser("goal", help="activate or deactivate the one active goal")
+    p.add_argument("action", nargs="?", default="use",
+                   help="'use <name>' to activate, or pass a bare goal name")
+    p.add_argument("name", nargs="?", help="goal to activate")
+    p.add_argument("--off", action="store_true", help="deactivate (full pool again)")
+    p.add_argument("--clear", action="store_true", help=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_goal)
+
+    p = sub.add_parser("show", help="show one posting (fetches the full description if needed)")
+    p.add_argument("id", type=int)
+    p.add_argument("--refresh", action="store_true", help="re-fetch the description")
+    p.add_argument("--json", action="store_true",
+                   help="machine-readable output, includes the stored description text")
+    p.set_defaults(fn=cmd_show)
+
+    p = sub.add_parser("triage", help="walk unmarked matches one by one (o/s/a/x keys)")
+    p.add_argument("--limit", type=int, default=25, help="how many to review (default 25)")
+    p.add_argument("--min-score", type=float, dest="min_score")
+    p.add_argument("--source")
+    p.add_argument("--goal", help="review this goal instead of the active one")
+    p.add_argument("--all-goals", action="store_true", dest="all_goals",
+                   help="ignore the active goal and review the full pool")
+    p.set_defaults(fn=cmd_triage)
+
+    p = sub.add_parser("verify", help="check saved/applied postings for dead listings")
+    p.add_argument("--status", help="comma list of statuses (default: saved,applied)")
+    p.add_argument("--all", action="store_true", help="every stored posting with a URL")
+    p.add_argument("--recheck",
+                   help="re-probe rows whose last verdict was one of these "
+                        "liveness states, oldest first (e.g. unknown, pending). "
+                        "Wins over --all.")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(fn=cmd_verify)
+
+    p = sub.add_parser("add-company",
+                       help="find the Greenhouse/Ashby/Lever board behind a careers page and add it")
+    p.add_argument("url", help="careers page or job-listing URL")
+    p.set_defaults(fn=cmd_add_company)
+
+    p = sub.add_parser("discover",
+                       help="for blocked job URLs, find and test a public API to "
+                            "verify liveness against (stdin, one URL per line)")
+    p.add_argument("--source", help="only URLs from this source")
+    p.add_argument("--limit", type=int, default=40)
+    p.set_defaults(fn=cmd_discover)
+
+    p = sub.add_parser("mark", help="set a posting's status")
+    p.add_argument("id", type=int)
+    p.add_argument("status")
+    p.set_defaults(fn=cmd_mark)
+
+    p = sub.add_parser("rescore", help="re-score all stored postings with the current preferences")
+    p.set_defaults(fn=cmd_rescore)
+
+    p = sub.add_parser("stats", help="counts and recent runs")
+    p.set_defaults(fn=cmd_stats)
+
+    args = parser.parse_args(argv)
+    ui.init(force_off=args.no_color)
+    try:
+        return args.fn(args)
+    except KeyboardInterrupt:
+        print("\ninterrupted")
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

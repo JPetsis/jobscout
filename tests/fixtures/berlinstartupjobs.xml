@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Berlin Startup Jobs</title>
+	<atom:link href="https://berlinstartupjobs.com/feed/" rel="self" type="application/rss+xml" />
+	<link>https://berlinstartupjobs.com/</link>
+	<description></description>
+	<lastBuildDate>Mon, 14 Sep 2026 13:32:16 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	
+
+<image>
+	<url>https://berlinstartupjobs.com/wp-content/uploads/Favicon-32x32.png</url>
+	<title>Berlin Startup Jobs</title>
+	<link>https://berlinstartupjobs.com/</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+<site xmlns="com-wordpress:feed-additions:1">83677010</site>	<item>
+		<title>Spezialist*in für Mail-Marketing und kreatives Schreiben // Mein Grundeinkommen e.V.</title>
+		<link>https://berlinstartupjobs.com/marketing/spezialistin-fur-mail-marketing-und-kreatives-schreiben-mein-grundeinkommen-e-v/</link>
+		
+		<dc:creator><![CDATA[BSJ-Admin2]]></dc:creator>
+		<pubDate>Mon, 14 Sep 2026 13:32:09 +0000</pubDate>
+				<category><![CDATA[Marketing & Communications]]></category>
+		<category><![CDATA[Creative Writing]]></category>
+		<category><![CDATA[e-mail]]></category>
+		<category><![CDATA[mail marketing]]></category>
+		<category><![CDATA[mailing]]></category>
+		<category><![CDATA[ux writing]]></category>
+		<guid isPermaLink="false">https://berlinstartupjobs.com/de/?p=452884</guid>
+
+					<description><![CDATA[<p>Mein Grundeinkommen e.V.</p>
+<p><a href="https://berlinstartupjobs.com/marketing/spezialistin-fur-mail-marketing-und-kreatives-schreiben-mein-grundeinkommen-e-v/" rel="nofollow">Read more »</a></p>
+]]></description>
+		
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">452884</post-id>	</item><item>
+		<title>Senior Software Engineer &#8211; Node.js (m/f/d) // Solarize</title>
+		<link>https://berlinstartupjobs.com/engineering/senior-software-engineer-node-js-m-f-d-solarize/</link>
+		
+		<dc:creator><![CDATA[Join]]></dc:creator>
+		<pubDate>Mon, 14 Sep 2026 08:29:37 +0000</pubDate>
+				<category><![CDATA[IT / Software Development]]></category>
+		<guid isPermaLink="false">https://berlinstartupjobs.com/?p=452868</guid>
+
+					<description><![CDATA[<p>Die Solarize Energy Solutions GmbH mit Büros in Berlin und Stuttgart revolutioniert die Energiewirtschaft mit innovativer Meter-to-Cash-Software.</p>
+<p><a href="https://berlinstartupjobs.com/engineering/senior-software-engineer-node-js-m-f-d-solarize/" rel="nofollow">Read more »</a></p>
+]]></description>
+		
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">452868</post-id>	</item></channel></rss>

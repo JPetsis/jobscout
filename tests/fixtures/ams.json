@@ -1,0 +1,211 @@
+{
+ "totalResults": 776,
+ "totalPages": 156,
+ "page": 1,
+ "pageSize": 5,
+ "results": [
+  {
+   "objectType": "searchJobOffer",
+   "id": 21658604,
+   "uuid": "0781795f-0fff-3264-8d4d-cfe33821972d",
+   "lastUpdatedAt": "2026-09-21T00:00:00Z",
+   "title": "Softwareentwickler/in",
+   "company": {
+    "name": "plasoft GmbH",
+    "website": null,
+    "address": {
+     "countryCode": "AT",
+     "federalState": "Steiermark",
+     "zipCode": "8605",
+     "municipality": "Kapfenberg",
+     "town": "Pötschach",
+     "street": "Industriestraße Ost 7",
+     "freeText": null,
+     "coordinates": null,
+     "displayMap": null
+    }
+   },
+   "educationLevels": [
+    {
+     "code": "H*",
+     "description": "Matura",
+     "parent": null
+    },
+    {
+     "code": "U*",
+     "description": "Fachhochschule/Universität/pädagogische Hochschule",
+     "parent": null
+    }
+   ],
+   "jobOfferType": {
+    "code": "AMS",
+    "description": "Arbeitsmarktservice"
+   },
+   "workingTime": {
+    "code": "V",
+    "description": "Vollzeit"
+   },
+   "employmentRelationship": {
+    "code": "AA",
+    "description": "ArbeiterInnen/Angestellte"
+   },
+   "summary": "<p>Als Softwareentwickler wirst du....</p>\n<p>- an unserer Cloudlösung infinalyse mitarbeiten.<br />- unser MES bzw. BDE weiterentwickeln.<br />- dich in Kundenprojekten weiterentwickeln und neue Technologien kennenlernen</p>\n<p>Deine Skills - Was du mitbringen solltest? </p>\n<p>- Eine abgeschlossene Ausbildung bzw. optimalerweise eine IT-Ausbildung.<br />- Erfahrungen in der Softwareentwicklung und die Bereitschaft sich weiterzubilden zeichnen dich aus<br />- Diese Technologien solltest du können: C#, PHP, MsSQL, CSS, HTML, jQuery, Javascript, Git<br />- Die primäre Unternehmenssprache ist Deutsch.<br />- Selbstorganisation liegt dir und du gehst zielorientiert an deine Aufgaben heran. <br />- Flexibilität und Belastbarkeit zeichnen dich aus.<br />- Du bist ein Teamplayer</p>\n<p>Umfeld - Was kannst du erwarten?</p>\n<p>- Wir leben eine offene Kommunikationskultur per Du<br />- Interessante und eigenverantwortliche Aufgaben in einem modernen und wachsenden Unternehmen<br />- Eine gründliche und individuelle Einarbeitung im Team<br />- Langfristige Karrierechancen <br />- Nach dem Onboarding steht dir ein erfahrener Kollege als Mentor zur Seite.<br />- Flexible Arbeitszeiten und ein …</p>",
+   "occupations": [
+    {
+     "id": 388,
+     "bisNoteId": "622",
+     "name": "SoftwareentwicklerIn",
+     "parent": null
+    }
+   ],
+   "urlToJobOffer": null,
+   "jobPortalName": null,
+   "workingLocation": {
+    "countryCode": "AT",
+    "federalState": "Steiermark",
+    "zipCode": "8605",
+    "municipality": "Kapfenberg",
+    "town": "Kapfenberg",
+    "street": null,
+    "freeText": null,
+    "coordinates": null,
+    "displayMap": false
+   },
+   "isPreselection": false,
+   "isBookmarked": null,
+   "isGreenJob": false
+  },
+  {
+   "objectType": "searchJobOffer",
+   "id": 22815788,
+   "uuid": "7252b872-12f8-31c5-8340-bbcf995f778a",
+   "lastUpdatedAt": "2026-09-11T00:00:00Z",
+   "title": "Softwareentwickler_in",
+   "company": {
+    "name": "nicht genannt",
+    "website": null,
+    "address": null
+   },
+   "educationLevels": [
+    {
+     "code": "H*",
+     "description": "Matura",
+     "parent": null
+    },
+    {
+     "code": "U*",
+     "description": "Fachhochschule/Universität/pädagogische Hochschule",
+     "parent": null
+    }
+   ],
+   "jobOfferType": {
+    "code": "AMS",
+    "description": "Arbeitsmarktservice"
+   },
+   "workingTime": {
+    "code": "V",
+    "description": "Vollzeit"
+   },
+   "employmentRelationship": {
+    "code": "AA",
+    "description": "ArbeiterInnen/Angestellte"
+   },
+   "summary": "<p><br /><span class=\"fw-bold\">Anforderungen:</span></p>\n<ul><li>abgeschlossene Ausbildung als Softwareentwickler_in </li><li>mehrjährige einschlägige Berufspraxis vorausgesetzt</li><li>Erfahrung in der Entwicklung und Optimierung von ERP-Programmen sowie für die Steuerung von ECM, DMS und Groupware</li><li>fachkundiger Umgang mit JavaScript wird vorausgesetzt</li><li>solide Kenntnisse in der Schnittstellenprogrammierung (REST(full), SOAP, ...)</li><li>Erfahrung im Betrieb von Datenbank- und Webservern (Linux, Apache, MySQL, MS-SQL)</li><li>Kenntnisse in der Versionierung (SVN, GIT) sowie Virtualisierung (VMware, Docker, ..) von Vorteil</li><li>React Native Vorerfahrung wünschenswert</li><li>gute Organisationskompetenz und verantwortungsbewusste Arbeitsweise im Team</li><li>adäquate Deutschkenntnisse, sehr gute Englischkenntnisse von Vorteil</li><li>hohes Maß an Zuverlässigkeit, Einsatzbereitschaft und Belastbarkeit</li></ul>\n<p><br /><span class=\"fw-bold\">Aufgabengebiet:</span></p>\n<ul><li>Mithilfe in der Weiterentwicklung unserer Software-Lösungen</li><li>Wartungsaufgaben und Kundensupport</li><li>Zusammenarbeit mit EDV und IT-Team</li></ul>\n<p><br /><span class=\"fw-bold\">Wir bie…</p>",
+   "occupations": [
+    {
+     "id": 388,
+     "bisNoteId": "622",
+     "name": "SoftwareentwicklerIn",
+     "parent": null
+    }
+   ],
+   "urlToJobOffer": null,
+   "jobPortalName": null,
+   "workingLocation": {
+    "countryCode": "AT",
+    "federalState": "Salzburg",
+    "zipCode": "5580",
+    "municipality": "Tamsweg",
+    "town": "Mörtelsdorf",
+    "street": null,
+    "freeText": null,
+    "coordinates": null,
+    "displayMap": false
+   },
+   "isPreselection": true,
+   "isBookmarked": null,
+   "isGreenJob": false
+  },
+  {
+   "objectType": "searchJobOffer",
+   "id": 22868954,
+   "uuid": "debdb0c6-89aa-3141-aa6e-a0c9a9ef4dbc",
+   "lastUpdatedAt": "2026-09-23T00:00:00Z",
+   "title": "Softwareentwickler_in",
+   "company": {
+    "name": "SYNERGIE Personal Austria GmbH",
+    "website": null,
+    "address": {
+     "countryCode": "AT",
+     "federalState": "Steiermark",
+     "zipCode": "8200",
+     "municipality": "Gleisdorf",
+     "town": "Gleisdorf",
+     "street": "Sparkassenplatz 1",
+     "freeText": null,
+     "coordinates": null,
+     "displayMap": null
+    }
+   },
+   "educationLevels": [
+    {
+     "code": "M*",
+     "description": "Berufsbildende mittlere Schule",
+     "parent": null
+    },
+    {
+     "code": "L*",
+     "description": "Lehre/Lehre mit Meisterprüfung",
+     "parent": null
+    }
+   ],
+   "jobOfferType": {
+    "code": "AMS",
+    "description": "Arbeitsmarktservice"
+   },
+   "workingTime": {
+    "code": "V",
+    "description": "Vollzeit"
+   },
+   "employmentRelationship": {
+    "code": "AA",
+    "description": "ArbeiterInnen/Angestellte"
+   },
+   "summary": "<p>Dieser Auftraggeber ist ein international tätiges Unternehmen im Bereich Industrie- und Produktionsautomatisierung, das Anlagen, Robotik- und Automatisierungslösungen für industrielle Fertigungsprozesse entwickelt.<br /><br />Zur Verstärkung des Teams, stellen wir für unseren Auftraggeber einen zuverlässigen <span class=\"fw-bold\">SOFTWAREENTWICKLER_IN ab sofort im Raum Gleisdorf</span> ein.<br /><br />Führerschein B und eigenes KFZ sind zur Anreise an den Arbeitsort von Vorteil, jedoch nicht Bedingung. <br /><br /><span class=\"fw-bold\">Ihr Aufgabenbereich</span><br />·Konfiguration und Anpassung der Softwarelösungen entsprechend den individuellen Anforderungen<br />·Weiterentwicklung, Optimierung und Wartung bestehender Anwendungen über den gesamten Lebenszyklus<br />·Aktive Mitarbeit bei der Analyse, Konzeption und Definition von Anforderungsspezifikationen<br />·Inbetriebnahme, Konfiguration und Betreuung der Softwarelösungen<br />·Enge Zusammenarbeit mit unterschiedlichen internen und externen Schnittstellen<br /><br /><span class=\"fw-bold\">Ihre Qualifikationen</span><br />·Abgeschlossene technische Ausbildung Lehre, HTL oder vergleichbare Qualifikation<br />·Erfahrung in der…</p>",
+   "occupations": [
+    {
+     "id": 388,
+     "bisNoteId": "622",
+     "name": "SoftwareentwicklerIn",
+     "parent": null
+    }
+   ],
+   "urlToJobOffer": null,
+   "jobPortalName": null,
+   "workingLocation": {
+    "countryCode": "AT",
+    "federalState": "Steiermark",
+    "zipCode": "8200",
+    "municipality": "Albersdorf-Prebuch",
+    "town": "Albersdorf",
+    "street": null,
+    "freeText": null,
+    "coordinates": null,
+    "displayMap": false
+   },
+   "isPreselection": false,
+   "isBookmarked": null,
+   "isGreenJob": false
+  }
+ ]
+}

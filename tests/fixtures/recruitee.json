@@ -1,0 +1,298 @@
+{
+ "offers": [
+  {
+   "country": "Netherlands",
+   "dynamic_fields": [],
+   "options_phone": "required",
+   "position": 685,
+   "state_name": "Noord-Holland",
+   "max_hours": 40,
+   "highlight": null,
+   "requirements": "<h3>Who we are looking for</h3><ul><li><p>You are fluent in both Dutch &amp; English,</p></li><li><p>Available to work at least 24 hours per week, also on weekends,</p></li><li><p>You've already gained first customer service experience (experience with Zendesk is a plus),</p></li><li><p>You genuinely enjoy interacting with people, both over the phone and in writing,</p></li><li><p>You follow processes and, at the same time, proactively share ideas on how to improve them,</p></li><li><p>You are results-driven and stress resistant.</p></li></ul><h3>Our perks</h3><p>We work hard to change the world, but we don't forget to recognise &amp; celebrate our successes, big and small. We put a focus on <strong>work-life balance</strong>&nbsp;and have family-friendly policies in place. Our benefits include:</p><ul><li><p>Stock option plan -&gt; we believe in shared value creation;</p></li><li><p>A training and <strong>development budget of €3,000</strong> per year per employee, because development and training are important to us and our sector offers endless opportunities;</p></li><li><p>An attractive <strong>pension plan</strong> (fully covered by Fastned);</p></li><li><p>Daily vegetarian lu…</p>",
+   "guid": "2uffe",
+   "location_question_visible": false,
+   "company_name": "Fastned",
+   "location": "Amsterdam, Noord-Holland, Netherlands",
+   "title": "Customer Support Agent - Dutch speaking",
+   "salary": {
+    "max": "37000",
+    "min": "34000",
+    "period": "year",
+    "currency": "EUR"
+   },
+   "experience_code": "entry_level",
+   "options_photo": "off",
+   "max_hours_per_week": "40",
+   "hybrid": true,
+   "state_code": "NH",
+   "created_at": "2026-06-24 08:12:17 UTC",
+   "education_code": "high_school",
+   "min_hours_per_week": "24",
+   "department": "Customer Operations",
+   "postal_code": "1096BC",
+   "city": "Amsterdam",
+   "locations_question_required": true,
+   "sharing_title": "Customer Support Agent - Dutch speaking",
+   "locations": [
+    {
+     "id": 96828,
+     "name": "Amsterdam Office",
+     "state": "Noord-Holland",
+     "country": "Netherlands",
+     "city": "Amsterdam",
+     "translations": {
+      "en": {
+       "name": "Amsterdam Office",
+       "city": "Amsterdam",
+       "postal_code": "1096BC",
+       "street": "Amstelplein 44",
+       "note": null
+      }
+     },
+     "country_code": "NL",
+     "postal_code": "1096BC",
+     "state_code": "NH",
+     "street": "Amstelplein 44",
+     "note": null
+    }
+   ],
+   "options_salutation": "off",
+   "sharing_description": "Join our inhouse Customer Operations team and be at the forefront of the electric vehicle and charging infrastructure revolution in Europe! At Fastned you can directly contribute to combating climate ",
+   "country_code": "NL",
+   "min_hours": 24,
+   "description": "<p><strong>Join our inhouse Customer Operations team and be at the forefront of the electric vehicle and charging infrastructure revolution in Europe! At Fastned you can directly contribute to combating climate change by accelerating the transition to electric mobility. Together with 300+ colleagues with over 40 nationalities we have the ambition to build a European network of fast charging stations. We focus on prime locations where electric drivers can charge their vehicles with energy from the sun and wind. What sets us apart is our focus on sustainability and clean energy. As a member of the Fastned team, you'll be contributing to a greener future by supporting our mission to give freedom to electric drivers.</strong></p><h3>Your role</h3><p>At Fastned, we pride ourselves on providing our customers with exceptional service and a top-notch charging experience. As our <strong>Dutch &amp; English speaking Customer Support Agent</strong>, you will play a crucial role in upholding our commitment to customer satisfaction together with our dynamic team and helping us stand out from the competition.</p><p>One of the things that makes working at Fastned so enjoyable is our innovative an…</p>",
+   "locations_question": "What is your preferred work location?",
+   "slug": "customer-support-agent-dutch-speaking-5",
+   "mailbox_email": "job.2uffe@fastned.recruitee.com",
+   "careers_apply_url": "https://fastned.recruitee.com/o/customer-support-agent-dutch-speaking-5/c/new",
+   "remote": false,
+   "id": 2652123,
+   "updated_at": "2026-09-10 13:21:10 UTC",
+   "careers_url": "https://fastned.recruitee.com/o/customer-support-agent-dutch-speaking-5",
+   "employment_type_code": "contract",
+   "locations_question_type": "multiple_choice",
+   "close_at": null,
+   "on_site": false,
+   "options_cover_letter": "off",
+   "status": "published",
+   "published_at": "2026-09-10 13:21:09 UTC",
+   "options_cv": "required",
+   "options_title": "off",
+   "tags": [],
+   "open_questions": [
+    {
+     "id": 4211915,
+     "position": 1,
+     "options": {},
+     "required": true,
+     "body": "Excited about joining our Customer Support team? We are curious to hear why you are the best person for this role &amp; why you want to join our mission at Fastned! ",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "Excited about joining our Customer Support team? We are curious to hear why you are the best person for this role &amp; why you want to join our mission at Fastned! "
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4211943,
+     "position": 2,
+     "options": {},
+     "required": true,
+     "body": "What is your salary expectation (yearly gross)?",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "What is your salary expectation (yearly gross)?"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4211944,
+     "position": 3,
+     "options": {},
+     "required": true,
+     "body": "Do you speak Dutch at a (near-)native level?",
+     "kind": "boolean",
+     "translations": {
+      "en": {
+       "body": "Do you speak Dutch at a (near-)native level?"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4211916,
+     "position": 4,
+     "options": {},
+     "required": false,
+     "body": "What is an unusual habit or absurd thing you love that will make us remember you?",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "What is an unusual habit or absurd thing you love that will make us remember you?"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4211917,
+     "position": 5,
+     "options": {
+      "length": 120
+     },
+     "required": false,
+     "body": "Do you have any questions for us?",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "Do you have any questions for us?"
+      }
+     },
+     "open_question_options": []
+    }
+   ],
+   "category_code": "customer_service"
+  },
+  {
+   "country": "Netherlands",
+   "dynamic_fields": [],
+   "options_phone": "required",
+   "position": 724,
+   "state_name": "Noord-Holland",
+   "max_hours": null,
+   "highlight": null,
+   "requirements": null,
+   "guid": "8a3mc",
+   "location_question_visible": false,
+   "company_name": "Fastned",
+   "location": "Amsterdam, Noord-Holland, Netherlands",
+   "title": "Health, Safety & Environment Officer",
+   "salary": {
+    "max": null,
+    "min": null,
+    "period": null,
+    "currency": null
+   },
+   "experience_code": "experienced",
+   "options_photo": "off",
+   "max_hours_per_week": null,
+   "hybrid": true,
+   "state_code": "NH",
+   "created_at": "2026-09-17 16:54:46 UTC",
+   "education_code": "bachelor_degree",
+   "min_hours_per_week": null,
+   "department": null,
+   "postal_code": "1096BC",
+   "city": "Amsterdam",
+   "locations_question_required": true,
+   "sharing_title": "Health, Safety & Environment Officer",
+   "locations": [
+    {
+     "id": 96828,
+     "name": "Amsterdam Office",
+     "state": "Noord-Holland",
+     "country": "Netherlands",
+     "city": "Amsterdam",
+     "translations": {
+      "en": {
+       "name": "Amsterdam Office",
+       "city": "Amsterdam",
+       "postal_code": "1096BC",
+       "street": "Amstelplein 44",
+       "note": null
+      }
+     },
+     "country_code": "NL",
+     "postal_code": "1096BC",
+     "state_code": "NH",
+     "street": "Amstelplein 44",
+     "note": null
+    }
+   ],
+   "options_salutation": "off",
+   "sharing_description": "Fastned exists because twelve years ago, driving an electric car across Europe meant planning your route around whether you would make it. We have spent since 2012 building the answer: a fast-charging",
+   "country_code": "NL",
+   "min_hours": null,
+   "description": "<p><strong><em><span style=\"color:#121317\">Fastned exists because twelve years ago, driving an electric car across Europe meant planning your route around whether you would make it. We have spent since 2012 building the answer: a fast-charging network you can actually rely on, running entirely on solar and wind. More than 400 stations across nine countries now, on our way to 1,000 by 2030. Every one of them is a bet that clean energy wins on the commercial case as well as the moral one, and so far the bet is paying off. Building that network takes more than construction. It takes the teams behind it, and those teams are being built right now, which means you would have a hand in deciding how the work gets done rather than stepping into something already settled.</span></em></strong></p><p><span style=\"color:#121317\">People work at height, near live electricity, next to motorway traffic, on sites run by contractors. Keeping them safe across the Netherlands and Belgium is the first half of this job. The second half is bigger: you will own safety culture and training for the entire HSE department, across every country Fastned operates in, and decide how safety is communicated and unde…</p>",
+   "locations_question": "What is your preferred work location?",
+   "slug": "health-safety-environment-officer",
+   "mailbox_email": "job.8a3mc@fastned.recruitee.com",
+   "careers_apply_url": "https://fastned.recruitee.com/o/health-safety-environment-officer/c/new",
+   "remote": false,
+   "id": 2750196,
+   "updated_at": "2026-09-22 11:32:15 UTC",
+   "careers_url": "https://fastned.recruitee.com/o/health-safety-environment-officer",
+   "employment_type_code": "fulltime_permanent",
+   "locations_question_type": "multiple_choice",
+   "close_at": null,
+   "on_site": false,
+   "options_cover_letter": "off",
+   "status": "published",
+   "published_at": "2026-09-17 17:09:07 UTC",
+   "options_cv": "required",
+   "options_title": "off",
+   "tags": [],
+   "open_questions": [
+    {
+     "id": 4378091,
+     "position": 1,
+     "options": {},
+     "required": true,
+     "body": "We're curious to hear why you're excited to join Fastned, our mission and in this role specifically!",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "We're curious to hear why you're excited to join Fastned, our mission and in this role specifically!"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4378092,
+     "position": 2,
+     "options": {},
+     "required": true,
+     "body": "This role has two halves: the hands-on HSE work across sites in the Netherlands and Belgium, and owning the safety culture, training and communications pillar for the whole HSE department across all markets. Which of the two are you stronger at today, and what have you done in the weaker one?",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "This role has two halves: the hands-on HSE work across sites in the Netherlands and Belgium, and owning the safety culture, training and communications pillar for the whole HSE department across all markets. Which of the two are you stronger at today, and what have you done in the weaker one?"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4378093,
+     "position": 3,
+     "options": {},
+     "required": true,
+     "body": "Do you speak Dutch at a professional level, written and spoken, and do you hold a valid driving licence?",
+     "kind": "text",
+     "translations": {
+      "en": {
+       "body": "Do you speak Dutch at a professional level, written and spoken, and do you hold a valid driving licence?"
+      }
+     },
+     "open_question_options": []
+    },
+    {
+     "id": 4378094,
+     "position": 4,
+     "options": {},
+     "required": true,
+     "body": "What are your salary expectations for this role? Gross annual, excluding bonus and benefits.",
+     "kind": "string",
+     "translations": {
+      "en": {
+       "body": "What are your salary expectations for this role? Gross annual, excluding bonus and benefits."
+      }
+     },
+     "open_question_options": []
+    }
+   ],
+   "category_code": "other"
+  }
+ ]
+}

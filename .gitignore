@@ -1,0 +1,17 @@
+# The workspace with your data lives in ~/.jobscout (outside this repo).
+# This repo is code only.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
+# agent working state / plans, not project code
+.hermes/
+# never commit user data, even if someone points the workspace here
+.jobscout/
+*.db
+*.sqlite
+reports/

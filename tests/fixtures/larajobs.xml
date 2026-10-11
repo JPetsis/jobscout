@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:atom="http://www.w3.org/2005/Atom"
+     xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+     xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+     xmlns:job="https://larajobs.com"
+>
+
+    <channel>
+        <title>LaraJobs</title>
+        <atom:link href="https://larajobs.com" rel="self" type="application/rss+xml" />
+        <link>https://larajobs.com</link>
+        <description>Your Laravel Jobs source.</description>
+        <lastBuildDate>Tue, 22 Sep 2026 09:37:48 +0000</lastBuildDate>
+        <language>en-US</language>
+        <sy:updatePeriod>hourly</sy:updatePeriod>
+        <sy:updateFrequency>1</sy:updateFrequency>
+        <generator>https://larajobs.com</generator>
+                    <item>
+                <title>Full-Stack Developer (Laravel + Vue/Inertia) - UK Only</title>
+                <link>https://larajobs.com/job/3938</link>
+                <pubDate>Tue, 22 Sep 2026 09:37:48 +0000</pubDate>
+                <dc:creator><![CDATA[Greenwood Capital]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote/Hybrid, UK Only]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[£60k]]></job:salary>
+                <job:company><![CDATA[Greenwood Capital]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/KkBoucdFD70LX626DWucr7uIsDEES2OIQ9dwP92I.jpg</job:company_logo>
+                <job:tags><![CDATA[API,Fullstack,Laravel,TailwindCSS,VueJS]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3938</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Full Stack Software Engineer (PHP/Laravel)- US Only</title>
+                <link>https://larajobs.com/job/3937</link>
+                <pubDate>Mon, 21 Sep 2026 20:01:47 +0000</pubDate>
+                <dc:creator><![CDATA[Evolution Collect, LLC]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote/USA]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$115,000.00 - $135,000.00]]></job:salary>
+                <job:company><![CDATA[Evolution Collect, LLC]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/dVbwL0gc4RF5TQtAmnahnEM8eTSqoZllTKpJGN3m.png</job:company_logo>
+                <job:tags><![CDATA[AWS,Laravel,MySQL,PHP,VueJS]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3937</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Laravel DevOps Unicorn 🦄</title>
+                <link>https://larajobs.com/job/3936</link>
+                <pubDate>Wed, 16 Sep 2026 06:35:27 +0000</pubDate>
+                <dc:creator><![CDATA[CRAE Group]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote / Cyprus]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[Up to €100k]]></job:salary>
+                <job:company><![CDATA[CRAE Group]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/DtSm9vRFvbkbDGEpPccAXhXo36JMEd2OsyISGu1G.png</job:company_logo>
+                <job:tags><![CDATA[Cloud,DevOps,Laravel]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3936</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Senior Software Engineer, Integrations</title>
+                <link>https://larajobs.com/job/3935</link>
+                <pubDate>Tue, 15 Sep 2026 23:43:26 +0000</pubDate>
+                <dc:creator><![CDATA[Givebutter]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote/USA]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$170,000-185,000]]></job:salary>
+                <job:company><![CDATA[Givebutter]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/</job:company_logo>
+                <job:tags><![CDATA[API,Engineer,Laravel,PHP,Senior]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3935</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Lead Developer — Rebuild, Modernize, &amp; Scale (Social Good SaaS, Remote)</title>
+                <link>https://larajobs.com/job/3934</link>
+                <pubDate>Mon, 14 Sep 2026 22:10:10 +0000</pubDate>
+                <dc:creator><![CDATA[Track it Forward]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote / USA / Canada]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[Competitive]]></job:salary>
+                <job:company><![CDATA[Track it Forward]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/LTGBjR9lhEBM8kh8HdXvpgYijS6autdBohCnMtqG.png</job:company_logo>
+                <job:tags><![CDATA[]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3934</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Product Lead (Strategy + Full Stack)</title>
+                <link>https://larajobs.com/job/3933</link>
+                <pubDate>Sat, 12 Sep 2026 11:14:53 +0000</pubDate>
+                <dc:creator><![CDATA[Optimizee Group]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$48,000–90,000]]></job:salary>
+                <job:company><![CDATA[Optimizee Group]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/GImBXQS11Wvn5dRp5sKQDR6F1DIKND2Ayd7yAJlv.png</job:company_logo>
+                <job:tags><![CDATA[Backend,Frontend,Fullstack,Lead,Management]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3933</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Intermediate Full-Stack Laravel Developer - SaaS for K–12 Schools</title>
+                <link>https://larajobs.com/job/3932</link>
+                <pubDate>Mon, 07 Sep 2026 19:38:52 +0000</pubDate>
+                <dc:creator><![CDATA[Frogtummy]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Utah-based]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$60,000-$80,000]]></job:salary>
+                <job:company><![CDATA[Frogtummy]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/ImkBFijvxElLVXtaYLbibCQ3bnY5c7r9Lmz8Dcph.png</job:company_logo>
+                <job:tags><![CDATA[]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3932</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Senior Product Engineer (Laravel - Remote)</title>
+                <link>https://larajobs.com/job/3931</link>
+                <pubDate>Mon, 07 Sep 2026 08:03:05 +0000</pubDate>
+                <dc:creator><![CDATA[Hospitable]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$134,450.00 - $167,258.30 USD]]></job:salary>
+                <job:company><![CDATA[Hospitable]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/HkiCbJkbEB3kZkRfBaHv6SRLNMm9gysLzBu4aZ1J.png</job:company_logo>
+                <job:tags><![CDATA[Backend,Laravel,MySQL,PHP,Senior]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3931</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Full-Stack Engineer</title>
+                <link>https://larajobs.com/job/3930</link>
+                <pubDate>Sat, 05 Sep 2026 08:49:39 +0000</pubDate>
+                <dc:creator><![CDATA[Fans API (previously OnlyFans API)]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Remote / Prague, Czech Republic]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[$60,000 - $100,069]]></job:salary>
+                <job:company><![CDATA[Fans API (previously OnlyFans API)]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/</job:company_logo>
+                <job:tags><![CDATA[API,Backend,Fullstack,Laravel,React]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3930</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+                    <item>
+                <title>Software Engineer</title>
+                <link>https://larajobs.com/job/3929</link>
+                <pubDate>Fri, 04 Sep 2026 12:37:22 +0000</pubDate>
+                <dc:creator><![CDATA[Invo Solutions]]></dc:creator>
+                <category><![CDATA[Job]]></category>
+                <job:location><![CDATA[Springfield, MO]]></job:location>
+                <job:job_type><![CDATA[FULL_TIME]]></job:job_type>
+                <job:salary><![CDATA[]]></job:salary>
+                <job:company><![CDATA[Invo Solutions]]></job:company>
+                <job:company_logo>https://larajobs.com/logos/5rvUXdn8loZhYMGYnLaFZixBHNhQEA3r3mVAwLcx.png</job:company_logo>
+                <job:tags><![CDATA[Laravel,PHP,Postgres,React]]></job:tags>
+                <guid isPermaLink="false">https://larajobs.com/job/3929</guid>
+                <description><![CDATA[
+
+                    ]]></description>
+                <content:encoded><![CDATA[
+
+                    ]]></content:encoded>
+            </item>
+            </channel>
+</rss>

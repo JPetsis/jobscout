@@ -1,0 +1,124 @@
+{
+ "comments": "21/08/2026: Cursor pagination is now available and is the preferred way to page through the feed. Pass the nextCursor value from each response back as ?cursor=. It is faster than offset and will never return the same job twice. The offset parameter is deprecated and will be removed in a future release. 13/03/2026: The API has been updated to include the companySlug field in the response.",
+ "limit": 20,
+ "totalCount": 102493,
+ "jobs": [
+  {
+   "title": "Profesor/a de Canto Moderno – Horario Flexible",
+   "excerpt": "Muchas personas quieren mejorar su voz, aprender a cantar sus canciones favoritas o ganar confianza al cantar, pero no siempre saben por dónde empezar.",
+   "companyName": "Tusclasesparticulares",
+   "companySlug": "tusclasesparticulares",
+   "companyLogo": "https://cdn-images.himalayas.app/y7b46iocidqh7kynztp58q6he7fz",
+   "employmentType": "Contractor",
+   "minSalary": 15,
+   "maxSalary": 30,
+   "salaryPeriod": "hourly",
+   "seniority": [
+    "Mid-level"
+   ],
+   "currency": "EUR",
+   "locationRestrictions": [
+    "Spain"
+   ],
+   "timezoneRestrictions": [
+    0,
+    1
+   ],
+   "categories": [
+    "Singing-Teacher",
+    "Music-Instructor",
+    "Profesor-De-Canto-Moderno",
+    "Vocal-Coach",
+    "Music-Education",
+    "Profesor-A-Tiempo-Parcial",
+    "Part-Time-Music-Instructor",
+    "Profesor-De-Clases-Particulares"
+   ],
+   "parentCategories": [],
+   "description": "<p>Muchas personas quieren mejorar su voz, aprender a cantar sus canciones favoritas o ganar confianza al cantar, pero no siempre saben por dónde empezar.</p><p>En <strong><a href=\"https://himalayas.app/companies/tusclasesparticulares\">Tusclasesparticulares</a></strong> buscamos <strong>profesores/as de canto moderno</strong> que quieran ayudar a alumnos a desarrollar su voz y disfrutar más de la música.</p><h3>¿Qué harás?</h3><ul>\n<li><p>Dar clases de <strong>canto moderno</strong> adaptadas a cada alumno.</p></li>\n<li><p>Trabajar técnica vocal, respiración y afinación.</p></li>\n<li><p>Ayudar a mejorar la interpretación y seguridad al cantar.</p></li>\n<li><p>Practicar canciones elegidas según los intereses del estudiante.</p></li>\n<li><p>Adaptar cada sesión al nivel y objetivos del alumno.</p></li>\n</ul><h3>Requisitos</h3><ul>\n<li><p>Buenos conocimientos de <strong>canto y técnica vocal</strong>.</p></li>\n<li><p>Capacidad para comunicar y transmitir conocimientos.</p></li>\n<li><p>No es necesaria experiencia previa como profesor/a.</p></li>\n<li><p>Pasión por la música y ganas de ayudar a otros.</p></li>\n<li><p>Capacidad para adaptar las sesiones a diferentes niveles.</p></li>\n</ul><h3>Beneficios</h3><ul>\n<li><h3>Horario 100% flexible.</h3></li>\n<li><p>Clases <strong>online, presenciales o híbridas</strong>.</p></li>\n<li><p>Retribución de <strong>15 a 30 €/hora</strong>.</p></li>\n<li><p>Tú decides cuándo dar clases y cuántos alumnos atender.</p></li>\n<li><p>Puedes compaginarlo con estudios, trabajo u otras actividades.</p></li>\n<li><p><strong>No necesitas experiencia previa como profesor/a para empezar.</strong></p></li>\n</ul><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+   "pubDate": 1790157046,
+   "expiryDate": 1795341044,
+   "applicationLink": "https://himalayas.app/companies/tusclasesparticulares/jobs/profesor-a-de-canto-moderno-horario-flexible",
+   "guid": "https://himalayas.app/companies/tusclasesparticulares/jobs/profesor-a-de-canto-moderno-horario-flexible"
+  },
+  {
+   "title": "ASO Manager",
+   "excerpt": "Responsibilities and Duties :• Optimizing Apps for App Store and Google Play - Create and implement ASO strategy to improve conversion rate - Manage and scale Apple Search Ads (ASA) campaigns - Plan and follow-up on traffic- and other marketing initiatives - Work with external agencies and internal stakeholders to gain insights and identify areas for improvement - Provide guidelines and recommendations to other stakeholders on how to maximise discoverability and improve conversion rate based on analytics Skills Required :• Experience with ASO - Excellent analytical skills - A good understanding of the mobile gaming market - Ability to communicate across a number of levels and be able to influence development and marketing teams - Excellent written and verbal communication skills - Proficiency in additional language - strong advantage - Experience working with ASA - strong advantage - Ability to work under your own initiative",
+   "companyName": "Gaana",
+   "companySlug": "gaana",
+   "companyLogo": "https://cdn-images.himalayas.app/h2v3laxxuabaaejyccd5odpxlh4v",
+   "employmentType": "Part Time",
+   "minSalary": null,
+   "maxSalary": null,
+   "salaryPeriod": "annual",
+   "seniority": [
+    "Manager"
+   ],
+   "currency": null,
+   "locationRestrictions": [
+    "India"
+   ],
+   "timezoneRestrictions": [
+    5.5
+   ],
+   "categories": [
+    "App-Store-Optimization",
+    "ASO-Manager",
+    "Mobile-Gaming-Marketing",
+    "Search-Advertising",
+    "Digital-Marketing"
+   ],
+   "parentCategories": [],
+   "description": "<h3>Responsibilities and Duties :</h3><ul>\n<li>Optimizing Apps for App Store and Google Play<br><br>- Create and implement ASO strategy to improve conversion rate<br><br>- Manage and scale Apple Search Ads (ASA) campaigns<br><br>- Plan and follow-up on traffic- and other marketing initiatives<br><br>- Work with external agencies and internal stakeholders to gain insights and identify areas for improvement<br><br>- Provide guidelines and recommendations to other stakeholders on how to maximise discoverability and improve conversion rate based on analytics</li>\n</ul><h3>Skills Required :</h3><ul>\n<li>Experience with ASO<br><br>- Excellent analytical skills<br><br>- A good understanding of the mobile gaming market<br><br>- Ability to communicate across a number of levels and be able to influence development and marketing teams<br><br>- Excellent written and verbal communication skills<br><br>- Proficiency in additional language - strong advantage<br><br>- Experience working with ASA - strong advantage<br><br>- Ability to work under your own initiative</li>\n</ul><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+   "pubDate": 1790157092,
+   "expiryDate": 1795341090,
+   "applicationLink": "https://himalayas.app/companies/gaana/jobs/aso-manager",
+   "guid": "https://himalayas.app/companies/gaana/jobs/aso-manager"
+  },
+  {
+   "title": "Global IT Operations Manager, Sensia",
+   "excerpt": "DutiesFunctional• Coordinate IT operations with the service providers to ensure delivery of timely and effective IT services that operate at a high level of stability and efficiency.",
+   "companyName": "Sensia",
+   "companySlug": "sensia",
+   "companyLogo": "",
+   "employmentType": "Full Time",
+   "minSalary": null,
+   "maxSalary": null,
+   "salaryPeriod": "annual",
+   "seniority": [
+    "Manager"
+   ],
+   "currency": null,
+   "locationRestrictions": [
+    "United States"
+   ],
+   "timezoneRestrictions": [
+    -10,
+    -9,
+    -8,
+    -7,
+    -6,
+    -5,
+    14
+   ],
+   "categories": [
+    "IT-Operations-Management",
+    "Global-IT-Management",
+    "IT-leadership",
+    "IT-Service-Management",
+    "Technology-Management",
+    "Global-IT-Manager",
+    "IT-Operations-Manager",
+    "IT-Business-Operations-Manager",
+    "IT-Service-Operations-Manager",
+    "IT-Operations-Lead"
+   ],
+   "parentCategories": [],
+   "description": "<h3>Duties</h3><h3>Functional</h3><ul>\n<li><p>Coordinate IT operations with the service providers to ensure delivery of timely and effective IT services that operate at a high level of stability and efficiency.</p></li>\n<li><p>Work with the IT service provider to optimize and improve local company networks and servers.</p></li>\n<li><p>Manage installations and upgrades of IT systems at <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> facilities in close coordination with Global Real Estate Project Manager.</p></li>\n<li><p>Be the single point of contact for IT escalations.</p></li>\n<li><p>Ensure issues are resolved in a timely manner by the service provider.</p></li>\n<li><p>Provide support and guidance to <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> employees globally.</p></li>\n<li><p>Oversee end user device inventory, replacement and delivery to users.</p></li>\n<li><p>Oversee the management, procurement and licensing of computer software applications driving common standards and best practises.</p></li>\n<li><p>Develop and coordinate manufacturing OT practises in coordination with parent company experience.</p></li>\n<li><p>Ensure backup of information and data to ensure recovery in event of system breakdown.</p></li>\n<li><p>Establish periodic operations reviews and reports.</p></li>\n<li><p>Reasonably challenge established standards to ensure that the correct technology is being applied for the best interests of <a href=\"https://himalayas.app/companies/sensia\">Sensia</a>.</p></li>\n<li><p>Be able to evaluate new technologies to advance deliverables.</p></li>\n<li><p>Excellent analytical skills &amp; attention to detail.</p></li>\n<li><p>Develop and execute regular IT operations review with service.</p></li>\n</ul><h3>Leadership</h3><ul>\n<li><p>Execute technical and interpersonal skills.</p></li>\n<li><p>Develop and evolve <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> specific IT policies and practices in coordination with <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> Cyber Security Office.</p></li>\n<li><p>Effectively resolve conflict service provider to meet business goals.</p></li>\n<li><p>Independently identify, manage and mitigate risks, resulting in proactive contingency planning as required.</p></li>\n<li><p>Persevere through obstacles to achieve results and remove obstacles to facilitate <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> success.</p></li>\n<li><p>Demonstrate confidence, maturity and flexibility in response to work challenges.</p></li>\n<li><p>Self-directed leader with ability to work with cross functional/global teams.</p></li>\n<li><p>Provide early and clear escalation of critical issues.</p></li>\n</ul><ul>\n<li><p>Clear effective communication across all levels of the organization.</p></li>\n<li><p>Ability to integrate business needs with corporate policies and industry best practice.</p></li>\n</ul><h3>Minimum Qualifications</h3><ul>\n<li><h3>Proven operation management experience.</h3></li>\n<li><h3>Problem-solving aptitude.</h3></li>\n<li><p>Bachelor's Degree in Computer Science, IT, or other relevant field.</p></li>\n<li><p>Willingness to travel globally as required.</p></li>\n</ul><h3>Desired Qualifications:</h3><ul>\n<li><h3>IT Leadership experience.</h3></li>\n<li><p>Experience managing out-sourced IT / other operations.</p></li>\n<li><p>Experience with system installation, configuration and analysis.</p></li>\n<li><p>Power Platform knowledge and experience in technologies like Power BI, Power Apps and Power Automate is desirable.</p></li>\n<li><p>Microsoft Azure and Office 365 certifications or proven experience.</p></li>\n<li><p>Knowledge of data protection operations and legislation (e.g. GDPR).</p></li>\n</ul>All your information will be kept confidential according to EEO guidelines.<p><a href=\"https://himalayas.app/companies/sensia\">Sensia</a> is looking for a highly organized operations professional to provide effective leadership, strategy and coordination of the IT services provided for <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> by its service providers. This position is a key role in the company's efforts to drive efficiencies for its employees, enhance the end-user experience and drive the “start-up” / small agile company culture.</p><p>The successful candidate will be responsible for the oversight of all day-to-day IT operations for <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> and work closely with the service providers to deploy continuous improvements as <a href=\"https://himalayas.app/companies/sensia\">Sensia</a> evolves and grows.</p><p>The above statements are intended to describe the general nature and level of work being performed by people assigned to the job. They are not intended to be an all-encompassing list of all responsibilities, duties and skills required of personnel so classified.  Reasonable accommodations to essential functions of the job will be made if necessary.</p><p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+   "pubDate": 1790157071,
+   "expiryDate": 1795341068,
+   "applicationLink": "https://himalayas.app/companies/sensia/jobs/global-it-operations-manager-sensia-546704629",
+   "guid": "https://himalayas.app/companies/sensia/jobs/global-it-operations-manager-sensia-546704629"
+  }
+ ]
+}
