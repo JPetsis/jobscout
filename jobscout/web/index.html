@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jobscout</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="dot"></span>
+    <h1>jobscout</h1>
+  </div>
+  <div class="stats" id="stats"><span class="muted">loading…</span></div>
+</header>
+
+<section class="filters">
+  <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">
+  <div class="seg" id="band" role="group" aria-label="Score band">
+    <button data-v="all" class="on">All</button>
+    <button data-v="strong">Strong</button>
+    <button data-v="match">Matches</button>
+  </div>
+  <select id="source"><option value="all">All sources</option></select>
+  <select id="status">
+    <option value="new">New</option>
+    <option value="saved">Saved</option>
+    <option value="applied">Applied</option>
+    <option value="dismissed">Dismissed</option>
+    <option value="all">Any status</option>
+  </select>
+  <span class="count" id="count"></span>
+</section>
+
+<main id="grid" class="grid" aria-live="polite"></main>
+
+<div id="empty" class="empty" hidden>
+  <p id="empty-msg">No matches.</p>
+</div>
+
+<footer class="foot">
+  <span class="muted" id="footer-note"></span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -150,3 +150,60 @@ def test_stats_shape(tmp_path):
     assert isinstance(st["matches"], int)
     assert isinstance(st["histogram"], list)
     assert st["run"]["id"] >= 1
+
+
+# --- GUI thread safety -----------------------------------------------------
+# pywebview runs js_api methods in SEPARATE THREADS. Without
+# check_same_thread=False this raises ProgrammingError; with the flag but no
+# lock, concurrent writers corrupt state. Both halves are covered here.
+
+def test_connection_is_usable_from_another_thread(tmp_path):
+    import threading as th
+
+    conn = _conn(tmp_path)
+    pid = _add(conn)
+    out: dict = {}
+    err: list = []
+
+    def work():
+        try:
+            out["n"] = len(api.list_matches(conn))
+            api.mark_posting(conn, pid, "saved")
+        except Exception as e:                                # noqa: BLE001
+            err.append(e)
+
+    t = th.Thread(target=work)
+    t.start()
+    t.join(timeout=10)
+    assert not err, f"cross-thread DB use failed: {err}"
+    assert out["n"] == 1
+    assert dbm.get_posting(conn, pid)["status"] == "saved"
+
+
+def test_concurrent_writers_do_not_corrupt_state(tmp_path):
+    import threading as th
+
+    conn = _conn(tmp_path)
+    pids = [_add(conn, company=f"C{i}", url=f"https://x/{i}", external_id=str(i))
+            for i in range(8)]
+    err: list = []
+
+    def work(pid, status):
+        try:
+            for _ in range(25):
+                api.mark_posting(conn, pid, status)
+                api.list_matches(conn, limit=5)
+        except Exception as e:                                # noqa: BLE001
+            err.append(e)
+
+    threads = [th.Thread(target=work, args=(p, "saved" if i % 2 else "applied"))
+               for i, p in enumerate(pids)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert not err, f"concurrent access failed: {err[:3]}"
+    # every row landed on one of the two valid values -- no torn writes
+    for p in pids:
+        assert dbm.get_posting(conn, p)["status"] in ("saved", "applied")

@@ -9,8 +9,18 @@ dependencies = [
     "geonamescache>=3.0.2",
 ]
 
+[project.optional-dependencies]
+# The desktop UI. Linux gets NO pywebview backend by default, so it must name
+# one explicitly or the app is a silent no-op there -- Qt (PySide6) ships
+# manylinux wheels; GTK's PyGObject is sdist-only and needs system headers.
+app = [
+    "pywebview>=6.2",
+    "pywebview[qt]>=6.2; sys_platform == 'linux'",
+]
+
 [project.scripts]
 jobscout = "jobscout.cli:main"
+jobscout-app = "jobscout.app:main"
 
 [build-system]
 requires = ["hatchling"]

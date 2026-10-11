@@ -4,12 +4,25 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .models import Posting
 from .score import Score, prefs_hash, score_posting
 from .textutil import norm
+
+# One connection is shared between the CLI (single-threaded) and the GUI, whose
+# pywebview `js_api` methods run in SEPARATE THREADS. Two consequences:
+#   * `check_same_thread=False` is required or any cross-thread use raises
+#     `ProgrammingError: SQLite objects created in a thread can only be used in
+#     that same thread`.
+#   * Passing that flag alone trades a loud crash for silent corruption, because
+#     a sqlite3.Connection is not safe for concurrent use. So every multi-step
+#     or writing operation serialises on this lock. Callers that may run on a
+#     GUI thread should hold it: `with dbm.LOCK: ...`.
+LOCK = threading.RLock()
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS postings (
@@ -87,10 +100,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 
 def connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path))
+    # check_same_thread=False is required for the GUI (pywebview runs js_api in
+    # separate threads). Concurrency is handled by the module LOCK, not by
+    # opening more connections -- see the note above LOCK.
+    conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA)
-    _migrate(conn)
+    with LOCK:
+        conn.executescript(SCHEMA)
+        _migrate(conn)
     return conn
 
 
@@ -247,8 +264,9 @@ def get_posting(conn, pid: int) -> sqlite3.Row | None:
 
 
 def set_status(conn, pid: int, status: str) -> None:
-    conn.execute("UPDATE postings SET status=? WHERE id=?", (status, pid))
-    conn.commit()
+    with LOCK:
+        conn.execute("UPDATE postings SET status=? WHERE id=?", (status, pid))
+        conn.commit()
 
 
 def set_description(conn, pid: int, description: str) -> None:
