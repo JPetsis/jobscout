@@ -29,6 +29,14 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute is honoured through a BROWSER rule that any author
+ * `display` declaration outranks. `.pane`, `.scanbar` and `.empty` all set
+ * `display`, so without this the panes and the scan bar were permanently
+ * visible no matter what the `hidden` attribute said (and closePanes() was
+ * faithfully toggling an attribute that had no effect). Keep this before the
+ * component rules and do not remove it. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;

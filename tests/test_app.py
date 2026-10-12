@@ -5,6 +5,7 @@ These run on macOS, so the Windows/Linux branches are exercised by patching
 whole reason these checks exist is that a user on the *other* platform finds
 out at launch, and a guard that only works on the platform it guards is untested.
 """
+import re
 import sys
 import threading
 import time
@@ -237,6 +238,66 @@ def test_happy_path_still_passes_the_api_object(monkeypatch, tmp_path):
     assert appmod.main() == 0
     assert calls["js_api"] is sentinel
     assert calls["url"].endswith("index.html")
+
+
+# --- the front-end's hidden-element contract -------------------------------
+#
+# `hidden` is honoured through a BROWSER stylesheet rule, and any author
+# `display` declaration outranks it. `.pane`, `.scanbar` and `.empty` all set
+# `display`, so without the [hidden] override those elements are permanently
+# painted no matter what the attribute says: the Settings pane sat open on
+# launch, empty (because openSettings() had never run), and its close button
+# toggled an attribute that did nothing. These tests are static and fast on
+# purpose -- the bug is a missing line of CSS, not a runtime condition.
+
+WEB = appmod.WEB
+
+
+def test_stylesheet_overrides_display_so_hidden_actually_hides():
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    rule = re.search(r"\[hidden\]\s*\{[^}]*display:\s*none", css)
+    assert rule, (
+        "styles.css must contain `[hidden] { display: none !important; }`. "
+        "Without it, every element that sets `display` ignores the hidden "
+        "attribute and stays on screen.")
+
+
+def test_hidden_rule_comes_before_the_component_rules():
+    """Order is not what makes it win (it uses !important) but keeping it at the
+    top is what stops someone 'tidying' it away as a duplicate of a later
+    rule."""
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    hidden_at = css.index("[hidden]")
+    for cls in (".pane {", ".scanbar {", ".empty {"):
+        assert hidden_at < css.index(cls), f"{cls} should come after [hidden]"
+
+
+def test_every_element_that_sets_display_and_hidden_has_the_override():
+    """The specific combination that broke: a class in index.html that uses the
+    hidden attribute, whose stylesheet rule sets display."""
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert "[hidden]" in css, "the override must exist for any of this to hold"
+
+    # every class carrying `hidden` in the markup
+    hidden_classes = set(re.findall(r'class="([^"]+)"[^>]*\shidden', html))
+    flat = {c for group in hidden_classes for c in group.split()}
+    assert flat, "expected some elements to start hidden"
+
+    display_classes = set(re.findall(r"\.([a-z-]+)\s*\{[^}]*display:", css))
+    clash = flat & display_classes
+    assert clash, "sanity: this is meant to catch the real overlap"
+    # the override is global, so the clash is covered; assert it is present
+    assert re.search(r"\[hidden\]\s*\{[^}]*display:\s*none\s*!important", css), (
+        f"classes {sorted(clash)} set display, so the global [hidden] override "
+        "must be !important")
+
+
+def test_panes_start_hidden_in_the_markup():
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    for pane in ("detail", "settings", "scrim", "scan-bar"):
+        assert re.search(rf'id="{pane}"[^>]*\shidden', html), (
+            f"#{pane} must start with the hidden attribute")
 
 
 # --- threading sanity ------------------------------------------------------
