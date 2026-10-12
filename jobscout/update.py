@@ -425,9 +425,15 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             "exit /b 1",
             "",
             ":swap",
+            # Clear any leftover first, exactly as the shell version does. A
+            # stale .previous would make the NEXT update's `move` fail, and a
+            # failed move onto an existing directory moves INSIDE it -- which
+            # is a mangled install rather than an error.
+            f'if exist "{old_root}.previous" rmdir /s /q "{old_root}.previous"',
             f'move "{old_root}" "{old_root}.previous" >nul 2>&1',
             f'move "{new_root}" "{old_root}" >nul 2>&1',
             "if errorlevel 1 goto failed",
+            f'rmdir /s /q "{old_root}.previous"',
             f"{restart}" if restart else "rem no relaunch requested",
             "exit /b 0",
             "",

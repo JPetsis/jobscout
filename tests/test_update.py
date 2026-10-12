@@ -310,6 +310,22 @@ def test_the_helper_swaps_the_build(tmp_path):
     assert not Path(str(old) + ".previous").exists()
 
 
+def test_a_swap_does_not_leave_a_stale_previous_copy(tmp_path):
+    """Left behind, a .previous copy makes the NEXT update's move fail -- and a
+    failed move onto an existing directory moves INSIDE it."""
+    old = _build(tmp_path / "app", "OLD")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+    _run_helper(up._helper_script(old, new, relaunch=False, pid=DEAD_PID),
+                tmp_path / _helper_name())
+    assert not Path(str(old) + ".previous").exists()
+
+    # and a second update over the same install still works
+    new2 = _build(tmp_path / "staged2" / "app", "NEWER")
+    _run_helper(up._helper_script(old, new2, relaunch=False, pid=DEAD_PID),
+                tmp_path / _helper_name())
+    assert (old / "marker.txt").read_text() == "NEWER"
+
+
 def test_a_failed_swap_restores_the_working_build(tmp_path):
     """The property that matters most: never leave the user with nothing that
     launches."""
@@ -508,13 +524,19 @@ def test_the_helper_bounds_how_long_it_waits(tmp_path):
     assert body.index("did not exit") < body.index(move)
 
 
-def test_the_helper_gives_up_without_touching_the_build(tmp_path):
+def test_the_helper_gives_up_without_touching_the_build(tmp_path, monkeypatch):
+    """A pid that IS alive, and a bound of one attempt.
+
+    The bound is set by patching the constant and REGENERATING the script, not
+    by rewriting its text: string surgery silently stopped matching when the
+    .bat was rewritten, and the test then waited the full 120 rounds and timed
+    out -- which looks like a hang rather than a broken test.
+    """
     old = _build(tmp_path / "app", "STILL RUNNING")
     new = _build(tmp_path / "staged" / "app", "NEW")
-    # a pid that IS alive: this process
+    monkeypatch.setattr(up, "WAIT_SECONDS", 1)
     body = up._helper_script(old, new, relaunch=False, pid=os.getpid())
-    body = body.replace(f"if [ \"$n\" -gt {up.WAIT_SECONDS} ]", 'if [ "$n" -gt 1 ]')
-    body = body.replace(f"if %n% GTR {up.WAIT_SECONDS}", "if %n% GTR 1")
+    assert "1" in body
     r = _run_helper(body, tmp_path / _helper_name())
     assert "did not exit" in r.stderr
     assert (old / "marker.txt").read_text() == "STILL RUNNING", "must be untouched"
