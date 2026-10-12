@@ -153,8 +153,10 @@ want digests, goals or the terminal triage loop.
 ## Updating
 
 If you installed a packaged build, jobscout updates itself. Open it and a
-notice appears when a newer release exists; press **Install and restart** and
-it downloads, verifies and swaps itself in, then reopens. From a terminal:
+notice appears when a newer release exists; press **Install and restart** to
+download and verify it, then **Quit and update** to let it close jobscout and
+take its place. jobscout reopens by itself — you are not closing it by hand.
+From a terminal:
 
 ```bash
 jobscout update --check     # just tell me

@@ -11,6 +11,7 @@ The properties that matter, in order of how much damage their absence causes:
 """
 import hashlib
 import json
+import os
 import subprocess
 import tarfile
 import time
@@ -385,3 +386,112 @@ def test_update_says_so_when_the_release_has_no_build_for_this_machine(tmp_path,
         "url": "https://example.invalid/rel"})
     with pytest.raises(up.UpdateError, match="no build for this machine"):
         up.update(tmp_path, apply=False)
+
+
+# --- the explicit two-step flow (download, then quit) ----------------------
+#
+# The app used to auto-quit after staging. Installing means terminating
+# jobscout, and that should be something the user asks for, not a side effect
+# of pressing a button labelled "install".
+
+class _FakeCfg:
+    root = None
+
+
+def _jsapi(tmp_path):
+    from jobscout.app import JsApi
+    api = JsApi.__new__(JsApi)                 # no __init__: no real workspace
+    api.cfg = _FakeCfg()
+    api.cfg.root = tmp_path
+    api._windows = []
+    api._staged = None
+    api._staged_version = None
+    return api
+
+
+def test_update_install_stages_but_does_not_quit(tmp_path, monkeypatch):
+    api = _jsapi(tmp_path)
+    monkeypatch.setattr(up, "install_root", lambda: tmp_path / "app")
+    monkeypatch.setattr(up, "update", lambda *a, **k: {
+        "ok": True, "updated": True, "staged": str(tmp_path / "staged.app"),
+        "staged_version": "0.2.0"})
+    quit_calls = []
+    monkeypatch.setattr(api, "quit", lambda: quit_calls.append(1))
+
+    res = api.update_install()
+    assert res["ok"] is True
+    assert res["staged_version"] == "0.2.0"
+    assert quit_calls == [], "downloading must never terminate the app"
+
+
+def test_a_second_install_reuses_the_staged_build(tmp_path, monkeypatch):
+    """Choosing 'not now' and coming back must not re-download 45 MB."""
+    api = _jsapi(tmp_path)
+    staged = tmp_path / "staged.app"
+    staged.mkdir()
+    monkeypatch.setattr(up, "install_root", lambda: tmp_path / "app")
+    calls = []
+    monkeypatch.setattr(up, "update", lambda *a, **k: calls.append(1) or {})
+    api._staged = str(staged)
+    api._staged_version = "0.2.0"
+
+    res = api.update_install()
+    assert res["reused"] is True
+    assert calls == [], "the network must not be touched again"
+
+
+def test_update_quit_refuses_when_nothing_is_staged(tmp_path, monkeypatch):
+    api = _jsapi(tmp_path)
+    res = api.update_quit()
+    assert res["ok"] is False
+    assert "nothing has been staged" in res["error"]
+
+
+def test_update_quit_spawns_the_helper_then_closes_the_window(tmp_path, monkeypatch):
+    api = _jsapi(tmp_path)
+    staged = tmp_path / "staged.app"
+    staged.mkdir()
+    api._staged = str(staged)
+    spawned = []
+    monkeypatch.setattr(up, "apply_staged",
+                        lambda p, relaunch=True: spawned.append((p, relaunch)))
+    closed = []
+    monkeypatch.setattr(api, "quit", lambda: closed.append(1) or {"ok": True})
+
+    res = api.update_quit()
+    assert res["quitting"] is True
+    assert spawned == [(staged, True)], "the helper must be started first"
+    assert closed == [1], "and only then does the window close"
+
+
+def test_a_source_checkout_is_told_to_git_pull(tmp_path, monkeypatch):
+    api = _jsapi(tmp_path)
+    monkeypatch.setattr(up, "install_root", lambda: None)
+    res = api.update_install()
+    assert res["ok"] is False
+    assert "git pull" in res["error"]
+
+
+# --- the helper must not wait forever -------------------------------------
+
+def test_the_helper_bounds_how_long_it_waits(tmp_path):
+    """A wait with no limit means a stuck helper is an unexplained hang and the
+    update silently never lands."""
+    body = up._helper_script(tmp_path / "a", tmp_path / "b", relaunch=False,
+                             pid=DEAD_PID)
+    assert str(up.WAIT_SECONDS) in body
+    assert "did not exit" in body
+    # and it must give up BEFORE touching the installed build
+    assert body.index("did not exit") < body.index("mv ")
+
+
+def test_the_helper_gives_up_without_touching_the_build(tmp_path):
+    old = _build(tmp_path / "app", "STILL RUNNING")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+    # a pid that IS alive: this process
+    body = up._helper_script(old, new, relaunch=False, pid=os.getpid())
+    body = body.replace(f"if [ \"$n\" -gt {up.WAIT_SECONDS} ]", 'if [ "$n" -gt 1 ]')
+    r = _run_helper(body, tmp_path / "apply.sh")
+    assert "did not exit" in r.stderr
+    assert (old / "marker.txt").read_text() == "STILL RUNNING", "must be untouched"
+    assert new.exists(), "the staged build must not be consumed"

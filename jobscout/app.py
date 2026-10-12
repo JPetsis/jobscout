@@ -107,6 +107,8 @@ class JsApi:
         # filled by main(); quit() closes these so the update helper -- which
         # waits for this process to exit -- can swap the build in.
         self._windows: list = []
+        self._staged: str | None = None          # a downloaded, verified build
+        self._staged_version: str | None = None
 
     def matches(self, limit: int = 400) -> list[dict]:
         """Matches under the stored profile, best first. Filtering is client-side."""
@@ -171,21 +173,53 @@ class JsApi:
                     "update_available": False}
 
     def update_install(self) -> dict:
-        """Download, verify and stage the update, then hand off to the helper.
+        """Download and verify the update and STOP there.
 
-        Returns once the helper is running. The front-end should let the window
-        close immediately afterwards: the helper waits for this process to exit
-        before it swaps the build, so holding the window open blocks it.
+        Deliberately split from update_quit: the download is safe to do while
+        the app runs, but installing means terminating jobscout, and that is the
+        user's decision to make explicitly rather than something that happens
+        because they pressed a button labelled "install".
+
+        A build staged earlier is reused, so choosing "not now" and coming back
+        does not re-download 45 MB.
         """
         if updatemod.install_root() is None:
             return {"ok": False,
                     "error": "running from a source checkout; update with "
                              "git pull && uv sync --extra app"}
+        staged = getattr(self, "_staged", None)
+        if staged and Path(staged).exists():
+            return {"ok": True, "updated": False, "staged": str(staged),
+                    "staged_version": getattr(self, "_staged_version", None),
+                    "reused": True}
         try:
-            res = updatemod.update(self.cfg.root, apply=True, relaunch=True)
+            res = updatemod.update(self.cfg.root, apply=False)
         except updatemod.UpdateError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, **{k: v for k, v in res.items() if k != "archive"}}
+        if not res.get("updated"):
+            return {"ok": True, "updated": False, "staged": None,
+                    "reason": res.get("reason", "already up to date")}
+        self._staged = res["staged"]
+        self._staged_version = res.get("staged_version")
+        return {"ok": True, "updated": True, "staged": res["staged"],
+                "staged_version": res.get("staged_version")}
+
+    def update_quit(self) -> dict:
+        """Terminate jobscout so the staged build can replace it.
+
+        Only called after the user explicitly asks to quit AND install. The
+        helper is spawned first (it outlives us), then the window is closed, so
+        the process actually exits and the swap can happen.
+        """
+        staged = getattr(self, "_staged", None)
+        if not staged or not Path(staged).exists():
+            return {"ok": False, "error": "nothing has been staged yet"}
+        try:
+            updatemod.apply_staged(Path(staged), relaunch=True)
+        except updatemod.UpdateError as e:
+            return {"ok": False, "error": str(e)}
+        self.quit()
+        return {"ok": True, "quitting": True}
 
     def quit(self) -> dict:
         """Close the window so the updater helper can do its swap."""

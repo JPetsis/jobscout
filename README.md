@@ -263,14 +263,30 @@ there is one; nothing is downloaded until you press **Install and restart**.
 `jobscout update --check` does the same from a terminal, and
 `updates.check: false` in the config turns the request off entirely.
 
-The install is staged and verified before anything is replaced:
+Installing is **two explicit steps**, because the second one closes the app:
 
-1. the archive is downloaded and checked against the **sha256 GitHub publishes
-   for that asset**, so a truncated or corrupted download is refused;
+1. **Install and restart** downloads and verifies. jobscout keeps running.
+2. The button becomes **Quit and update**. Pressing it terminates jobscout, the
+   new build takes its place, and jobscout reopens by itself. **Not now** leaves
+   the verified download on disk, so coming back later does not fetch it again.
+
+Nothing terminates the app as a side effect. A button labelled "install" does
+not get to close your window on its own.
+
+The download is verified before anything is replaced:
+
+1. the archive is checked against the **sha256 GitHub publishes for that
+   asset**, so a truncated or corrupted download is refused;
 2. it is unpacked and confirmed to actually contain a jobscout build;
-3. a small helper waits for the app to exit, moves the old build aside, swaps
-   the new one in, and relaunches. If the swap fails it **restores the previous
-   build** — an update can never leave you with nothing that launches.
+3. once you choose to quit, a small helper waits for jobscout to exit, moves
+   the old build aside, swaps the new one in, and relaunches. If the swap fails
+   it **restores the previous build** — an update can never leave you with
+   nothing that launches.
+
+The helper waits for a *clean exit*, not for you: it swaps within a second of
+the process ending, with nothing to click. The wait is bounded (120s) so a
+helper that somehow outlives a stuck app gives up and leaves your install alone
+rather than hanging.
 
 `jobscout update --from FILE` installs a build you already have (a zip or
 tar.gz from the release page, or one you built yourself) using the same checks

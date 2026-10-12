@@ -229,7 +229,8 @@ function wirePanes() {
   $('settings-btn').addEventListener('click', openSettings);
   $('scan-btn').addEventListener('click', startScan);
   $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
-  $('update-install').addEventListener('click', installUpdate);
+  // dismissing keeps a verified download on disk; the next check re-offers it
+  $('update-install').addEventListener('click', onUpdateClick);
   $('scan-cancel').addEventListener('click', () => pywebview.api.cancel_scan());
 
   document.addEventListener('keydown', (e) => {
@@ -524,11 +525,22 @@ async function checkForUpdates(force) {
   }
 }
 
-async function installUpdate() {
+let STAGED = null;         // set once an update is downloaded and verified
+
+/* Two steps on purpose. Downloading is safe while the app runs; INSTALLING
+ * means terminating jobscout, and that is the user's call to make explicitly,
+ * not a side effect of pressing a button. `Not now` keeps the verified copy,
+ * so coming back does not re-download it. */
+async function onUpdateClick() {
+  if (STAGED) { await quitToUpdate(); return; }
+  await downloadUpdate();
+}
+
+async function downloadUpdate() {
   const btn = $('update-install');
   btn.disabled = true;
   btn.textContent = 'Downloading\u2026';
-  $('update-text').textContent = 'checking the download\u2026';
+  $('update-text').textContent = 'downloading and verifying\u2026';
 
   let res;
   try {
@@ -538,17 +550,45 @@ async function installUpdate() {
   }
   if (!res || !res.ok) {
     btn.disabled = false;
-    btn.textContent = 'Install and restart';
+    btn.textContent = 'Try again';
     showUpdate('<span class="up-err">Update failed: ' +
       String((res && res.error) || 'unknown error') + '</span>');
     return;
   }
-  // The helper waits for this process to exit before swapping the build, so
-  // the window MUST close now -- holding it open blocks the update.
+  if (!res.staged) {                       // nothing to install after all
+    btn.disabled = false;
+    btn.textContent = 'Check again';
+    showUpdate('jobscout is already up to date.');
+    return;
+  }
+  offerQuit(res.staged_version || 'the update');
+}
+
+function offerQuit(version) {
+  STAGED = version;
+  const btn = $('update-install');
+  btn.disabled = false;
+  btn.textContent = 'Quit and update';
+  btn.classList.add('primary');
+  $('update-dismiss').textContent = 'Not now';
+  $('update-text').innerHTML =
+    '<b>jobscout ' + version + '</b> is downloaded and verified. ' +
+    'jobscout has to quit so it can be replaced \u2014 it will reopen by itself.';
+}
+
+async function quitToUpdate() {
+  const btn = $('update-install');
+  btn.disabled = true;
   btn.textContent = 'Restarting\u2026';
-  showUpdate('Installing <b>' + (res.staged_version || 'the update') +
-    '</b> \u2014 jobscout will restart itself.');
-  setTimeout(() => pywebview.api.quit(), 900);
+  $('update-text').innerHTML = 'Closing jobscout and installing <b>' +
+    STAGED + '</b>\u2026';
+  try {
+    await pywebview.api.update_quit();     // closes this window
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Quit and update';
+    showUpdate('<span class="up-err">Could not quit: ' + String(e) + '</span>');
+  }
 }
 
 /* ---------- scan ---------- */

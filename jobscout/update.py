@@ -48,6 +48,11 @@ HOMEPAGE = f"https://github.com/{REPO}/releases"
 CHECK_INTERVAL = timedelta(hours=24)
 TIMEOUT = 20.0
 
+# How long the swap helper waits for jobscout to exit before giving up and
+# leaving the installed build alone. Long enough for a slow shutdown, short
+# enough that a stuck helper is not a mystery.
+WAIT_SECONDS = 120
+
 
 class UpdateError(Exception):
     """Anything that stops an update, with a message meant for a user."""
@@ -391,12 +396,18 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
         return "\n".join([
             "@echo off",
             "rem the running .exe is locked, so wait for it to exit first",
+            "set /a n=0",
             ":wait",
             f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul',
-            "if not errorlevel 1 (",
-            "  timeout /t 1 /nobreak >nul",
-            "  goto wait",
+            "if errorlevel 1 goto go",
+            "set /a n+=1",
+            f"if %n% GTR {WAIT_SECONDS} (",
+            "  echo jobscout did not exit; nothing was changed. 1>&2",
+            "  exit /b 1",
             ")",
+            "timeout /t 1 /nobreak >nul",
+            "goto wait",
+            ":go",
             f'move "{old_root}" "{old_root}.previous" >nul 2>&1',
             f'move "{new_root}" "{old_root}" >nul 2>&1',
             "if errorlevel 1 (",
@@ -410,8 +421,17 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
 
     return "\n".join([
         "#!/bin/sh",
-        f"# wait for jobscout (pid {pid}) to exit",
-        f"while kill -0 {pid} 2>/dev/null; do sleep 1; done",
+        f"# Wait for jobscout (pid {pid}) to exit. Bounded: if it never does, give",
+        f"# up WITHOUT touching the installed build rather than hanging forever.",
+        "n=0",
+        f"while kill -0 {pid} 2>/dev/null; do",
+        "  n=$((n+1))",
+        f'  if [ "$n" -gt {WAIT_SECONDS} ]; then',
+        '    echo "jobscout did not exit; nothing was changed." >&2',
+        "    exit 1",
+        "  fi",
+        "  sleep 1",
+        "done",
         f'rm -rf "{old_root}.previous"',
         f'if mv "{old_root}" "{old_root}.previous" 2>/dev/null && '
         f'mv "{new_root}" "{old_root}" 2>/dev/null; then',
