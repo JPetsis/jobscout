@@ -18,9 +18,9 @@ document.documentElement.dataset.theme =
 
 <!-- Who is using jobscout? Shown once per run, and only when there is more
      than one profile to choose between. Also reachable from Settings. -->
-<div id="picker" class="picker" role="dialog" aria-modal="true"
+<div id="picker" class="overlay solid" role="dialog" aria-modal="true"
      aria-labelledby="picker-title" hidden>
-  <div class="picker-card">
+  <div class="overlay-card picker-card">
     <h2 id="picker-title">Who's using jobscout?</h2>
     <p class="muted">Each profile keeps its own settings, job boards and saved
       postings — nothing is shared between them.</p>
@@ -95,17 +95,20 @@ document.documentElement.dataset.theme =
 </footer>
 
 <!-- detail pane -->
-<aside id="detail" class="pane" hidden aria-labelledby="detail-title">
-  <div class="pane-head">
-    <h2 id="detail-title">Posting</h2>
-    <div class="pane-tools">
-      <button id="detail-open" class="ghost small">Open ad</button>
-      <button id="detail-refresh" class="ghost small" title="Re-fetch the full text from the source">Refresh</button>
-      <button id="detail-close" class="ghost small" aria-label="Close">✕</button>
+<div id="detail" class="overlay" role="dialog" aria-modal="true"
+     aria-labelledby="detail-title" hidden>
+  <div class="overlay-card detail-card">
+    <div class="pane-head">
+      <h2 id="detail-title">Posting</h2>
+      <div class="pane-tools">
+        <button id="detail-open" class="ghost small">Open ad</button>
+        <button id="detail-refresh" class="ghost small" title="Re-fetch the full text from the source">Refresh</button>
+        <button id="detail-close" class="ghost small" aria-label="Close">✕</button>
+      </div>
     </div>
+    <div class="pane-body" id="detail-body"></div>
   </div>
-  <div class="pane-body" id="detail-body"></div>
-</aside>
+</div>
 
 <!-- settings pane -->
 <aside id="settings" class="pane wide" hidden aria-labelledby="settings-title">

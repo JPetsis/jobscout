@@ -287,8 +287,27 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .d-meta dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .d-why { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .d-why span { background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
-.d-desc { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.55; }
-.d-desc a { color: var(--blue); }
+/* ---- the description ----
+   Rendered from plain text that KEEPS its line breaks (the extractors use
+   clean_html_lines), so paragraphs and bullet lists become real elements
+   instead of one run-on block. */
+.d-desc { overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.6; }
+.d-desc p { margin: 0 0 11px; }
+.d-desc p:last-child { margin-bottom: 0; }
+.d-desc h4 {
+  margin: 16px 0 7px; font-size: 13px; letter-spacing: .02em;
+  text-transform: none; color: var(--ink); font-weight: 650;
+}
+.d-desc h4:first-child { margin-top: 0; }
+.d-desc ul { margin: 0 0 11px; padding-left: 20px; }
+.d-desc li { margin-bottom: 4px; }
+.d-desc li:last-child { margin-bottom: 0; }
+.d-desc a { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--blue); }
+.d-desc a:hover { border-bottom-width: 2px; }
+.d-note {
+  margin: 0; padding: 11px 13px; border-radius: 9px;
+  background: var(--chip); color: var(--ink); font-size: 13px; line-height: 1.5;
+}
 .pane-body .loading { color: var(--muted); font-size: 13px; }
 
 /* settings contents */
@@ -349,21 +368,29 @@ button.ghost.primary {
 }
 button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
 
-/* ---- the profile picker ---- */
-.picker {
+/* ---- overlays: a scrim with a centred floating card ----
+   The profile picker and the posting detail are the same shape, so they share
+   this. `.pane` stays for the docked Settings panel, which is deliberately not
+   a dialog. */
+.overlay {
   position: fixed; inset: 0; z-index: 60;
-  background: var(--bg);
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
+  background: rgba(0,0,0,.42);
 }
-.picker-card {
-  width: 100%; max-width: 460px;
+/* the first-run picker is a gate, not a layer over the app, so it is opaque */
+.overlay.solid { background: var(--bg); }
+.overlay-card {
+  display: flex; flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 22px 22px 18px;
-  box-shadow: 0 18px 48px rgba(0,0,0,.18);
+  box-shadow: 0 18px 48px rgba(0,0,0,.28);
+  overflow: hidden;
+  max-height: 88vh;
 }
+.picker-card { width: 100%; max-width: 460px; padding: 22px 22px 18px; }
+.detail-card { width: min(920px, 94vw); }
 .picker-card h2 { margin: 0 0 6px; font-size: 17px; }
 .picker-card > .muted { margin: 0 0 16px; font-size: 12.5px; line-height: 1.5; }
 .picker-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }

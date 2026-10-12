@@ -265,6 +265,10 @@ function wirePanes() {
   $('scrim').addEventListener('click', closePanes);
   $('detail-close').addEventListener('click', closePanes);
   $('settings-close').addEventListener('click', closePanes);
+  $('detail').addEventListener('click', (ev) => {
+    // only the backdrop, not the card: a click inside must not close it
+    if (ev.target === $('detail')) closePanes();
+  });
   $('detail-open').addEventListener('click', () => {
     if (CURRENT && CURRENT.url) pywebview.api.open_url(CURRENT.url);
   });
@@ -344,9 +348,145 @@ function renderDetail(d) {
   }
   if (why.childNodes.length) body.appendChild(why);
 
-  const desc = el('div', 'd-desc');
-  desc.textContent = d.description || '(no description available)';
-  body.appendChild(desc);
+  if (d.description) {
+    body.appendChild(renderDescription(d.description));
+  } else {
+    // Never an empty box: the backend says WHY there is nothing (withdrawn,
+    // no link, or the board publishes no text), which are very different
+    // answers to "should I keep looking at this?".
+    body.appendChild(el('p', 'd-note',
+      d.description_note || 'No description available for this listing.'));
+  }
+}
+
+/* ---------- the description ---------- */
+
+/* The extractors keep line breaks (clean_html_lines), so the text arrives with
+   real paragraph and list structure. Turn that into elements. Everything is
+   built with textContent/createTextNode: this text comes from job boards and
+   is NOT trusted. */
+
+const BULLET = /^\s*(?:[-*•·–—]|\d+[.)])\s+\S/;
+/* Where one block of prose ends. The two shapes in the wild differ in how they
+   use a bare newline: XING/ashby WRAP a sentence across lines, so a line not
+   ending in punctuation continues the paragraph; HN puts one whole thought on
+   each line with no blank line between them, so a completed sentence ends the
+   paragraph. Joining everything makes a blob; breaking on every newline shreds
+   a wrapped sentence into fragments. */
+const SENTENCE_END = /[.!?:]["')\]]?$/;
+const BARE_LINK = /^(?:https?:\/\/|www\.)\S+$/i;
+
+function appendInline(node, text) {
+  // Bare URLs in an advert are usually the application link, so make them
+  // clickable -- through the same open_url the "Open ad" button uses.
+  // the parens matter: the loop reads m[1], so this needs a capture group
+  const re = /(https?:\/\/[^\s<>()\[\]"']+)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    let url = m[1];
+    let tail = '';
+    while (url && '.,;:!?'.includes(url[url.length - 1])) {
+      tail = url[url.length - 1] + tail;
+      url = url.slice(0, -1);
+    }
+    if (m.index > last) node.appendChild(document.createTextNode(text.slice(last, m.index)));
+    if (url) {
+      const a = el('a', null, url);
+      a.href = '#';
+      a.title = 'Open in your browser';
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        pywebview.api.open_url(url);
+      });
+      node.appendChild(a);
+    } else {
+      node.appendChild(document.createTextNode(m[1]));
+    }
+    if (tail) node.appendChild(document.createTextNode(tail));
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) node.appendChild(document.createTextNode(text.slice(last)));
+}
+
+/* Presentation-only fallback. Some boards ship the whole advert as ONE enormous
+   paragraph -- measured: 2,975 characters with no line break at all from
+   recruitee -- and no amount of CSS makes that readable. Splitting it at
+   sentence boundaries changes no wording; it only stops a wall of text. A
+   paragraph already under the threshold is left exactly as the source wrote it. */
+const LONG_PARA = 620;
+const PARA_TARGET = 420;
+
+function splitSentences(text) {
+  const parts = text.match(/[^.!?]+(?:[.!?]+["')\]]*\s*|$)/g) || [text];
+  const out = [];
+  let cur = '';
+  for (const part of parts) {
+    if (cur && (cur + part).length > PARA_TARGET) {
+      out.push(cur.trim());
+      cur = '';
+    }
+    cur += part;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.length ? out : [text];
+}
+
+function pushParagraph(wrap, text) {
+  for (const chunk of (text.length > LONG_PARA ? splitSentences(text) : [text])) {
+    const p = el('p');
+    appendInline(p, chunk);
+    wrap.appendChild(p);
+  }
+}
+
+function renderDescription(raw) {
+  const wrap = el('div', 'd-desc');
+  const lines = String(raw).split('\n');
+  let para = [];
+  let list = null;
+
+  const flushPara = () => {
+    if (!para.length) return;
+    pushParagraph(wrap, para.join(' '));
+    para = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    wrap.appendChild(list);
+    list = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushPara();
+      flushList();
+      continue;
+    }
+    if (BULLET.test(line)) {
+      flushPara();
+      if (!list) list = el('ul');
+      const li = el('li');
+      appendInline(li, line.replace(/^\s*(?:[-*•·–—]|\d+[.)])\s+/, ''));
+      list.appendChild(li);
+      continue;
+    }
+    flushList();
+    // A short line ending in a colon is a section label ("Your tasks:"), not a
+    // sentence. Length-capped so a real sentence that happens to end in a colon
+    // is not promoted to a heading.
+    if (line.length <= 72 && line.endsWith(':') && !line.startsWith('http')) {
+      flushPara();
+      wrap.appendChild(el('h4', null, line.replace(/:$/, '')));
+      continue;
+    }
+    para.push(line);
+    if (SENTENCE_END.test(line) || BARE_LINK.test(line)) flushPara();
+  }
+  flushPara();
+  flushList();
+  return wrap;
 }
 
 /* ---------- profiles ---------- */
