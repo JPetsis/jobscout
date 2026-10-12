@@ -114,6 +114,13 @@ def stats(conn, prefs: dict) -> dict:
 # in this list cannot be written through the app: `cfgwrite` refuses unknown
 # keys rather than appending them, and this list is the allow-list on top.
 SETTINGS = [
+    {"key": "sources.enabled", "op": "list", "kind": "str_list",
+     "group": "Where to look",
+     "label": "Which job boards to scan",
+     "options_from": "sources",
+     "help": "Untick the ones you do not want. Fewer boards means a faster "
+             "scan; anything already stored stays in your list either way."},
+
     {"key": "preferences.title_terms", "op": "list", "kind": "str_list",
      "group": "What you are looking for",
      "label": "Job titles you want",
@@ -168,6 +175,18 @@ SETTINGS = [
 _BY_KEY = {s["key"]: s for s in SETTINGS}
 
 
+def source_options(enabled) -> list[dict]:
+    """Every source the build knows about, in registry order, with labels.
+
+    Registry order groups related boards (German, EU, global-remote, ATS), so
+    the list is easier to scan than an alphabetical one.
+    """
+    from .sources import REGISTRY, SOURCE_NAMES
+    on = set(enabled or [])
+    return [{"value": n, "label": getattr(REGISTRY[n], "LABEL", n),
+             "checked": n in on} for n in SOURCE_NAMES]
+
+
 def read_settings(path) -> list[dict]:
     """Current value of every editable setting, ready for a settings screen."""
     from . import cfgwrite
@@ -176,8 +195,15 @@ def read_settings(path) -> list[dict]:
     for spec in SETTINGS:
         row = dict(spec)
         row["value"] = cfgwrite.get_value(text, spec["key"])
+        if spec.get("options_from") == "sources":
+            row["options"] = source_options(row["value"])
         out.append(row)
     return out
+
+
+def known_source_names() -> set[str]:
+    from .sources import SOURCE_NAMES
+    return set(SOURCE_NAMES)
 
 
 def validate_setting(key: str, value):
@@ -212,6 +238,15 @@ def validate_setting(key: str, value):
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise ValueError(f"{key} expects a list of strings")
         clean = [v.strip() for v in value if v.strip()]
+        if key == "sources.enabled":
+            # A name that is not in the registry is skipped with a warning at
+            # scan time, so a typo looks like a board that quietly returns
+            # nothing. Reject it here where the user can see why.
+            known = known_source_names()
+            unknown = [v for v in clean if v not in known]
+            if unknown:
+                raise ValueError(
+                    f"not a source this build knows: {', '.join(sorted(unknown))}")
         return clean
 
     if kind == "str_int_map":
@@ -236,7 +271,7 @@ def write_setting(path, key: str, value) -> dict:
     if spec is None:
         raise ValueError(f"not an editable setting: {key!r}")
     clean = validate_setting(key, value)
-    changed = cfgwrite.edit(path, spec["op"], key, clean)
+    changed = cfgwrite.edit(path, spec["op"], key, clean)   # serialised inside
     return {"key": key, "value": clean, "changed": changed}
 
 

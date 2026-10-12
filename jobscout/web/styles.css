@@ -302,3 +302,24 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .s-saved { color: var(--ok); font-size: 12px; margin-left: 8px; }
 .s-err { color: var(--warn); font-size: 12px; margin-top: 4px; }
 .s-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+/* ---- option-backed settings (job board toggles) ---- */
+.s-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 2px 14px;
+  margin-top: 2px;
+}
+.s-choice {
+  display: flex; align-items: center; gap: 7px;
+  padding: 2px 0; font-size: 13px; cursor: pointer;
+}
+.s-choice input { margin: 0; flex: none; }
+.s-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-choice-key {
+  color: var(--muted); font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-left: auto;
+}
+.s-tally { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.s-tally.warn { color: var(--warn); }

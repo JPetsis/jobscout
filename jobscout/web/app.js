@@ -302,7 +302,6 @@ function renderDetail(d) {
 
 /* ---------- settings ---------- */
 
-let SAVE_TIMER = null;
 
 async function openSettings() {
   $('settings').hidden = false;
@@ -338,6 +337,11 @@ async function openSettings() {
 
 function settingRow(r) {
   const wrap = el('div', 's-row');
+  let timer = null;                 // per row, so one row cannot cancel another
+  // Captured ONCE, before any save can overwrite it. The config's order is
+  // meaningful ("sources run in this order"), and reading it back off r.value
+  // each time loses it the moment a save writes an empty or partial list.
+  const order = Array.isArray(r.value) ? r.value.slice() : [];
   const isBool = r.kind === 'bool';
   const label = el('label', null, r.label);
   label.htmlFor = 'set-' + r.key;
@@ -345,7 +349,38 @@ function settingRow(r) {
   wrap.appendChild(el('p', 's-help', r.help));
 
   let input;
-  if (isBool) {
+  let checkboxes = null;
+
+  if (r.options) {
+    // A list whose possible values the backend knows (job boards). Checkboxes
+    // rather than a textarea: nobody should have to spell 'smartrecruiters'.
+    checkboxes = [];
+    const box = el('div', 's-choices');
+    for (const opt of r.options) {
+      const line = el('label', 's-choice');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!opt.checked;
+      cb.dataset.value = opt.value;
+      line.appendChild(cb);
+      line.appendChild(el('span', 's-choice-label', opt.label));
+      if (opt.label !== opt.value) line.appendChild(el('span', 's-choice-key', opt.value));
+      box.appendChild(line);
+      checkboxes.push(cb);
+    }
+    wrap.appendChild(box);
+    const tally = el('div', 's-tally');
+    wrap.appendChild(tally);
+
+    const updateTally = () => {
+      const n = checkboxes.filter((c) => c.checked).length;
+      tally.textContent = n + ' of ' + checkboxes.length + ' selected' +
+        (n === 0 ? ' — nothing will be scanned' : '');
+      tally.classList.toggle('warn', n === 0);
+    };
+    updateTally();
+    for (const cb of checkboxes) cb.addEventListener('change', updateTally);
+  } else if (isBool) {
     const line = el('div', 's-check');
     input = document.createElement('input');
     input.type = 'checkbox';
@@ -371,13 +406,25 @@ function settingRow(r) {
     input.value = r.value != null ? r.value : '';
     wrap.appendChild(input);
   }
-  input.id = 'set-' + r.key;
+  if (input) input.id = 'set-' + r.key;
 
   const note = el('span', 's-saved', '');
   const err = el('div', 's-err', '');
   err.hidden = true;
 
   const collect = () => {
+    if (checkboxes) {
+      // The config says "sources run in this order", so keep it. Ranking
+      // against the order captured at render time means the sequence survives
+      // even an untick-everything-then-retick cycle, which a filter against the
+      // current value cannot do: that information is already gone by then.
+      const ticked = checkboxes.filter((c) => c.checked).map((c) => c.dataset.value);
+      const rank = (v) => {
+        const i = order.indexOf(v);
+        return i === -1 ? order.length + ticked.indexOf(v) : i;
+      };
+      return ticked.slice().sort((a, b) => rank(a) - rank(b));
+    }
     if (isBool) return input.checked;
     if (r.kind === 'str_list') {
       return input.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -426,16 +473,22 @@ function settingRow(r) {
     }
   };
 
-  if (isBool) {
-    input.addEventListener('change', save);
+  // Debounce everything that can fire in a burst. Without this, "untick all"
+  // fired 25 writes back to back; each is a read-modify-write of the file, and
+  // they raced each other into corrupting config.yaml.
+  const saveSoon = (ms) => {
+    clearTimeout(timer);
+    timer = setTimeout(save, ms);
+  };
+
+  if (checkboxes) {
+    for (const cb of checkboxes) cb.addEventListener('change', () => saveSoon(400));
+  } else if (isBool) {
+    input.addEventListener('change', () => saveSoon(200));
   } else {
-    // debounce: a textarea fires on every keystroke
-    input.addEventListener('input', () => {
-      clearTimeout(SAVE_TIMER);
-      SAVE_TIMER = setTimeout(save, 700);
-    });
+    input.addEventListener('input', () => saveSoon(700));
     input.addEventListener('blur', () => {
-      clearTimeout(SAVE_TIMER);
+      clearTimeout(timer);
       save();
     });
   }

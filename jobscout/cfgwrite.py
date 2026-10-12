@@ -21,9 +21,24 @@ Deliberate behaviours:
 """
 from __future__ import annotations
 
+import os
+import tempfile
+import threading
 from pathlib import Path
 
 INDENT = 2
+
+# Config edits are read-modify-write, and the window can fire several at once
+# (ticking a board, or a settings control saving per keystroke). Two hazards,
+# both of which corrupted a real config:
+#   1. interleaved writers lose each other's edits;
+#   2. `write_text` TRUNCATES before writing, so a concurrent read can see a
+#      half-written file and derive a replacement from it, which is how
+#      fragments of unrelated sections ended up duplicated in the file.
+# A lock removes the first; writing to a temp file and os.replace removes the
+# second, because rename is atomic and a reader sees either the old file or the
+# new one, never a partial one.
+_LOCK = threading.RLock()
 
 
 class ConfigEditError(Exception):
@@ -153,6 +168,91 @@ def _scalar_line(line: str, key: str, value) -> str:
     return new + nl
 
 
+def _flow_span(lines: list[str], idx: int) -> int | None:
+    """If the key on line `idx` opens a flow sequence that does NOT close on the
+    same line, return the index of the line that closes it.
+
+    This matters because `sources.enabled` is written wrapped across three
+    lines for readability, and treating it as one line corrupts the file: the
+    replacement lands on the first line and the continuation lines are left
+    dangling, which is invalid YAML. Returns None for a single-line value, an
+    unterminated sequence, or anything that is not a flow sequence.
+    """
+    raw = lines[idx].split(":", 1)[1].rstrip("\n")
+    body, _comment = _split_trailing_comment(raw)
+    if "[" not in body or "]" in body:
+        return None
+    depth = body.count("[") - body.count("]")
+    for j in range(idx + 1, len(lines)):
+        stripped, _ = _split_trailing_comment(lines[j].rstrip("\n"))
+        depth += stripped.count("[") - stripped.count("]")
+        if depth <= 0:
+            return j
+    return None                                  # never closed; leave it alone
+
+
+def _join_flow(lines: list[str], idx: int, end: int) -> str:
+    """The full text of a flow value spanning idx..end, comments removed.
+
+    Comments are stripped PER LINE and only then joined. Stripping after
+    joining looks equivalent and is not: a `#` on the first line would swallow
+    every continuation line, so
+        enabled: [a, b,   # why not
+                  c]
+    would read back as '[a, b,' and `c` would vanish.
+    """
+    parts = []
+    for j in range(idx, end + 1):
+        body, _comment = _split_trailing_comment(lines[j].rstrip("\n"))
+        parts.append(body)
+    joined = "".join(parts)
+    return joined.split(":", 1)[1].strip()
+
+
+def _interior_comments(lines: list[str], idx: int, end: int) -> list[str]:
+    """Comment text sitting INSIDE a wrapped flow value.
+
+    A comment between the brackets cannot be kept where it is (the value is
+    rewritten wholesale), so it is lifted out and re-emitted above the key
+    rather than dropped: config comments are documentation, and losing one
+    silently is the exact failure this module exists to prevent.
+    """
+    out = []
+    for j in range(idx, end + 1):
+        _body, comment = _split_trailing_comment(lines[j].rstrip("\n"))
+        if comment and comment.strip("# ").strip():
+            out.append(comment.strip())
+    return out
+
+
+def _wrap_flow(values, lead: str, key: str, width: int = 90) -> list[str]:
+    """Render a flow list, wrapped the way the config already wraps it.
+
+    The live config wraps `enabled:` across three lines, aligned just after the
+    `[`. Emitting one 200-character line would be valid YAML and a readability
+    regression, so the original shape is reproduced.
+    """
+    items = [_emit_scalar(v) for v in values]
+    one = "[" + ", ".join(items) + "]"
+    if len(lead) + len(key) + 2 + len(one) <= width:
+        return [f"{lead}{key}: {one}"]
+
+    pad = " " * (len(lead) + len(key) + 3)       # aligns just after the "["
+    lines: list[str] = []
+    cur = "["
+    for i, item in enumerate(items):
+        piece = item + ("," if i < len(items) - 1 else "]")
+        if cur == "[":
+            cur += piece
+        elif len(pad) + len(cur) + 1 + len(piece) <= width:
+            cur += " " + piece
+        else:
+            lines.append(cur)
+            cur = piece
+    lines.append(cur)
+    return [f"{lead}{key}: {lines[0]}"] + [pad + ln for ln in lines[1:]]
+
+
 def _emit_scalar(value) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -177,6 +277,10 @@ def get_value(text: str, dotted: str):
         idx, span_end, indent, _ = _locate(lines, dotted)
     except ConfigEditError:
         return None
+    flow_end = _flow_span(lines, idx)
+    if flow_end is not None:
+        return _parse_inline(_join_flow(lines, idx, flow_end))
+
     raw = lines[idx].split(":", 1)[1].strip()
     if raw:
         return _parse_inline(raw)
@@ -250,11 +354,22 @@ def set_list(text: str, dotted: str, values) -> str:
     body = raw.rstrip("\n")
     old_val, comment = _split_trailing_comment(body)
 
-    if old_val.strip().startswith("["):                       # inline flow list
-        if _parse_inline(old_val.strip()) == list(values):    # true no-op
+    flow_end = _flow_span(lines, idx)
+    if flow_end is not None or old_val.strip().startswith("["):   # flow list
+        end = flow_end if flow_end is not None else idx
+        # a wrapped flow list carries its comment on the closing line
+        if flow_end is not None:
+            _body, close_comment = _split_trailing_comment(
+                lines[end].rstrip("\n"))
+            comment = comment or close_comment
+        if get_value(text, dotted) == list(values):               # true no-op
             return text
-        new = f"{lead}{key}: {_emit_inline_list(values)}"
-        return "".join(lines[:idx] + [new + (comment or "") + nl] + lines[idx + 1:])
+        rendered = _wrap_flow(list(values), lead, key)
+        lifted = [f"{lead}# {c.lstrip('# ').strip()}{nl}"
+                  for c in _interior_comments(lines, idx, end)]
+        block = lifted + [f"{rendered[0]}{comment}{nl}"]
+        block += [f"{r}{nl}" for r in rendered[1:]]
+        return "".join(lines[:idx] + block + lines[end + 1:])
 
     block = [f"{lead}  - {_emit_scalar(v)}\n" for v in values]
     if not block:
@@ -299,18 +414,39 @@ def _read(path: Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    """Replace a file in one step, so no reader ever sees a partial write."""
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".jobscout-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)          # atomic on the same filesystem
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def edit(path: Path, op: str, dotted: str, value) -> bool:
     """Apply one edit to a file. Returns True when the file changed.
 
     A no-op (same value already present) leaves the file byte-identical.
+    Serialised against other edits and written atomically -- see the note on
+    _LOCK.
     """
     path = Path(path)
-    before = _read(path)
     fn = {"scalar": set_scalar, "list": set_list, "mapping": set_mapping}.get(op)
     if fn is None:
         raise ConfigEditError(f"unknown op {op!r}")
-    after = fn(before, dotted, value)
-    if after != before:
-        path.write_text(after, encoding="utf-8")
-        return True
-    return False
+    with _LOCK:
+        before = _read(path)
+        after = fn(before, dotted, value)
+        if after != before:
+            _write_atomic(path, after)
+            return True
+        return False
