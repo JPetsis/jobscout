@@ -93,10 +93,19 @@ class Fetcher:
                 self.errors.append(f"{host}: {type(e).__name__}: {e}")
                 raise FetchError(url, f"{type(e).__name__}: {e}") from e
 
-    def post_json(self, url: str, payload: dict, host_delay: float | None = None):
-        """POST a JSON body and parse the JSON response (same retry rules)."""
+    def post_json(self, url: str, payload: dict, host_delay: float | None = None,
+                  headers: dict | None = None):
+        """POST a JSON body and parse the JSON response (same retry rules).
+
+        `headers` mirrors get_json's parameter. It exists because some APIs
+        localise their response from Accept-Language, and the default header
+        here is German-first (correct for the German boards, wrong for an API
+        whose location strings have to be matched by an English gazetteer).
+        """
         host = urllib.parse.urlsplit(url).netloc
-        h = self._headers({"Content-Type": "application/json"})
+        extra = {"Content-Type": "application/json"}
+        extra.update(headers or {})
+        h = self._headers(extra)
         body = json.dumps(payload).encode("utf-8")
         attempt = 0
         while True:

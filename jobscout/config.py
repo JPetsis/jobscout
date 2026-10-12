@@ -184,7 +184,8 @@ sources:
   # sources run in this order; remove entries to disable them
   enabled: [linkedin, stepstone, xing, stellenanzeigen, karriere_at, jobs_ch,
             arbeitnow, berlinstartupjobs, ams, eures, jobsat, hn, remotive, wwr, remoteok,
-            larajobs, workingnomads, nodesk, himalayas, greenhouse, ashby, recruitee]
+            larajobs, workingnomads, nodesk, himalayas, greenhouse, ashby, recruitee,
+            themuse]
 
   linkedin:
     # LinkedIn's public guest search (no login). Keep the budget small or
@@ -264,6 +265,27 @@ sources:
     max_pages: 20        # newest N pages walked per scan
     max_age_days: 21     # stop paging once postings older than this appear
 
+  themuse:
+    # The Muse's public API needs no key. Registering only raises the rate
+    # limit, so `api_key` is optional.
+    #
+    # It has NO free-text search: the axes are category, location and level.
+    # Leave `categories` empty to fetch everything newest-first and let the
+    # scorer decide, or name categories to fetch narrower and faster.
+    # https://www.themuse.com/developers/api/v2
+    pages: 5                 # 20 postings per page
+    categories: []           # e.g. [Software Engineering, Data Science]
+    location: ""             # e.g. United States, New York, NY ("" = anywhere)
+    api_key: ""              # optional
+
+  workday:
+    # The API behind a large share of large-employer careers sites. No key.
+    # Add employers under `companies.workday.tokens` below; with none added
+    # this source does nothing, which is why it is off by default.
+    pages: 3                 # 20 postings per page, per query
+    queries: []              # keywords only; from your profile unless set
+
+
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>
@@ -307,6 +329,8 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "nodesk": {},
     "himalayas": {"max_pages": 20, "max_age_days": 21},
     "recruitee": {},
+    "themuse": {"pages": 5, "categories": [], "location": "", "api_key": ""},
+    "workday": {"pages": 3},
     "eures": {"search_code": "TITLE", "publication_period": "LAST_MONTH",
               "per_page": 50, "max_pages": 2, "max_age_days": 45},
     "greenhouse": {},

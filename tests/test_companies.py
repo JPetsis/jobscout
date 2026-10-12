@@ -114,7 +114,13 @@ def test_enable_source_missing_list():
 
 
 def test_enable_source_on_real_template():
+    """Behavioural, not a literal slice of the template: the old assertion
+    pinned the exact text `...recruitee, lever]` and broke the moment a source
+    was added to the default list, which is not a regression."""
+    before = yaml.safe_load(DEFAULT_CONFIG)["sources"]["enabled"]
     new, status = companies._enable_in_list(DEFAULT_CONFIG, "lever")
     assert status == "added"
-    assert "greenhouse, ashby, recruitee, lever]" in new
-    assert yaml.safe_load(new)["sources"]["enabled"][-1] == "lever"
+    after = yaml.safe_load(new)["sources"]["enabled"]
+    assert after[-1] == "lever"                 # appended
+    assert after[:-1] == before                 # nothing else disturbed
+    assert DEFAULT_CONFIG.count("#") == new.count("#")   # comments untouched

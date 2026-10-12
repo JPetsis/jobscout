@@ -6,8 +6,8 @@ from jobscout.sources import (REGISTRY, SOURCE_NAMES, ams, arbeitnow, ashby,
                               berlinstartupjobs, eures, greenhouse, himalayas, hn,
                               jobs_ch, jobsat, karriere_at, larajobs, lever, linkedin,
                               nodesk, recruitee, remoteok, remotive, smartrecruiters,
-                              stepstone, stellenanzeigen, workable, workingnomads, wwr,
-                              xing)
+                              stepstone, stellenanzeigen, themuse, workday, workable,
+                              workingnomads, wwr, xing)
 
 
 def test_registry_complete():
@@ -621,3 +621,102 @@ def test_workable(fixture_json):
     p = postings[0]
     assert p.url.startswith("https://apply.workable.com/")
     assert p.location
+
+
+# --- The Muse (US, no key) --------------------------------------------------
+
+def test_themuse(fixture_json):
+    postings = themuse.parse(fixture_json("themuse.json"))
+    assert len(postings) == 3
+    p = postings[0]
+    assert p.source == "themuse"
+    assert p.title and p.company
+    assert p.url.startswith("https://www.themuse.com/jobs/")
+    assert p.external_id.isdigit()
+    assert p.location                      # e.g. 'Flexible / Remote' or a city
+    assert "<" not in p.description        # HTML stripped
+    assert p.extra["categories"]           # kept for display
+
+
+def test_themuse_survives_an_empty_page():
+    assert themuse.parse({"results": []}) == []
+    assert themuse.parse({}) == []
+
+
+def test_themuse_reads_structured_locations_and_levels(fixture_json):
+    postings = themuse.parse(fixture_json("themuse.json"))
+    # locations come back as a list of dicts; they must become one string
+    assert all(isinstance(p.location, str) for p in postings)
+    assert all("{" not in p.location for p in postings)
+    assert any(p.extra.get("levels") for p in postings)
+
+
+# --- Workday (per-company ATS, no key) --------------------------------------
+
+def test_workday_token_accepts_both_forms():
+    assert workday.parse_token("nvidia:wd5:NVIDIAExternalCareerSite") == (
+        "nvidia", "wd5", "NVIDIAExternalCareerSite")
+    assert workday.parse_token(
+        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite") == (
+        "nvidia", "wd5", "NVIDIAExternalCareerSite")
+    # no locale segment
+    assert workday.parse_token(
+        "https://salesforce.wd12.myworkdayjobs.com/External_Career_Site") == (
+        "salesforce", "wd12", "External_Career_Site")
+
+
+def test_workday_token_rejects_junk():
+    for bad in ("", "   ", "not-a-url", "https://example.com/careers"):
+        assert workday.parse_token(bad) is None
+
+
+def test_workday(fixture_json):
+    postings = workday.parse(fixture_json("workday.json"), "nvidia", "wd5", "NVIDIAExternalCareerSite")
+    assert len(postings) == 3
+    p = postings[0]
+    assert p.source == "workday"
+    assert p.title
+    assert p.company == "nvidia"
+    assert p.location in ("Israel, Yokneam", "2 Locations") or p.location
+    assert p.url.startswith(
+        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/")
+    assert p.external_id.startswith("JR")          # bulletFields[0]
+    assert p.extra["tenant"] == "nvidia"
+
+
+def test_workday_does_not_invent_a_posted_date(fixture_json):
+    """`postedOn` is a phrase ('Posted 30+ Days Ago'), not a date. Mapping it
+    through date_part would either drop it or fabricate one, so it stays text."""
+    postings = workday.parse(fixture_json("workday.json"), "nvidia", "wd5", "Site")
+    assert all(p.posted_at == "" for p in postings)
+    assert all(p.extra["posted_text"] for p in postings)
+
+
+def test_workday_bad_token_is_loud_not_silent():
+    class F:
+        errors: list = []
+
+    f = F()
+    out = workday.fetch({"companies": ["not-a-valid-token"]}, f)
+    assert out == []
+    assert f.errors, "a bad token must be reported, not swallowed"
+    assert "not-a-valid-token" in f.errors[0]
+    assert "tenant:wdN:Site" in f.errors[0]        # says what a good one looks like
+
+
+def test_workday_with_nothing_configured_is_quiet():
+    """Enabling a source before adding an employer is normal, not an error."""
+    class F:
+        errors: list = []
+
+    f = F()
+    assert workday.fetch({"companies": []}, f) == []
+    assert f.errors == []
+
+
+def test_workday_asks_for_english():
+    """The shared Fetcher sends German-first Accept-Language, and CXS localises
+    with it: 'Standorte' instead of 'Locations'. German location text cannot be
+    matched by the geo gate, so the US filter would quietly stop working."""
+    assert workday.EN_HEADERS["Accept-Language"].startswith("en")
+    assert "de" not in workday.EN_HEADERS["Accept-Language"].split(";")[0]

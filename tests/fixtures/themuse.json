@@ -1,0 +1,121 @@
+{
+ "page": 1,
+ "page_count": 43,
+ "items_per_page": 20,
+ "took": 6,
+ "timed_out": false,
+ "total": 860,
+ "results": [
+  {
+   "contents": "<p><b>Description</b><br><br><b>Looking for an opportunity to make an impact?</b><br><br>At Leidos, we deliver innovative solutions through the efforts of our diverse and talented people who are<br><br>dedicated to our customers' success. We empower our teams, contribute to our communities, and operate sustainable. Everything we do is built on a dedication to do the right thing for our customers, ",
+   "name": "Sensor Integration Engineer",
+   "type": "external",
+   "publication_date": "2026-07-15T19:18:43Z",
+   "short_name": "sensor-integration-engineer",
+   "model_type": "jobs",
+   "id": 21950974,
+   "locations": [
+    {
+     "name": "Flexible / Remote"
+    }
+   ],
+   "categories": [
+    {
+     "name": "Software Engineering"
+    }
+   ],
+   "levels": [
+    {
+     "name": "Senior Level",
+     "short_name": "senior"
+    }
+   ],
+   "tags": [],
+   "refs": {
+    "landing_page": "https://www.themuse.com/jobs/leidos/sensor-integration-engineer"
+   },
+   "company": {
+    "id": 15000275,
+    "short_name": "leidos",
+    "name": "Leidos"
+   }
+  },
+  {
+   "contents": "<p><b>Company Description</b><br><br>A Experian é uma empresa global de dados e tecnologia que impulsiona oportunidades para pessoas e empresas ao redor do mundo. Atuamos em diversos mercados, como serviços financeiros, saúde, automotivo, agronegócio, seguros, entre outros. A Experian investe em pessoas e em novas tecnologias avançadas para liberar o poder dos dados. Contamos com uma equipe incrív",
+   "name": "Analista de Desenvolvimento de Software Senior",
+   "type": "external",
+   "publication_date": "2026-09-11T19:07:46Z",
+   "short_name": "analista-de-desenvolvimento-de-software-senior-f31a76",
+   "model_type": "jobs",
+   "id": 22151236,
+   "locations": [
+    {
+     "name": "Flexible / Remote"
+    },
+    {
+     "name": "São Paulo, Brazil"
+    }
+   ],
+   "categories": [
+    {
+     "name": "Software Engineering"
+    }
+   ],
+   "levels": [
+    {
+     "name": "Senior Level",
+     "short_name": "senior"
+    }
+   ],
+   "tags": [],
+   "refs": {
+    "landing_page": "https://www.themuse.com/jobs/experian/analista-de-desenvolvimento-de-software-senior-f31a76"
+   },
+   "company": {
+    "id": 15000863,
+    "short_name": "experian",
+    "name": "Experian"
+   }
+  },
+  {
+   "contents": "<p>RELOCATION ASSISTANCE:  No relocation assistance availableCLEARANCE TYPE:  SecretTRAVEL:  Yes, 75% of the Time <em>Description</em> At Northrop Grumman, our employees have incredible opportunities to work on revolutionary systems that impact people's lives around the world today, and for generations to come. Our pioneering and inventive spirit has enabled us to be at the forefront of many techn",
+   "name": "Mission Planner (On-Call/Casual Employee)",
+   "type": "external",
+   "publication_date": "2025-04-17T12:49:53Z",
+   "short_name": "mission-planner-oncallcasual-employee",
+   "model_type": "jobs",
+   "id": 18460555,
+   "locations": [
+    {
+     "name": "Flexible / Remote"
+    }
+   ],
+   "categories": [
+    {
+     "name": "Software Engineering"
+    }
+   ],
+   "levels": [
+    {
+     "name": "Senior Level",
+     "short_name": "senior"
+    }
+   ],
+   "tags": [
+    {
+     "name": "Fortune 1000",
+     "short_name": "fortune-1000-companies"
+    }
+   ],
+   "refs": {
+    "landing_page": "https://www.themuse.com/jobs/northropgrumman/mission-planner-oncallcasual-employee"
+   },
+   "company": {
+    "id": 792,
+    "short_name": "northropgrumman",
+    "name": "Northrop Grumman"
+   }
+  }
+ ],
+ "aggregations": {}
+}
