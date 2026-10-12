@@ -926,19 +926,23 @@ def cmd_goal(args) -> int:
     else:
         print(ui.red(f"unknown action '{action}' — use `jobscout goal use <name>` or `jobscout goal off`"))
         return 1
-    # persist: rewrite the `active:` key inside the goals block
-    text = cfg.path.read_text(encoding="utf-8")
-    if re.search(r"(?m)^goals:\s*$", text):
-        if cfg.active_goal:
-            if re.search(r"(?m)^\s*active:.*$", text):
-                text = re.sub(r"(?m)^(\s*)active:.*$",
-                              lambda m: f"{m.group(1)}active: {cfg.active_goal}", text, count=1)
-            else:
-                text = re.sub(r"(?m)^goals:\s*$",
-                              f"goals:\n  active: {cfg.active_goal}", text, count=1)
-        else:
-            if re.search(r"(?m)^\s*active:.*$", text):
-                text = re.sub(r"(?m)^(\s*)active:.*$", r"\1active: \"\"", text, count=1)
+    # persist: rewrite the `active:` key inside the goals block.
+    #
+    # This used to be a raw re.sub with the replacement r"\1active: \"\"". In a
+    # replacement TEMPLATE `\"` is not an escape re understands, so it emitted a
+    # literal backslash and the file ended up with `active: \"\"` -- which YAML
+    # reads back as a 4-character TRUTHY string. jobscout then believed a goal
+    # named \"\" was active: `goals` claimed one was, while no goal filtered.
+    #
+    # cfgwrite owns config.yaml edits (line-level, comment-preserving, atomic),
+    # so it owns this one too.
+    from . import cfgwrite
+    try:
+        cfgwrite.edit(cfg.path, "scalar", "goals.active", cfg.active_goal)
+    except cfgwrite.ConfigEditError:
+        # No `goals:` block at all: there is nothing to activate into, and the
+        # list above already told the user goals do not exist.
+        pass
     if action == "off":
         print(ui.dim("goal mode off — showing the full pool again"))
     else:
@@ -946,7 +950,6 @@ def cmd_goal(args) -> int:
         print(ui.cyan(f"goal active: {g.name}") + ui.dim(f"  ({g.describe()})"))
         print(ui.dim("list / triage now default to this goal; "
                      "`--all-goals` shows the full pool"))
-    cfg.path.write_text(text, encoding="utf-8")
     return 0
 
 

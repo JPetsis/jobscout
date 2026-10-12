@@ -126,3 +126,90 @@ def test_no_goal_object_is_never_a_match():
 def test_matching_is_case_and_space_insensitive():
     g = Goal(name="austria", kind="location", locations=["Austria"])
     assert match(_row(location="VIENNA,   AUSTRIA"), g)
+
+
+# --- persisting the active goal --------------------------------------------
+#
+# `jobscout goal off` used to write `active: \"\"` rather than `active: ""`.
+# The value was built by a raw re.sub whose replacement template was
+# r"\1active: \"\""; in a replacement template `\"` is not an escape re
+# understands, so it emitted a literal backslash. YAML then read the result
+# back as a 4-character TRUTHY string, so jobscout believed a goal named \"\"
+# was active: `jobscout goals` said "one active at a time" while nothing was
+# actually filtered. The fix routes the write through cfgwrite.
+
+GOALS_CONFIG = """preferences:
+  min_score: 6
+
+# the goals block, with a comment that must survive
+goals:
+  active: austria
+  austria:
+    kind: location
+    locations: [austria, wien]
+    label: Austria
+  senior:
+    kind: seniority
+"""
+
+
+def _ws_with_goals(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout.config import home, init_workspace
+    root = home()
+    init_workspace(root)
+    (root / "config.yaml").write_text(GOALS_CONFIG, encoding="utf-8")
+    return root
+
+
+def test_goal_off_writes_an_empty_string_not_an_escaped_one(tmp_path, monkeypatch):
+    from jobscout import cli
+    root = _ws_with_goals(tmp_path, monkeypatch)
+
+    assert cli.main(["goal", "off"]) == 0
+
+    raw = (root / "config.yaml").read_text(encoding="utf-8")
+    active_line = [l for l in raw.splitlines()
+                   if l.strip().startswith("active:")][0]
+    assert active_line.strip() == 'active: ""', active_line
+    assert "\\" not in active_line, "no stray backslash"
+
+
+def test_a_cleared_goal_is_falsy_when_read_back(tmp_path, monkeypatch):
+    """The whole point: the file must not claim an active goal afterwards."""
+    from jobscout import cli
+    from jobscout.config import load_config
+
+    _ws_with_goals(tmp_path, monkeypatch)
+    cli.main(["goal", "off"])
+
+    cfg = load_config()
+    assert cfg.active_goal == "", repr(cfg.active_goal)
+    assert not cfg.active_goal, "a bogus truthy value made the app filter by a goal that does not exist"
+
+
+def test_goal_use_round_trips_and_keeps_comments(tmp_path, monkeypatch):
+    from jobscout import cli
+    from jobscout.config import load_config
+
+    root = _ws_with_goals(tmp_path, monkeypatch)
+    before = (root / "config.yaml").read_text(encoding="utf-8")
+
+    assert cli.main(["goal", "use", "senior"]) == 0
+    assert load_config().active_goal == "senior"
+
+    after = (root / "config.yaml").read_text(encoding="utf-8")
+    assert "with a comment that must survive" in after
+    assert len(after.splitlines()) == len(before.splitlines())
+
+
+def test_goal_off_is_idempotent(tmp_path, monkeypatch):
+    """Running it twice must not accumulate escaping."""
+    from jobscout import cli
+
+    root = _ws_with_goals(tmp_path, monkeypatch)
+    cli.main(["goal", "off"])
+    first = (root / "config.yaml").read_text(encoding="utf-8")
+    cli.main(["goal", "off"])
+    second = (root / "config.yaml").read_text(encoding="utf-8")
+    assert first == second, "a second `goal off` should be a byte-identical no-op"
