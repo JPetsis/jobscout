@@ -64,6 +64,15 @@ def scan(cfg, conn, fetcher, *,
     # re-resolve every source name through the registry on each loop pass.
     adapters = dict(iter_sources(cfg.enabled))
     names = [n for n in adapters if not only or n in only]
+
+    # `--only X` where X exists but is NOT enabled scans nothing and looks
+    # exactly like a source that had no jobs today. Name the skipped ones and
+    # say what enables them.
+    if only:
+        skipped = sorted(n for n in only if n not in adapters)
+        if skipped:
+            emit({"kind": "not_enabled", "names": skipped,
+                  "enabled_count": len(adapters)})
     stats = {"sources": {}, "requests": 0, "errors": [], "prefs_hash": new_hash}
     matches: list[tuple] = []
     total_new = 0

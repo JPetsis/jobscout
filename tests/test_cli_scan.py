@@ -81,3 +81,23 @@ def test_many_errors_are_bounded(capsys, scan_env, monkeypatch):
 def test_cancelled_scan_says_so(capsys, scan_env, monkeypatch):
     _run(monkeypatch, _summary(cancelled=True))
     assert "cancelled" in capsys.readouterr().out
+
+
+# --- `--only X` where X is not enabled -------------------------------------
+
+def test_scanning_a_source_that_is_not_enabled_says_so(capsys, scan_env, monkeypatch):
+    """Without this, `--only themuse` scans nothing and prints "0 sources",
+    which reads as "that board had no jobs" rather than "you never enabled it".
+    Hit for real while verifying the new US sources."""
+    def fake_scan(cfg, conn, fetcher, *, only=None, on_event=None, **_):
+        if on_event:
+            on_event({"kind": "not_enabled", "names": sorted(only or []),
+                      "enabled_count": 0})
+        return _summary()
+
+    monkeypatch.setattr(scanner, "scan", fake_scan)
+    cli.cmd_scan(types.SimpleNamespace(only="themuse", quiet=False))
+    out = capsys.readouterr().out
+    assert "themuse is not enabled" in out
+    assert "sources.enabled" in out            # says how to fix it
+    assert "Settings" in out

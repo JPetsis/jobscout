@@ -131,6 +131,11 @@ def cmd_scan(args) -> int:
         elif kind == "pruned":
             print(f"  {ui.dim(e['name'])} {ui.dim('pruned')} {ui.red(str(e['removed']))} "
                   f"{ui.dim('unverifiable row(s), no publisher expiry')}")
+        elif kind == "not_enabled":
+            for n in e["names"]:
+                print(ui.red(f"  {n} is not enabled") +
+                      ui.dim("  — add it to sources.enabled, or tick it in "
+                             "Settings; scanning it was skipped"))
         elif kind == "source_done" and not quiet:
             fetched_c = ui.dim(f"{e['fetched']:>4} fetched")
             new_c = ui.green(f"{e['new']:>3} new") if e["new"] else ui.dim(f"{e['new']:>3} new")

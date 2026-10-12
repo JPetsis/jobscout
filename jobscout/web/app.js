@@ -571,6 +571,9 @@ function applyScanEvent(e) {
       e.new + ' new · ' + e.matches + ' matches';
   } else if (e.kind === 'rescored') {
     $('scan-label').textContent = 'profile changed — rescored ' + e.total + ' postings';
+  } else if (e.kind === 'not_enabled') {
+    $('scan-label').textContent = e.names.join(', ') + ' is not enabled — ' +
+      'tick it in Settings';
   } else if (e.kind === 'cancelled') {
     $('scan-label').textContent = 'cancelling after ' + e.after + ' of ' + e.of + ' sources';
   }
