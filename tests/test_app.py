@@ -7,6 +7,7 @@ out at launch, and a guard that only works on the platform it guards is untested
 """
 import re
 import types
+from pathlib import Path
 import sys
 import threading
 import time
@@ -494,10 +495,15 @@ def test_switching_rebinds_config_and_database(api):
     assert out["ok"] is True
     assert api.cfg.root != before
     assert api.cfg.root.name == "Second"
-    # ask sqlite which file it actually has open, rather than trusting the
-    # config: the point of the switch is that the CONNECTION moved too
-    opened = api.conn.execute("PRAGMA database_list").fetchone()[2]
-    assert opened.endswith("profiles/Second/jobscout.db"), opened
+    # Ask sqlite which file it actually has open, rather than trusting the
+    # config: the point of the switch is that the CONNECTION moved too.
+    # Compared as path COMPONENTS, not a string suffix -- a suffix with "/" in
+    # it passes on macOS and fails on Windows, which is a broken test rather
+    # than a broken switch.
+    opened = Path(api.conn.execute("PRAGMA database_list").fetchone()[2])
+    assert opened.name == "jobscout.db"
+    assert opened.parent.name == "Second"
+    assert opened.parent.parent.name == "profiles"
 
 
 def test_switching_writes_the_choice_to_disk(api):
