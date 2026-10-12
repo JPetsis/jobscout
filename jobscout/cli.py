@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
 from datetime import datetime
 from pathlib import Path
 
@@ -55,6 +56,57 @@ def cmd_init(args) -> int:
     print("  1. jobscout config --edit    (your roles, locations, sources)")
     print("  2. jobscout scan")
     print("  3. jobscout digest")
+    return 0
+
+
+def cmd_restore(args) -> int:
+    """Put a backup back. Thin view over backup.restore()."""
+    cfg = load_config()
+    dest = Path(args.to).expanduser() if args.to else backupmod.default_destination()
+
+    if args.from_archive:
+        archive = Path(args.from_archive).expanduser()
+    else:
+        rows = backupmod.list_backups(dest)
+        if not rows:
+            print(ui.red(f"no backups found in {dest}"))
+            print(ui.dim("  `jobscout backup` writes one; `jobscout backup --list` shows them"))
+            return 1
+        archive = rows[0]["path"]                    # newest first
+
+    info = backupmod.describe(archive)
+    print(ui.bold("restore") + ui.dim(f"  {archive.name}"))
+    if info.get("created"):
+        print(ui.dim(f"  taken {info['created']}"))
+    if info.get("postings") is not None:
+        print(f"  {ui.cyan(str(info['postings']))} postings · {info.get('marked') or 0} marked")
+
+    if not backupmod.workspace_is_empty(cfg.root) and not args.overwrite:
+        print()
+        print(ui.red("your workspace already has a config or database") +
+              ui.dim(f"  ({cfg.root})"))
+        print(ui.dim("  restoring would replace it. re-run with --overwrite;"))
+        print(ui.dim("  your current state is copied to a new backup first."))
+        return 1
+
+    if not args.yes and not backupmod.workspace_is_empty(cfg.root):
+        print()
+        print(ui.dim("  this replaces your current workspace. re-run with --yes."))
+        return 1
+
+    try:
+        res = backupmod.restore(archive, cfg.root, overwrite=args.overwrite)
+    except (OSError, ValueError, tarfile.TarError) as e:
+        print(ui.red(f"restore failed: {type(e).__name__}: {e}"))
+        return 1
+
+    c = res["counts"]
+    print()
+    print(ui.bold("restored") + ui.dim(f"  {cfg.root}"))
+    print(f"{ui.cyan(str(c['postings']))} postings · {c['marked']} marked · "
+          f"last run #{c['last_run']}")
+    if res.get("safety_backup"):
+        print(ui.dim(f"your previous state was saved to {res['safety_backup']}"))
     return 0
 
 
@@ -915,6 +967,16 @@ def main(argv=None) -> int:
     p.add_argument("--open", action="store_true")
     p.add_argument("--edit", action="store_true")
     p.set_defaults(fn=cmd_config)
+
+    p = sub.add_parser("restore", help="put a backup back into the workspace")
+    p.add_argument("--from", dest="from_archive", metavar="FILE",
+                   help="the backup to restore (default: the newest one)")
+    p.add_argument("--to", metavar="DIR",
+                   help="where the backups live (default: ~/jobscout-backups)")
+    p.add_argument("--overwrite", action="store_true",
+                   help="replace an existing workspace (a safety copy is kept)")
+    p.add_argument("--yes", action="store_true", help="skip the confirmation")
+    p.set_defaults(fn=cmd_restore)
 
     p = sub.add_parser("update", help="check for and install a newer build")
     p.add_argument("--check", action="store_true",

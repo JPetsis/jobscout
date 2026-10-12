@@ -235,3 +235,117 @@ def test_a_second_backup_in_the_same_minute_never_replaces_the_first(tmp_path):
         with tarfile.open(res["archive"], "r:gz") as tar:
             assert tar.getnames()
         assert res["counts"]["postings"] == 4
+
+
+# --- restore ---------------------------------------------------------------
+
+def test_workspace_is_empty_only_when_nothing_is_there(tmp_path):
+    ws = tmp_path / "ws"
+    assert bk.workspace_is_empty(ws) is True        # does not even exist
+    ws.mkdir()
+    assert bk.workspace_is_empty(ws) is True
+    (ws / "config.yaml").write_text("x")
+    assert bk.workspace_is_empty(ws) is False
+    (ws / "config.yaml").unlink()
+    (ws / "jobscout.db").write_bytes(b"x")
+    assert bk.workspace_is_empty(ws) is False
+
+
+def test_restore_into_an_empty_workspace(tmp_path):
+    src_ws = make_workspace(tmp_path / "src", postings=4)
+    arc = bk.backup(src_ws, tmp_path / "out")["archive"]
+
+    fresh = tmp_path / "fresh"
+    res = bk.restore(arc, fresh)
+    assert res["counts"]["postings"] == 4
+    assert res["replaced_existing"] is False
+    assert (fresh / "config.yaml").read_text() == CONFIG     # comments intact
+    reports = list((fresh / "reports").glob("*.md"))
+    assert len(reports) == 2
+
+
+def test_restore_refuses_to_clobber_a_workspace(tmp_path):
+    """Overwriting a workspace that holds decisions with an old snapshot is
+    worse than leaving the backup unclaimed."""
+    src_ws = make_workspace(tmp_path / "src")
+    arc = bk.backup(src_ws, tmp_path / "out")["archive"]
+    live = make_workspace(tmp_path / "live", postings=9)
+
+    with pytest.raises(FileExistsError, match="already holds a workspace"):
+        bk.restore(arc, live)
+    # and the live workspace is untouched
+    conn = sqlite3.connect(str(live / "jobscout.db"))
+    assert conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0] == 9
+    conn.close()
+
+
+def test_restore_keeps_a_SAFETY_COPY_of_what_it_replaces(tmp_path, monkeypatch):
+    """The safety net must survive the call. An earlier version wrote it into a
+    TemporaryDirectory deleted on the next line, so a restore you regret had no
+    way back."""
+    monkeypatch.setattr(bk, "default_destination", lambda: tmp_path / "safety")
+    src_ws = make_workspace(tmp_path / "src", postings=3)
+    arc = bk.backup(src_ws, tmp_path / "out")["archive"]
+    live = make_workspace(tmp_path / "live", postings=7)
+
+    res = bk.restore(arc, live, overwrite=True)
+    safety = Path(res["safety_backup"])
+    assert safety.exists(), "the safety copy must still be on disk"
+    assert res["replaced_existing"] is True
+
+    # and it really holds the pre-restore state
+    dest = tmp_path / "extract"
+    dest.mkdir()
+    with tarfile.open(safety, "r:gz") as tar:
+        tar.extractall(dest, filter="data")
+    conn = sqlite3.connect(str(dest / "jobscout.db"))
+    assert conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0] == 7
+    conn.close()
+
+
+def test_restore_of_an_empty_workspace_needs_no_safety_copy(tmp_path):
+    src_ws = make_workspace(tmp_path / "src")
+    arc = bk.backup(src_ws, tmp_path / "out")["archive"]
+    res = bk.restore(arc, tmp_path / "empty")
+    assert res["safety_backup"] is None
+
+
+def test_restore_refuses_something_that_is_not_a_backup(tmp_path):
+    arc = tmp_path / "random.tar.gz"
+    with tarfile.open(arc, "w:gz") as t:
+        t.add(tmp_path, arcname="stuff")
+    with pytest.raises(ValueError, match="not a jobscout backup"):
+        bk.restore(arc, tmp_path / "ws")
+
+
+def test_restore_refuses_a_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        bk.restore(tmp_path / "nope.tar.gz", tmp_path / "ws")
+
+
+# --- describe (the manifest reader) ----------------------------------------
+
+def test_describe_reports_what_is_inside(tmp_path):
+    ws = make_workspace(tmp_path / "ws", postings=6)
+    arc = bk.backup(ws, tmp_path / "out")["archive"]
+    d = bk.describe(arc)
+    assert d["postings"] == 6
+    assert d["marked"] == 1
+    assert d["created"]
+
+
+def test_describe_reads_the_padded_marked_field(tmp_path):
+    """`marked    84 (saved/applied/dismissed)` is space-padded. Splitting
+    before stripping yields "" and reports 0 marked, which is a lie about the
+    most valuable thing in the archive."""
+    ws = make_workspace(tmp_path / "ws", postings=3)
+    arc = bk.backup(ws, tmp_path / "out")["archive"]
+    assert bk.describe(arc)["marked"] == 1
+    assert isinstance(bk.describe(arc)["marked"], int)
+
+
+def test_describe_survives_a_damaged_archive(tmp_path):
+    bad = tmp_path / "jobscout-2026-01-01-0000.tar.gz"
+    bad.write_bytes(b"not a tarball")
+    d = bk.describe(bad)                       # must not raise
+    assert d["postings"] is None

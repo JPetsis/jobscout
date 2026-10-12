@@ -206,7 +206,14 @@ somewhere else, which works just as well for this purpose:
 cp -r ~/.jobscout ~/jobscout-backup
 ```
 
-Then uninstall, and restore if the backup was needed. On macOS the same applies
+Then uninstall. If the tool takes `~/.jobscout` with it, open jobscout again:
+it will find the backup and offer to put it back. Or from a terminal:
+
+```bash
+jobscout restore
+```
+
+On macOS the same applies
 to AppCleaner and similar utilities; the directory to exclude is `~/.jobscout`
 (on Windows, `C:\Users\<you>\.jobscout\`).
 

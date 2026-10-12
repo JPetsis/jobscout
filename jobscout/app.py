@@ -8,16 +8,146 @@ touch holds `dbm.LOCK` (see the note above LOCK in db.py).
 """
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import webbrowser
 from pathlib import Path
 
-from . import api, db as dbm, scanner, update as updatemod
+from . import api, backup as backupmod, db as dbm, scanner, update as updatemod
 from .config import load_config
 from .http import Fetcher
 
 WEB = Path(__file__).resolve().parent / "web"
+
+
+class RestoreOffer:
+    """The API behind the first-run window that offers a backup back.
+
+    Exists because of one specific afternoon: a deep-uninstaller deleted
+    ~/.jobscout, and the app on next launch said only "no config found, run
+    jobscout init". A backup was sitting right there in ~/jobscout-backups and
+    nothing connected the two.
+    """
+
+    def __init__(self, root, backups) -> None:
+        self.root = root
+        self.backups = backups
+        self.windows: list = []
+        self.done = False
+
+    def info(self) -> dict:
+        rows = []
+        for b in self.backups[:5]:
+            d = backupmod.describe(b["path"])
+            rows.append({"name": b["path"].name, "path": str(b["path"]),
+                         "created": d.get("created") or b.get("created", ""),
+                         "postings": d.get("postings"), "marked": d.get("marked")})
+        return {"root": str(self.root), "backups": rows}
+
+    def restore(self, path: str = "") -> dict:
+        target = Path(path) if path else self.backups[0]["path"]
+        try:
+            res = backupmod.restore(target, self.root, overwrite=False)
+        except Exception as e:                                 # noqa: BLE001
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        self.done = True
+        return {"ok": True, "counts": res["counts"], "archive": str(res["archive"])}
+
+    def quit(self) -> dict:
+        for w in list(self.windows):
+            try:
+                w.destroy()
+            except Exception:                                  # noqa: BLE001
+                pass
+        return {"ok": True}
+
+
+_RESTORE_HTML = """<!doctype html><meta charset="utf-8">
+<style>
+ body{margin:0;padding:26px 28px;background:#16171a;color:#ececf0;
+      font:13.5px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+ h1{font-size:15px;margin:0 0 6px}
+ p{margin:0 0 12px;color:#9a9aa2}
+ ul{list-style:none;margin:0 0 16px;padding:0}
+ li{background:#1e1f23;border:1px solid #32343a;border-radius:10px;
+    padding:10px 12px;margin-bottom:8px;cursor:pointer}
+ li.on{border-color:#2b5cd9}
+ li b{font-weight:600}
+ .meta{color:#9a9aa2;font-size:12px}
+ .row{display:flex;gap:9px;align-items:center}
+ button{font:inherit;border-radius:8px;padding:7px 14px;cursor:pointer;
+        border:1px solid #32343a;background:#1e1f23;color:#ececf0}
+ button.primary{background:#2b5cd9;border-color:#2b5cd9;color:#fff}
+ button:disabled{opacity:.5;cursor:default}
+ .ok{color:#3fb950}.err{color:#d29922}
+</style>
+<h1>jobscout has no profile here yet</h1>
+<p id="lead">Loading backups&hellip;</p>
+<ul id="list"></ul>
+<div class="row">
+  <button class="primary" id="go" disabled>Restore</button>
+  <button id="skip">Start fresh</button>
+</div>
+<p id="result" class="meta"></p>
+<script>
+let CHOSEN = null, DATA = null;
+
+function fmt(n, what) { return n == null ? what : n + ' ' + what; }
+
+async function boot() {
+  DATA = await pywebview.api.info();
+  const lead = document.getElementById('lead');
+  const list = document.getElementById('list');
+  if (!DATA.backups.length) {
+    lead.textContent = 'No backup was found, so there is nothing to restore.';
+    document.getElementById('skip').textContent = 'Close';
+    return;
+  }
+  lead.textContent = DATA.backups.length + ' backup(s) found in ~/jobscout-backups. '
+    + 'Restore one, or start fresh.';
+  DATA.backups.forEach((b, i) => {
+    const li = document.createElement('li');
+    const bits = [fmt(b.postings, 'postings'), fmt(b.marked, 'marked')].join(' \u00b7 ');
+    li.innerHTML = '<b>' + b.name + '</b><div class="meta">' + (b.created || '')
+      + ' &middot; ' + bits + '</div>';
+    li.onclick = () => {
+      CHOSEN = b.path;
+      document.getElementById('go').disabled = false;
+      document.getElementById('go').textContent = 'Restore ' + b.name;
+      [...list.children].forEach((c) => c.classList.remove('on'));
+      li.classList.add('on');
+    };
+    if (i === 0) li.onclick();          // preselect the newest
+    list.appendChild(li);
+  });
+}
+
+document.getElementById('go').onclick = async () => {
+  const btn = document.getElementById('go');
+  btn.disabled = true;
+  const res = await pywebview.api.restore(CHOSEN || '');
+  const out = document.getElementById('result');
+  if (res && res.ok) {
+    out.className = 'ok';
+    out.textContent = 'Restored ' + res.counts.postings + ' postings, '
+      + res.counts.marked + ' marked. Close this window and open jobscout again.';
+    document.getElementById('skip').textContent = 'Close';
+  } else {
+    out.className = 'err';
+    out.textContent = 'Could not restore: ' + ((res && res.error) || 'unknown error');
+    btn.disabled = false;
+  }
+};
+document.getElementById('skip').onclick = () => pywebview.api.quit();
+
+/* Wait for the bridge, exactly as the main window does -- `pywebview.api` is
+ * not injected when an end-of-body script first runs. The direct call covers
+ * the opposite ordering, where the bridge won the race. */
+if (window.pywebview && window.pywebview.api) { boot(); }
+else { window.addEventListener('pywebviewready', boot); }
+</script>
+"""
 
 
 class ScanJob:
@@ -342,6 +472,23 @@ def main() -> int:
     try:
         api_obj = JsApi()
     except SystemExit as e:
+        # Nothing to work with. Before saying so, check whether a backup is
+        # sitting there -- a fresh workspace plus an existing backup is exactly
+        # the state a user lands in after losing or removing their data.
+        root = Path(os.environ.get("JOBSCOUT_HOME") or (Path.home() / ".jobscout"))
+        found = []
+        if backupmod.workspace_is_empty(root):
+            try:
+                found = backupmod.list_backups(backupmod.default_destination())
+            except OSError:
+                found = []
+        if found:
+            offer = RestoreOffer(root, found)
+            offer.windows.append(webview.create_window(
+                "jobscout", html=_RESTORE_HTML, js_api=offer,
+                width=620, height=460))
+            webview.start()
+            return 0
         # no console in a windowed build -- the message must be visible
         _show_fatal(webview, str(e))
         return 1

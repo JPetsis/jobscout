@@ -187,3 +187,84 @@ def test_update_reports_a_source_checkout_instead_of_pretending(capsys, monkeypa
     out = capsys.readouterr().out
     assert "source checkout" in out
     assert "git pull" in out
+
+
+# --- `jobscout restore` -----------------------------------------------------
+
+def _backup_env(monkeypatch, tmp_path, *, has_workspace=True):
+    import types as _t
+    import sqlite3
+    from jobscout import backup as bk
+    from jobscout.config import DEFAULT_CONFIG
+
+    src_ws = tmp_path / "source"
+    (src_ws / "reports").mkdir(parents=True)
+    (src_ws / "config.yaml").write_text(DEFAULT_CONFIG)
+    conn = sqlite3.connect(str(src_ws / "jobscout.db"))
+    conn.execute("CREATE TABLE postings (id INTEGER PRIMARY KEY, title TEXT, "
+                 "score REAL, filtered INTEGER DEFAULT 0, dup_of INTEGER, status TEXT)")
+    conn.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, started_at TEXT)")
+    conn.executemany("INSERT INTO postings (title, score, status) VALUES (?,?,?)",
+                     [("a", 1.0, "saved"), ("b", 1.0, "new")])
+    conn.execute("INSERT INTO runs (started_at) VALUES ('2026-01-01T00:00:00')")
+    conn.commit()
+    conn.close()
+    arc = bk.backup(src_ws, tmp_path / "backups")["archive"]
+
+    root = tmp_path / "ws"
+    if has_workspace:
+        root.mkdir(parents=True)
+        (root / "config.yaml").write_text("# live\npreferences:\n  min_score: 7\n")
+    cfg = _t.SimpleNamespace(root=root, prefs={}, enabled=[],
+                             path=root / "config.yaml")
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+    return arc, root
+
+
+def _restore_args(tmp_path, **over):
+    import types as _t
+    base = dict(from_archive=None, to=str(tmp_path / "backups"),
+                overwrite=False, yes=False)
+    base.update(over)
+    return _t.SimpleNamespace(**base)
+
+
+def test_restore_refuses_to_clobber_a_live_workspace(capsys, monkeypatch, tmp_path):
+    _backup_env(monkeypatch, tmp_path)
+    rc = cli.cmd_restore(_restore_args(tmp_path))
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "already has a config or database" in out
+    assert "--overwrite" in out
+    # and it says the current state will be saved
+    assert "copied to a new backup" in out
+
+
+def test_restore_shows_what_is_in_the_backup_before_touching_anything(capsys, monkeypatch, tmp_path):
+    _backup_env(monkeypatch, tmp_path)
+    cli.cmd_restore(_restore_args(tmp_path))
+    out = capsys.readouterr().out
+    assert "2 postings" in out          # so the user can judge
+    assert "1 marked" in out
+
+
+def test_restore_into_an_empty_workspace_succeeds(capsys, monkeypatch, tmp_path):
+    arc, root = _backup_env(monkeypatch, tmp_path, has_workspace=False)
+    rc = cli.cmd_restore(_restore_args(tmp_path))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "restored" in out
+    assert (root / "jobscout.db").exists()
+    assert (root / "config.yaml").exists()
+
+
+def test_restore_with_nothing_available_says_so(capsys, monkeypatch, tmp_path):
+    import types as _t
+    cfg = _t.SimpleNamespace(root=tmp_path / "ws", prefs={}, enabled=[],
+                             path=tmp_path / "ws" / "config.yaml")
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+    rc = cli.cmd_restore(_restore_args(tmp_path))
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "no backups found" in out
+    assert "jobscout backup" in out       # says how to make one

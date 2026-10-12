@@ -18,6 +18,7 @@ no backup: it is a false assurance.
 """
 from __future__ import annotations
 
+import shutil
 import sqlite3
 import tarfile
 import tempfile
@@ -151,6 +152,95 @@ def backup(root: Path, dest_dir: Path, *, include_reports: bool = True,
         "entries": names,
         "counts": counts,
     }
+
+
+def workspace_is_empty(root: Path) -> bool:
+    """Nothing a user would miss: no config and no database.
+
+    The test for "should we offer a restore" has to be narrow. A workspace with
+    either file in it holds decisions the user made, and overwriting those with
+    an old snapshot is worse than leaving a backup unclaimed.
+    """
+    root = Path(root)
+    return not (root / CONFIG_NAME).exists() and not (root / DB_NAME).exists()
+
+
+def describe(archive: Path) -> dict:
+    """What is inside a backup, read from its MANIFEST without unpacking it."""
+    out = {"path": Path(archive), "created": "", "postings": None, "marked": None}
+    try:
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar.getmembers():
+                if Path(member.name).name != MANIFEST:
+                    continue
+                text = tar.extractfile(member).read().decode("utf-8", "replace")
+                for line in text.splitlines():
+                    # the manifest pads its values with spaces, so the value
+                    # MUST be stripped before it is split again -- otherwise
+                    # `marked    84 (...)` yields "" and reports 0
+                    key, _, value = line.partition(" ")
+                    value = value.strip()
+                    if key == "created":
+                        out["created"] = value
+                    elif key == "postings":
+                        out["postings"] = int(value or 0)
+                    elif key == "marked":
+                        out["marked"] = int(value.split(" ", 1)[0] or 0)
+    except (OSError, tarfile.TarError, ValueError):
+        pass                     # a damaged manifest is not worth failing over
+    return out
+
+
+def restore(archive: Path, root: Path, *, overwrite: bool = False) -> dict:
+    """Unpack a backup into the workspace.
+
+    Two safety rules, both learned from the day this project lost a workspace:
+      * refuse to overwrite a workspace that holds anything, unless asked;
+      * before overwriting, snapshot what is there with `backup()` -- so even a
+        restore you regret leaves a way back.
+    """
+    archive = Path(archive)
+    root = Path(root)
+    if not archive.is_file():
+        raise FileNotFoundError(f"no such backup: {archive}")
+
+    with tarfile.open(archive, "r:gz") as tar:
+        names = {Path(n).name for n in tar.getnames()}
+    missing = {DB_NAME, CONFIG_NAME} - names
+    if missing:
+        raise ValueError(
+            f"{archive.name} is not a jobscout backup (no {', '.join(sorted(missing))})")
+
+    if not workspace_is_empty(root) and not overwrite:
+        raise FileExistsError(
+            f"{root} already holds a workspace (config or database). "
+            "Restoring would replace it; pass --overwrite to proceed.")
+
+    # Snapshot what is being replaced, into the REAL backup directory. An
+    # earlier version of this line wrote it into a TemporaryDirectory that was
+    # deleted on the next statement, so the safety net was destroyed the moment
+    # it was created -- a restore you regret had no way back.
+    saved = None
+    if not workspace_is_empty(root):
+        saved = backup(root, default_destination())["archive"]
+
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        staged = Path(tmp)
+        with tarfile.open(archive, "r:gz") as tar:
+            tar.extractall(staged, filter="data")
+        for name in (DB_NAME, CONFIG_NAME):
+            shutil.copyfile(staged / name, root / name)
+        reports = staged / "reports"
+        if reports.is_dir():
+            (root / "reports").mkdir(exist_ok=True)
+            for f in reports.glob("*.md"):
+                shutil.copyfile(f, root / "reports" / f.name)
+
+    counts = _counts(root / DB_NAME)
+    return {"root": root, "archive": archive, "counts": counts,
+            "replaced_existing": saved is not None,
+            "safety_backup": str(saved) if saved else None}
 
 
 def list_backups(dest_dir: Path) -> list[dict]:

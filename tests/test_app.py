@@ -337,3 +337,115 @@ def test_two_connections_to_one_file_are_fine(tmp_path):
     for t in ts:
         t.join(timeout=10)
     assert not errors, errors
+
+
+# --- the first-run restore offer -------------------------------------------
+#
+# Reproduces the state a user lands in after their workspace is removed: an
+# empty ~/.jobscout and a backup sitting in ~/jobscout-backups. The app used to
+# say only "no config found, run jobscout init" and never connect the two.
+
+def _fake_backup(tmp_path, postings=3):
+    import sqlite3 as _sq
+    from jobscout import backup as _bk
+    src_ws = tmp_path / "src"
+    (src_ws / "reports").mkdir(parents=True)
+    (src_ws / "config.yaml").write_text("# documented\npreferences:\n  min_score: 6\n")
+    conn = _sq.connect(str(src_ws / "jobscout.db"))
+    conn.execute("CREATE TABLE postings (id INTEGER PRIMARY KEY, title TEXT, "
+                 "score REAL, filtered INTEGER DEFAULT 0, dup_of INTEGER, status TEXT)")
+    conn.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, started_at TEXT)")
+    for i in range(postings):
+        conn.execute("INSERT INTO postings (title, score, status) VALUES (?,?,?)",
+                     (f"job {i}", 9.0, "saved" if i == 0 else "new"))
+    conn.execute("INSERT INTO runs (started_at) VALUES ('2026-01-01T00:00:00')")
+    conn.commit()
+    conn.close()
+    return _bk.backup(src_ws, tmp_path / "backups")["archive"]
+
+
+def test_restore_offer_lists_backups_with_what_they_hold(tmp_path):
+    arc = _fake_backup(tmp_path, postings=3)
+    offer = appmod.RestoreOffer(tmp_path / "empty", [{"path": arc}])
+    info = offer.info()
+    assert len(info["backups"]) == 1
+    b = info["backups"][0]
+    assert b["name"] == arc.name
+    assert b["postings"] == 3
+    assert b["marked"] == 1
+    assert b["created"]
+
+
+def test_restore_offer_actually_restores(tmp_path):
+    arc = _fake_backup(tmp_path, postings=4)
+    root = tmp_path / "empty"
+    offer = appmod.RestoreOffer(root, [{"path": arc}])
+    res = offer.restore(str(arc))
+    assert res["ok"] is True
+    assert res["counts"]["postings"] == 4
+    assert (root / "config.yaml").exists()
+    assert offer.done is True
+
+
+def test_restore_offer_reports_failure_instead_of_raising(tmp_path):
+    offer = appmod.RestoreOffer(tmp_path / "empty",
+                                [{"path": tmp_path / "gone.tar.gz"}])
+    res = offer.restore("")
+    assert res["ok"] is False
+    assert "error" in res
+
+
+def test_main_offers_a_restore_when_the_workspace_is_empty(tmp_path, monkeypatch):
+    """The whole point: a fresh workspace plus an existing backup must produce
+    an offer, not a dead end."""
+    arc = _fake_backup(tmp_path, postings=2)
+    created = {"windows": []}
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            created["windows"].append(kw)
+            return object()
+
+        @staticmethod
+        def start(*a, **k):
+            created["started"] = True
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod, "JsApi",
+                        lambda: (_ for _ in ()).throw(SystemExit("no config found")))
+    monkeypatch.setattr(appmod.backupmod, "default_destination",
+                        lambda: tmp_path / "backups")
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "empty"))
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    assert appmod.main() == 0
+    assert created.get("started") is True
+    assert created["windows"], "a window must be shown"
+    assert "html" in created["windows"][0], "it is the offer page, not the UI"
+    assert "js_api" in created["windows"][0], "the offer needs a bridge"
+
+
+def test_main_still_shows_the_error_when_there_is_no_backup(tmp_path, monkeypatch):
+    created = {}
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            created.update(kw)
+            return object()
+
+        @staticmethod
+        def start(*a, **k):
+            pass
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod, "JsApi",
+                        lambda: (_ for _ in ()).throw(SystemExit("no config found at X")))
+    monkeypatch.setattr(appmod.backupmod, "default_destination",
+                        lambda: tmp_path / "no-backups-here")
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "empty"))
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    assert appmod.main() == 1
+    assert "no config found" in created.get("html", "")

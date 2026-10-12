@@ -90,6 +90,7 @@ off when piped.
 | `jobscout rescore` | re-apply your current preferences to everything stored |
 | `jobscout stats` | per-source counts and recent runs |
 | `jobscout backup` | archive the workspace (config, database, reports) to one file; `--list` shows them |
+| `jobscout restore` | put a backup back; `--from FILE` picks one, `--overwrite` replaces an existing workspace |
 | `jobscout update` | check for a newer build; `--check` only reports, `--yes` installs it, `--from FILE` installs a build you already downloaded |
 
 ### Every flag
@@ -255,6 +256,30 @@ being hand-maintained: it reads the careers page (or a job URL), detects the
 board behind it, validates the token against the ATS API, appends it to
 `companies.<source>.tokens` in your config, and enables the source if it was
 not in `sources.enabled` yet.
+
+## Restoring a backup
+
+If jobscout starts and finds no workspace, it looks for a backup first. That is
+the state you land in after losing or removing `~/.jobscout`, and a backup
+sitting in `~/jobscout-backups` used to go unclaimed while the app said only
+"no config found". Now it shows what it found — date, posting count, how many
+you had marked — and offers to restore it, or lets you start fresh.
+
+From a terminal:
+
+```bash
+jobscout restore                     # restore the newest backup
+jobscout restore --from FILE         # a particular one
+jobscout restore --overwrite --yes   # replace a live workspace
+```
+
+Two safety rules, both of them a response to actually losing a workspace:
+
+- It **refuses to overwrite** a workspace that already holds a config or a
+  database. Restoring an old snapshot over live triage decisions is worse than
+  leaving the backup alone, so that needs `--overwrite`.
+- When it does overwrite, it **takes a fresh backup of what it is replacing
+  first**, and tells you where that went. A restore you regret has a way back.
 
 ## Updating
 
