@@ -150,6 +150,36 @@ want digests, goals or the terminal triage loop.
 
 ---
 
+## Uninstalling, and why you should back up first
+
+**A deep uninstaller will delete your jobscout data.** Tools that "deep
+uninstall" or "clean leftover files" match by application name, see
+`~/.jobscout/`, and treat it as leftover cruft from the app you just removed.
+It is not: that directory holds your profile and every posting you have saved,
+applied to or dismissed.
+
+If you use one of these tools, back up first:
+
+```bash
+cp -r ~/.jobscout ~/jobscout-backup
+```
+
+Then uninstall, and restore if the backup was needed. On macOS the same applies
+to AppCleaner and similar utilities; the directory to exclude is `~/.jobscout`
+(on Windows, `C:\Users\<you>\.jobscout\`).
+
+Two things worth knowing about what you would lose:
+
+- `config.yaml` is worth backing up on its own. It is heavily commented and
+  hand-editable, and a fresh one is generic. Your edits are the valuable part.
+- `jobscout.db` holds all triage state. It can be rebuilt by scanning again,
+  but your saved/applied/dismissed marks cannot be recreated.
+
+To remove jobscout and keep your data, delete the application only. To remove
+everything, delete `~/.jobscout/` as well, deliberately.
+
+---
+
 ## Running from source instead
 
 If you have Python 3.11+ and [uv](https://docs.astral.sh/uv/):
