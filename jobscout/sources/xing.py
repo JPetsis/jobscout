@@ -21,9 +21,14 @@ _RE_DATE_ISO = re.compile(r'job-teaser-list-item-styles__PublicationDate[^"]*"[^
 _RE_DATE_TEXT = re.compile(r'job-teaser-list-item-styles__PublicationDate[^"]*"[^>]*>.*?<span[^>]*>([^<]{2,40})<', re.S)
 
 
+def _cards(text: str) -> list[str]:
+    """The per-posting chunks of an XING search page."""
+    return text.split(_CARD_SPLIT)[1:]
+
+
 def parse(text: str) -> list[Posting]:
     out = []
-    for chunk in text.split(_CARD_SPLIT)[1:]:
+    for chunk in _cards(text):
         link = _RE_LINK.search(chunk)
         title = _RE_TITLE.search(chunk)
         if not title:
@@ -38,6 +43,11 @@ def parse(text: str) -> list[Posting]:
         elif date_txt:
             posted = de_rel_date(date_txt.group(1))
         href = link.group(1) if link else ""
+        if not href:
+            # A card with no link can never be opened, verified, or have its
+            # description fetched, so it reaches the window as a match that
+            # dead-ends the user. fetch() counts these; do not store one.
+            continue
         out.append(Posting(
             source=NAME,
             title=clean_html(title.group(1)),
@@ -61,7 +71,15 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
             if status != 200:
                 fetcher.errors.append(f"xing: HTTP {status} for '{q.get('keywords')}' page {page}")
                 continue
-            out.extend(parse(text))
+            got = parse(text)
+            out.extend(got)
+            # parse() drops cards it cannot link; say so rather than letting a
+            # parser drift look like "XING had fewer jobs today".
+            dropped = len(_cards(text)) - len(got)
+            if dropped:
+                fetcher.errors.append(
+                    f"xing: {dropped} of {len(_cards(text))} listings on page {page} "
+                    f"for '{q.get('keywords')}' had no link and were skipped")
     return out
 
 

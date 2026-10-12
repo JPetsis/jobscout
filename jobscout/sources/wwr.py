@@ -6,7 +6,7 @@ from email.utils import parsedate_to_datetime
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html
+from ..textutil import clean_html, clean_html_lines
 
 NAME = "wwr"
 LABEL = "We Work Remotely"
@@ -36,7 +36,7 @@ def parse(text: str) -> list[Posting]:
             company, role = "", title
         link = (item.findtext("link") or item.findtext("url") or "").strip()
         region = (item.findtext("region") or "").strip()
-        desc = clean_html(item.findtext("description") or "")
+        desc = clean_html_lines(item.findtext("description") or "")
         out.append(Posting(
             source=NAME,
             title=role,

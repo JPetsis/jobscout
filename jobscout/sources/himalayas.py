@@ -17,7 +17,7 @@ import urllib.parse
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, iso_from_epoch
+from ..textutil import clean_html, clean_html_lines, iso_from_epoch
 
 NAME = "himalayas"
 LABEL = "Himalayas"
@@ -66,7 +66,7 @@ def parse(data) -> list[Posting]:
             # behind a Cloudflare challenge, so the URL can never be probed,
             # but a date the publisher declared does not need probing.
             expires_at=iso_from_epoch(j.get("expiryDate")),
-            description=clean_html(j.get("description") or "")[:6000],
+            description=clean_html_lines(j.get("description") or "")[:6000],
             compensation=_compensation(j),
         ))
     return out

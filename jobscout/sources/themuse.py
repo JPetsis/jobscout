@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, date_part
+from ..textutil import clean_html, clean_html_lines, date_part
 
 NAME = "themuse"
 LABEL = "The Muse"
@@ -48,7 +48,7 @@ def parse(data: dict) -> list[Posting]:
             url=refs.get("landing_page", ""),
             external_id=str(j.get("id", "")),
             posted_at=date_part(str(j.get("publication_date") or "")),
-            description=clean_html(j.get("contents", ""))[:8000],
+            description=clean_html_lines(j.get("contents", ""))[:8000],
             extra={"categories": cats, "levels": levels},
         ))
     return out

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, date_part
+from ..textutil import clean_html, clean_html_lines, date_part
 
 NAME = "remoteok"
 LABEL = "Remote OK"
@@ -28,7 +28,7 @@ def parse(data) -> list[Posting]:
             url=it.get("url", "") or it.get("apply_url", ""),
             external_id=str(it.get("id", "")),
             posted_at=date_part(str(it.get("date") or "")),
-            description=clean_html(it.get("description", ""))[:6000],
+            description=clean_html_lines(it.get("description", ""))[:6000],
             compensation=sal,
             extra={"tags": it.get("tags")},
         ))

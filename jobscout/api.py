@@ -333,6 +333,7 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
         return None
 
     desc = row["description"] or ""
+    note = ""
     if refresh or len(desc) < 400:
         mod = REGISTRY.get(row["source"])
         fetcher = Fetcher()
@@ -348,13 +349,35 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
                 fresh = detailmod.html_detail(row["url"], fetcher)
         except Exception:            # a detail fetch must never break the pane
             fresh = None
+        if not fresh:
+            # Nothing came back, and the pane cannot just show an empty box:
+            # "withdrawn", "no link" and "this board publishes no text" look
+            # identical otherwise, and one of them means stop looking. This is
+            # the failure path only, so it costs a request only when there is
+            # nothing to show anyway.
+            try:
+                alt, why = detailmod.html_detail_verbose(row["url"], fetcher)
+            except Exception:                                    # noqa: BLE001
+                alt, why = "", ""
+            if alt and len(alt) > len(desc):
+                fresh = alt
+            else:
+                note = why
         if fresh and len(fresh) > len(desc):
             with dbm.LOCK:
                 dbm.set_description(conn, row["id"], fresh)
             desc = fresh
+            note = ""
 
     out = posting_dict(row)
     out["description"] = desc
+    # What to say when there is no text to show. Already-known deadness is
+    # free; the rest is decided above. Never a silent empty box.
+    if not desc:
+        liveness = row["verify_note"] if row["verify_status"] == "dead" else ""
+        out["description_note"] = note or liveness or (
+            "This board did not publish a description for this listing. "
+            "Open it on the site to read the advert.")
     out["salary"] = {
         "min": row["salary_min"], "max": row["salary_max"],
         "currency": row["salary_currency"], "period": row["salary_period"],

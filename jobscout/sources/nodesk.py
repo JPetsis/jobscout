@@ -12,7 +12,7 @@ from email.utils import parsedate_to_datetime
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, xml_safe
+from ..textutil import clean_html, clean_html_lines, xml_safe
 
 NAME = "nodesk"
 LABEL = "NoDesk"
@@ -49,7 +49,7 @@ def parse(text: str) -> list[Posting]:
             url=link,
             external_id=link,
             posted_at=_rfc822((item.findtext("pubDate") or "").strip()),
-            description=clean_html(item.findtext("description") or "")[:6000],
+            description=clean_html_lines(item.findtext("description") or "")[:6000],
         ))
     return out
 

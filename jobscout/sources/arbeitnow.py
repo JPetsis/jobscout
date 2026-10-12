@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, iso_from_epoch
+from ..textutil import clean_html, clean_html_lines, iso_from_epoch
 
 NAME = "arbeitnow"
 LABEL = "Arbeitnow"
@@ -21,7 +21,7 @@ def parse(data: dict) -> list[Posting]:
             url=it.get("url", ""),
             external_id=str(it.get("slug", "")),
             posted_at=iso_from_epoch(it.get("created_at")),
-            description=clean_html(it.get("description", ""))[:6000],
+            description=clean_html_lines(it.get("description", ""))[:6000],
             extra={"tags": it.get("tags"), "remote": it.get("remote")},
         ))
     return out

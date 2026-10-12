@@ -10,7 +10,7 @@ import re
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html
+from ..textutil import clean_html, clean_html_lines
 
 NAME = "workingnomads"
 LABEL = "Working Nomads"
@@ -41,7 +41,7 @@ def parse(data) -> list[Posting]:
             url=url,
             external_id=m.group(1) if m else url,
             posted_at=_date(it.get("pub_date")),
-            description=clean_html(it.get("description") or "")[:6000],
+            description=clean_html_lines(it.get("description") or "")[:6000],
         ))
     return out
 

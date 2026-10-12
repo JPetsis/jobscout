@@ -38,7 +38,7 @@ import urllib.parse
 
 from ..http import Fetcher, FetchError
 from ..models import Posting
-from ..textutil import clean_html, date_part
+from ..textutil import clean_html, clean_html_lines, date_part
 
 NAME = "ams"
 LABEL = "AMS eJob-Room"
@@ -119,7 +119,7 @@ def parse(data: dict) -> list[Posting]:
             url=PORTAL.format(uuid=urllib.parse.quote(uuid, safe="")),
             external_id=str(oid),
             posted_at=date_part(str(o.get("lastUpdatedAt") or "")),
-            description=clean_html(o.get("summary") or "")[:8000],
+            description=clean_html_lines(o.get("summary") or "")[:8000],
             extra={"uuid": uuid,
                    "green": bool(o.get("isGreenJob")),
                    "preselection": bool(o.get("isPreselection")),

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import clean_html, date_part
+from ..textutil import clean_html, clean_html_lines, date_part
 
 NAME = "workable"
 LABEL = "Workable"
@@ -24,7 +24,7 @@ def parse(data: dict, token: str = "") -> list[Posting]:
             url=j.get("url") or j.get("shortlink") or "",
             external_id=str(j.get("shortcode") or j.get("id") or ""),
             posted_at=date_part(str(j.get("published_on") or "")),
-            description=clean_html(j.get("description", ""))[:8000],
+            description=clean_html_lines(j.get("description", ""))[:8000],
             extra={"token": token, "department": j.get("department")},
         ))
     return out

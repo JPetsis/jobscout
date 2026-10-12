@@ -28,7 +28,7 @@ import urllib.parse
 
 from ..http import Fetcher, FetchError
 from ..models import Posting
-from ..textutil import clean_html, iso_from_epoch
+from ..textutil import clean_html, clean_html_lines, iso_from_epoch
 
 NAME = "eures"
 LABEL = "EURES"
@@ -63,7 +63,7 @@ def _text(jv: dict) -> tuple[str, str]:
     if not isinstance(node, dict):
         node = next((v for v in trs.values() if isinstance(v, dict)), {})
     title = (node.get("title") or jv.get("title") or "").strip()
-    desc = clean_html(node.get("description") or jv.get("description") or "")
+    desc = clean_html_lines(node.get("description") or jv.get("description") or "")
     return title, desc
 
 
