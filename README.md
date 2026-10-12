@@ -278,9 +278,21 @@ Working today (all verified live, all free):
 | `ams` | Austria | `jobs.ams.at` public JSON API; requests are signed with a client-side HMAC-SHA512 over a key shipped in the public app bundle (no account, no API key) |
 | `jobsat` | Austria | `jobs.at` public search, server-rendered HTML (no JSON API, no key); 15 cards per page, detail URL is base64 in `data-c-redirect`, an empty location means "Österreich" |
 | `greenhouse`, `ashby`, `lever`, `smartrecruiters`, `workable` | company boards | public ATS APIs — add your target companies under `companies:` in the config, or let `jobscout add-company <careers-url>` find them |
+| `themuse` | US | The Muse public API, **no key**. It has no free-text search (only category/location/level), so it fetches by category and lets the scorer decide relevance; `categories` and `location` are configurable and empty means "everything, newest first" |
+| `workday` | US / global | the API behind a large share of large-employer careers sites (NVIDIA, Salesforce…), **no key**. Add employers under `companies.workday.tokens`; a token is `tenant:wdN:site` or just the careers URL — `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite` is accepted verbatim |
 
 Known limitations, on purpose:
 
+- **The big US boards are closed.** Verified with live requests, not assumed:
+  Indeed's API is gone and its RSS is retired (search itself 403s), Monster's
+  API host is NXDOMAIN, CareerBuilder's gateway answers 573 with its backend
+  DNS unresolvable, ZipRecruiter and Dice are partner-only (Dice's API hosts no
+  longer resolve), Built In serves no feed despite nine probes, Wellfound sits
+  behind Cloudflare Turnstile, Otta merged into Welcome to the Jungle, and
+  Jooble's REST API is behind a Cloudflare challenge — the same wall that got
+  himalayas dropped from this project. `themuse` and `workday` are what is
+  genuinely reachable for a US search; between them they cover a US job board
+  and the Fortune-500 careers sites.
 - **Indeed**: actively blocks scripted access ("Security Check"), no public API
   without tokens. Not supported; StepStone/XING/stellenanzeigen cover the same
   German market.
