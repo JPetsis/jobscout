@@ -285,6 +285,31 @@ sources:
     pages: 3                 # 20 postings per page, per query
     queries: []              # keywords only; from your profile unless set
 
+  adzuna:
+    # Needs a free key — leave this source disabled until you have one.
+    # https://developer.adzuna.com/signup (instant, no card).
+    # Unlike the others, `country` is what makes it useful outside Germany:
+    # it is a path segment and picks both the market and the salary currency
+    # (us, gb, de, at, ch, nl, fr, au, ca).
+    # Free tier: 25 requests/min, 250/day — ONE request per scan is the
+    # default for that reason.
+    app_id: ""
+    app_key: ""
+    country: us              # us, gb, de, at, ch, nl, fr, au, ca
+    what: ""                 # search keywords ("" = everything)
+    where: ""                # location restriction
+    pages: 1                 # requests per scan
+
+  usajobs:
+    # Needs a free key — leave this source disabled until you have one.
+    # https://developer.usajobs.gov/apirequest/ (a form; the key is emailed).
+    # US federal agencies only. The email must be a real address: it is sent
+    # as the User-Agent, which is how USAJOBS identifies you.
+    key: ""
+    email: ""
+    keyword: ""              # "" = everything
+    results_per_page: 25     # max 500
+
 
 companies:
   greenhouse:
@@ -331,6 +356,8 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "recruitee": {},
     "themuse": {"pages": 5, "categories": [], "location": "", "api_key": ""},
     "workday": {"pages": 3},
+    "adzuna": {"country": "us", "pages": 1},
+    "usajobs": {"results_per_page": 25},
     "eures": {"search_code": "TITLE", "publication_period": "LAST_MONTH",
               "per_page": 50, "max_pages": 2, "max_age_days": 45},
     "greenhouse": {},

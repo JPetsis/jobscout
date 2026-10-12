@@ -158,8 +158,22 @@ def cmd_scan(args) -> int:
     print(f"{ui.bold(str(summary['new']))} new · {ui.cyan(str(summary['matches']))} matches this run · "
           f"{summary['total_matches']} matching overall · {ui.gold(str(summary['strong']))} strong")
     if summary["errors"]:
-        print(ui.red(f"{len(summary['errors'])} source error(s)") +
-              ui.dim("  — see the digest footer"))
+        # Print the messages, not just a count. A keyed source that is enabled
+        # without a key reports "0 fetched" and one line of "N source error(s)"
+        # -- which is indistinguishable from a source that simply had no jobs
+        # today, and leaves the user with no idea what to do. The actionable
+        # text already exists in each message; hiding it in the digest footer
+        # was the mistake.
+        print(ui.red(f"{len(summary['errors'])} source error(s)"))
+        for msg in summary["errors"][:6]:
+            text = str(msg)
+            # Generous cap, and the tail is what matters: these messages end
+            # with the URL that fixes the problem, so a tight head-only cut
+            # removes the actionable half.
+            print("  " + ui.dim(text if len(text) <= 300 else text[:297] + "…"))
+        extra = len(summary["errors"]) - 6
+        if extra > 0:
+            print(ui.dim(f"  … and {extra} more (the digest footer lists all)"))
     if summary["cancelled"]:
         print(ui.dim("scan cancelled — completed sources were saved"))
     if summary["unmarked"]:

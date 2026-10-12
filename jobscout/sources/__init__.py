@@ -18,6 +18,7 @@ SOURCE_NAMES = [
     "remoteok", "larajobs", "workingnomads", "nodesk", "himalayas",
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
+    "adzuna", "usajobs",
 ]
 
 REGISTRY = {name: import_module(f".{name}", __package__) for name in SOURCE_NAMES}

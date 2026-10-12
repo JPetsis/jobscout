@@ -280,6 +280,12 @@ Working today (all verified live, all free):
 | `greenhouse`, `ashby`, `lever`, `smartrecruiters`, `workable` | company boards | public ATS APIs — add your target companies under `companies:` in the config, or let `jobscout add-company <careers-url>` find them |
 | `themuse` | US | The Muse public API, **no key**. It has no free-text search (only category/location/level), so it fetches by category and lets the scorer decide relevance; `categories` and `location` are configurable and empty means "everything, newest first" |
 | `workday` | US / global | the API behind a large share of large-employer careers sites (NVIDIA, Salesforce…), **no key**. Add employers under `companies.workday.tokens`; a token is `tenant:wdN:site` or just the careers URL — `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite` is accepted verbatim |
+| `adzuna` | 9 countries incl. US/GB | official search API, **free key** from [developer.adzuna.com/signup](https://developer.adzuna.com/signup). `country` is a path segment and picks both the market and the salary currency (`us`, `gb`, `de`, `at`, `ch`, `nl`, `fr`, `au`, `ca`). Free tier is 25 requests/min and 250/day, so one request per scan is the default |
+| `usajobs` | US federal | official USAJOBS API, **free key** from [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/) (a form, the key is emailed). Needs `key` and a real `email`, which is sent as the User-Agent because that is how USAJOBS identifies callers |
+
+The two keyed sources ship **disabled**. Enable them in Settings once you have a
+key. If you enable one without a key, the scan says so by name and prints the
+signup URL, rather than reporting zero jobs and leaving you to guess.
 
 Known limitations, on purpose:
 
