@@ -102,6 +102,7 @@ off when piped.
 | `jobscout mark ID STATUS` | track what you did with a posting |
 | `jobscout rescore` | re-apply your current preferences to everything stored |
 | `jobscout stats` | per-source counts and recent runs |
+| `jobscout discover` | for URLs a source blocks, find and test a public API to check liveness against (reads URLs on stdin) |
 | `jobscout backup` | archive the workspace (config, database, reports) to one file; `--list` shows them |
 | `jobscout restore` | put a backup back; `--from FILE` picks one, `--overwrite` replaces an existing workspace |
 | `jobscout update` | check for a newer build; `--check` only reports, `--yes` installs it, `--from FILE` installs a build you already downloaded |
