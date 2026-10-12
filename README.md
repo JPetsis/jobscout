@@ -89,6 +89,7 @@ off when piped.
 | `jobscout mark ID STATUS` | track what you did with a posting |
 | `jobscout rescore` | re-apply your current preferences to everything stored |
 | `jobscout stats` | per-source counts and recent runs |
+| `jobscout backup` | archive the workspace (config, database, reports) to one file; `--list` shows them |
 
 ### Every flag
 

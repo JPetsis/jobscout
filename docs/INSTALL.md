@@ -158,7 +158,21 @@ uninstall" or "clean leftover files" match by application name, see
 It is not: that directory holds your profile and every posting you have saved,
 applied to or dismissed.
 
-If you use one of these tools, back up first:
+jobscout has a command for exactly this:
+
+```bash
+jobscout backup
+```
+
+It writes a single archive to `~/jobscout-backups/`, which is deliberately
+OUTSIDE `~/.jobscout/` so that the same cleanup tool cannot delete the backup
+along with the data. The archive holds your config, your database and your
+reports, and prints the one-line restore command when it finishes. Use
+`jobscout backup --list` to see what you have.
+
+If you installed the packaged app and have no `jobscout` command, either run it
+from a source checkout (`uv run jobscout backup`) or simply copy the folder
+somewhere else, which works just as well for this purpose:
 
 ```bash
 cp -r ~/.jobscout ~/jobscout-backup

@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from . import __version__
 from . import db as dbm
@@ -20,6 +21,7 @@ from . import liveness
 from . import salary as salmod
 from . import triage as triagemod
 from . import ui
+from . import backup as backupmod
 from . import scanner
 from .config import home, init_workspace, load_config
 from .http import FetchError, Fetcher
@@ -52,6 +54,38 @@ def cmd_init(args) -> int:
     print("  1. jobscout config --edit    (your roles, locations, sources)")
     print("  2. jobscout scan")
     print("  3. jobscout digest")
+    return 0
+
+
+def cmd_backup(args) -> int:
+    """Archive the workspace. Thin view over jobscout/backup.py."""
+    cfg = load_config()
+    dest = Path(args.to).expanduser() if args.to else backupmod.default_destination()
+
+    if args.list:
+        rows = backupmod.list_backups(dest)
+        if not rows:
+            print(ui.dim(f"no backups in {dest}"))
+            return 0
+        for r in rows:
+            mb = f"{r['bytes'] / 1048576:>7.1f} MB"
+            print(f"  {ui.dim(r['created'])}  {ui.cyan(mb)}  {r['path'].name}")
+        print(ui.dim(f"{len(rows)} backup(s) in {dest}"))
+        return 0
+
+    try:
+        res = backupmod.backup(cfg.root, dest, include_reports=not args.no_reports)
+    except Exception as e:  # a backup that failed must say so, loudly
+        print(ui.red(f"backup failed: {type(e).__name__}: {e}"))
+        return 1
+
+    c = res["counts"]
+    mb = res["bytes"] / 1048576
+    print(ui.bold("jobscout backup") + ui.dim(f"  →  {res['archive']}"))
+    print(f"{ui.cyan(str(c['postings']))} postings · {c['marked']} marked · "
+          f"last run #{c['last_run']} · {mb:.1f} MB")
+    print(ui.dim(f"{len(res['entries'])} files: config.yaml, jobscout.db, reports/"))
+    print(ui.dim(f"restore: tar xzf {res['archive'].name} -C ~/.jobscout"))
     return 0
 
 
@@ -773,6 +807,14 @@ def main(argv=None) -> int:
     p.add_argument("--open", action="store_true")
     p.add_argument("--edit", action="store_true")
     p.set_defaults(fn=cmd_config)
+
+    p = sub.add_parser("backup",
+                       help="archive the workspace (config, database, reports) to one file")
+    p.add_argument("--to", metavar="DIR",
+                   help="destination directory (default: ~/jobscout-backups)")
+    p.add_argument("--list", action="store_true", help="list existing backups and exit")
+    p.add_argument("--no-reports", action="store_true", help="leave the reports/ directory out")
+    p.set_defaults(fn=cmd_backup)
 
     p = sub.add_parser("scan", help="fetch all enabled sources, score, store new postings")
     p.add_argument("--only", help="comma-separated source names to run (e.g. stepstone,xing)")
