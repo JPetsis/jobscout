@@ -504,7 +504,8 @@ def test_the_helper_bounds_how_long_it_waits(tmp_path):
     assert str(up.WAIT_SECONDS) in body
     assert "did not exit" in body
     # and it must give up BEFORE touching the installed build
-    assert body.index("did not exit") < body.index("mv ")
+    move = "move " if sys.platform == "win32" else "mv "
+    assert body.index("did not exit") < body.index(move)
 
 
 def test_the_helper_gives_up_without_touching_the_build(tmp_path):
