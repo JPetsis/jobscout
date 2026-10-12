@@ -178,54 +178,66 @@ and the previous build is restored automatically if the swap fails.
 
 ---
 
-## Uninstalling, and why you should back up first
+## Removing the app, and keeping your data
 
-**A deep uninstaller will delete your jobscout data.** Tools that "deep
-uninstall" or "clean leftover files" match by application name, see
-`~/.jobscout/`, and treat it as leftover cruft from the app you just removed.
-It is not: that directory holds your profile and every posting you have saved,
-applied to or dismissed.
+**Your data is not inside the app.** Everything jobscout knows lives in
+`~/.jobscout/` (on Windows, `C:\Users\<you>\.jobscout\`), completely separate
+from the application. So removing the application cannot touch it.
 
-jobscout has a command for exactly this:
+**On macOS**, drag `jobscout.app` from Applications to the Trash. That is it.
+Or, if you prefer a command:
+
+```bash
+rm -rf /Applications/jobscout.app
+```
+
+Your profile, your database and your reports are untouched and still there next
+time you install. Same on Windows and Linux: delete the `jobscout` folder you
+unpacked, and `~/.jobscout/` stays where it is.
+
+### Do NOT use a "deep uninstall" tool
+
+This is the one thing that will lose your data. Tools that deep-uninstall or
+clean up leftover files work by application name: they see `~/.jobscout/`,
+decide it is leftover cruft from the app you just removed, and delete it. It is
+not cruft — it holds your profile and every posting you saved, applied to or
+dismissed.
+
+AppCleaner and similar utilities on macOS will do this. If you use one, exclude
+`~/.jobscout`. Otherwise just delete the app by hand, which is what those tools
+do anyway for a single self-contained bundle.
+
+### Back up first anyway
 
 ```bash
 jobscout backup
 ```
 
-It writes a single archive to `~/jobscout-backups/`, which is deliberately
-OUTSIDE `~/.jobscout/` so that the same cleanup tool cannot delete the backup
-along with the data. The archive holds your config, your database and your
-reports, and prints the one-line restore command when it finishes. Use
-`jobscout backup --list` to see what you have.
-
-If you installed the packaged app and have no `jobscout` command, either run it
-from a source checkout (`uv run jobscout backup`) or simply copy the folder
-somewhere else, which works just as well for this purpose:
+That writes one archive to `~/jobscout-backups/`, deliberately OUTSIDE
+`~/.jobscout/` so a cleanup tool cannot take the backup along with the data.
+`jobscout backup --list` shows what you have. If you only have the packaged app
+and no `jobscout` command, a plain copy does the same job:
 
 ```bash
 cp -r ~/.jobscout ~/jobscout-backup
 ```
 
-Then uninstall. If the tool takes `~/.jobscout` with it, open jobscout again:
-it will find the backup and offer to put it back. Or from a terminal:
+If something does remove your workspace, open jobscout again: it will find the
+backup and offer to restore it. Or, from a terminal, `jobscout restore`.
 
-```bash
-jobscout restore
-```
+### What is worth keeping, and what is not
 
-On macOS the same applies
-to AppCleaner and similar utilities; the directory to exclude is `~/.jobscout`
-(on Windows, `C:\Users\<you>\.jobscout\`).
+- `config.yaml` — worth keeping. It is heavily commented and hand-editable, and
+  a fresh one is generic. Your edits are the valuable part.
+- `jobscout.db` — your triage state. The postings can be rebuilt by scanning
+  again, but your saved / applied / dismissed marks cannot be recreated.
+- `reports/` — regenerable any time with `jobscout digest --all`.
 
-Two things worth knowing about what you would lose:
+### Removing everything
 
-- `config.yaml` is worth backing up on its own. It is heavily commented and
-  hand-editable, and a fresh one is generic. Your edits are the valuable part.
-- `jobscout.db` holds all triage state. It can be rebuilt by scanning again,
-  but your saved/applied/dismissed marks cannot be recreated.
-
-To remove jobscout and keep your data, delete the application only. To remove
-everything, delete `~/.jobscout/` as well, deliberately.
+Delete the application **and** `~/.jobscout/`, deliberately and in that order.
+`~/jobscout-backups/` is separate too, so delete that as well if you want the
+backups gone.
 
 ---
 

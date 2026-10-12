@@ -44,8 +44,8 @@ uv run jobscout-app
 ```
 
 The window shows your stored matches as a card grid with a search box, a score
-band (all / strong / matches), and source and status filters. Three things you
-can do without a terminal:
+band (all / strong / matches), and source and status filters. Everything a
+non-technical user needs is in it:
 
 - **Read a match.** Click a card for the full posting — salary, liveness, why it
   scored, and the whole description, fetched live when the source only put a
@@ -53,10 +53,23 @@ can do without a terminal:
   database; `S` / `A` / `X` do the same from the keyboard.
 - **Scan.** The Scan button runs the identical scan loop the CLI runs, with a
   progress bar and a Cancel button. With a source selected in the filter it
-  scans only that source.
-- **Edit your profile.** Settings is the profile a non-technical user needs:
-  the job titles you want, your skills and how much you care about each, the
-  countries and places you'll accept, and how strict the cutoffs are.
+  scans only that source. If a source needs attention — a missing API key, say —
+  the scan says so by name and prints what to do about it, rather than
+  reporting zero jobs and leaving you to guess.
+- **Choose which boards to scan.** Settings has a checkbox per job board, with
+  real names rather than config keys. All 29 are offered; tick what you want.
+  Your existing order is preserved, and selecting nothing warns you instead of
+  letting a scan quietly do nothing.
+- **Edit your profile.** The job titles you want, your skills and how much you
+  care about each, the countries and places you'll accept, and how strict the
+  cutoffs are.
+- **Install updates.** When a newer release exists the window says so and
+  offers to install it. Nothing is downloaded until you press the button, and
+  jobscout only quits to replace itself when you tell it to. See
+  [Updating](#updating).
+- **Recover a backup.** If the window opens and finds no workspace, it looks
+  for a backup first and offers to restore it instead of just failing. See
+  [Restoring a backup](#restoring-a-backup).
 
 Settings writes to `config.yaml` through `jobscout/cfgwrite.py`, which edits the
 file line by line. That matters: a `yaml.safe_load` / `safe_dump` round-trip
@@ -403,7 +416,13 @@ jobscout/            # code (this repo)
 │   ├── sources/     # one module per job board
 │   ├── web/         # the window's HTML/CSS/JS (bundled as data)
 │   ├── app.py       # desktop shell (pywebview) -> jobscout-app
+│   ├── api.py       # the service layer the window and the CLI both use
 │   ├── cli.py       # jobscout <command>
+│   ├── scanner.py   # the one scan loop (CLI and window share it)
+│   ├── cfgwrite.py  # comment-preserving edits to config.yaml
+│   ├── backup.py    # archive / restore the workspace
+│   ├── update.py    # check for, verify and install a newer build
+│   ├── querygen.py  # build search queries from the profile
 │   ├── score.py     # the rule engine
 │   ├── salary.py    # pay parsing + formatting
 │   ├── liveness.py  # dead-listing checks (ATS-aware)
@@ -434,6 +453,15 @@ salary parsing (ranges, currencies, periods, and the junk it must ignore: ids,
 headcounts, revenue figures, 401(k) plans), liveness checks (ATS API probes and
 page markers), the triage loop, company detection + config edits, and an
 end-to-end scan→digest run.
+
+The parts added since are tested against the damage they exist to prevent:
+`cfgwrite` must leave a same-value write byte-identical and must not lose a
+comment (including inline trailing ones), writes are serialised and atomic so
+concurrent edits cannot corrupt the file, `backup` is verified by *restoring*
+it and checking the state comes back, `restore` must refuse to clobber a live
+workspace and must leave a safety copy that outlives the call, and `update`
+verifies a checksum before unpacking, refuses anything that is not a jobscout
+build, and restores the previous build when a swap fails.
 
 ## Building a distributable
 
