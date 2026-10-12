@@ -37,12 +37,31 @@ jobs:
       - name: pytest
         run: uv run pytest
 
+      # Lint the workflow files themselves. This exists because a single
+      # disallowed context in an `if:` (secrets is not available there) made
+      # GitHub reject the whole file: every run died in 0s having created zero
+      # jobs, and nothing in the repo said why. `actionlint` names the line.
+      # Pinned to the version this repo was validated against.
+      - name: lint workflows
+        run: |
+          curl -sSLo actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+
   bundle:
     name: bundle (${{ matrix.name }})
     needs: test
     # PRs are served by the test job; bundles are for tags and manual runs.
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
+    # The `secrets` context is NOT available in a step-level `if`. Passing the
+    # token through a job-level env var is the supported indirection: `env` IS
+    # allowed in `if`, and an unset secret arrives here as the empty string.
+    # (Getting this wrong does not fail one step: GitHub rejects the whole
+    # workflow file, so every run dies in 0s with zero jobs.)
+    env:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -130,7 +149,7 @@ jobs:
       # not exist until the project is created, so they are left for the pass
       # that has a real project to test against.
       - name: sign (Windows / SignPath Foundation)
-        if: runner.os == 'Windows' && secrets.SIGNPATH_API_TOKEN != ''
+        if: runner.os == 'Windows' && env.SIGNPATH_API_TOKEN != ''
         uses: signpath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
