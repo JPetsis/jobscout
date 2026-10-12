@@ -368,13 +368,20 @@ def extract(archive: Path, into: Path) -> Path:
                       "(no jobscout.app or jobscout/ inside)")
 
 
-def _relaunch_command(path: Path) -> str:
-    """How to start `path` again, per platform."""
+def _relaunch_command(root: Path) -> str:
+    """How to start jobscout again from its install root.
+
+    `root` is what `install_root()` returns: the `.app` bundle on macOS, the
+    onedir FOLDER on Windows and Linux. The distinction matters -- launching the
+    folder on Windows opens Explorer, and on Linux it tries to execute a
+    directory. Both are silent no-ops as far as the user is concerned: the
+    update appears to do nothing.
+    """
     if sys.platform == "darwin":
-        return f'open "{path}"'
+        return f'open "{root}"'                    # open handles the bundle
     if sys.platform == "win32":
-        return f'start "" "{path}"'
-    return f'"{path}" &'
+        return f'start "" "{root}\\jobscout.exe"'
+    return f'"{root}/jobscout" &'
 
 
 def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
@@ -467,10 +474,17 @@ def apply_staged(staged: Path, *, relaunch: bool = True) -> Path:
     script.write_text(_helper_script(root, staged, relaunch=relaunch),
                       encoding="utf-8")
     script.chmod(0o755)
-    creation = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0
-    subprocess.Popen([str(script)], start_new_session=True,
-                     creationflags=creation,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sys.platform == "win32":
+        # A batch file is not an executable image: CreateProcess needs the
+        # command processor, and DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        # keeps it alive once we exit.
+        argv = ["cmd", "/c", str(script)]
+        flags = 0x00000008 | 0x00000200
+        subprocess.Popen(argv, creationflags=flags,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.Popen([str(script)], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return script
 
 

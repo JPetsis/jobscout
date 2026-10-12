@@ -12,6 +12,7 @@ The properties that matter, in order of how much damage their absence causes:
 import hashlib
 import json
 import os
+import sys
 import subprocess
 import tarfile
 import time
@@ -24,6 +25,11 @@ import pytest
 from jobscout import update as up
 
 DEAD_PID = 999999        # not running, so the helper's wait passes at once
+
+
+def _helper_name() -> str:
+    """The helper script this platform actually generates."""
+    return "apply.bat" if sys.platform == "win32" else "apply.sh"
 
 
 # --- version comparison ----------------------------------------------------
@@ -198,14 +204,16 @@ def _serve(tmp_path, content: bytes) -> Path:
 def test_a_matching_checksum_is_accepted(tmp_path):
     src = _serve(tmp_path, b"payload")
     want = hashlib.sha256(b"payload").hexdigest()
-    dest = up.download(f"file://{src}", tmp_path / "out.bin", expected_sha256=want)
+    # as_uri(), not f"file://{path}": that form is malformed on Windows and
+    # urlopen fails with a confusing WinError instead of the expected result
+    dest = up.download(src.as_uri(), tmp_path / "out.bin", expected_sha256=want)
     assert dest.read_bytes() == b"payload"
 
 
 def test_a_wrong_checksum_is_refused_and_nothing_is_left(tmp_path):
     src = _serve(tmp_path, b"payload")
     with pytest.raises(up.UpdateError, match="checksum"):
-        up.download(f"file://{src}", tmp_path / "out.bin", expected_sha256="0" * 64)
+        up.download(src.as_uri(), tmp_path / "out.bin", expected_sha256="0" * 64)
     assert not (tmp_path / "out.bin").exists()
     assert not list(tmp_path.glob("*.part"))
 
@@ -213,12 +221,12 @@ def test_a_wrong_checksum_is_refused_and_nothing_is_left(tmp_path):
 def test_a_wrong_size_is_refused(tmp_path):
     src = _serve(tmp_path, b"payload")
     with pytest.raises(up.UpdateError, match="bytes"):
-        up.download(f"file://{src}", tmp_path / "out.bin", expected_size=999)
+        up.download(src.as_uri(), tmp_path / "out.bin", expected_size=999)
 
 
 def test_a_failed_download_leaves_no_partial_file(tmp_path):
     with pytest.raises(up.UpdateError, match="download failed"):
-        up.download(f"file://{tmp_path/'nope.bin'}", tmp_path / "out.bin")
+        up.download((tmp_path / "nope.bin").as_uri(), tmp_path / "out.bin")
     assert not list(tmp_path.glob("*.part"))
     assert not (tmp_path / "out.bin").exists()
 
@@ -276,16 +284,26 @@ def _build(root: Path, marker: str) -> Path:
 
 
 def _run_helper(body: str, path: Path):
+    """Run the helper the way the platform would.
+
+    The script body differs per platform (sh vs .bat), so the runner must too:
+    executing an sh script on Windows fails with '%1 is not a valid Win32
+    application', which is a broken TEST rather than a broken update.
+    """
     path.write_text(body)
     path.chmod(0o755)
-    return subprocess.run([str(path)], capture_output=True, text=True, timeout=30)
+    if sys.platform == "win32":
+        argv = ["cmd", "/c", str(path)]
+    else:
+        argv = [str(path)]
+    return subprocess.run(argv, capture_output=True, text=True, timeout=60)
 
 
 def test_the_helper_swaps_the_build(tmp_path):
     old = _build(tmp_path / "app", "OLD")
     new = _build(tmp_path / "staged" / "app", "NEW")
     r = _run_helper(up._helper_script(old, new, relaunch=False, pid=DEAD_PID),
-                    tmp_path / "apply.sh")
+                    tmp_path / _helper_name())
     assert r.returncode == 0, r.stderr
     assert (old / "marker.txt").read_text() == "NEW"
     assert not new.exists()
@@ -298,7 +316,7 @@ def test_a_failed_swap_restores_the_working_build(tmp_path):
     old = _build(tmp_path / "app", "WORKING")
     missing = tmp_path / "never-created" / "app"
     r = _run_helper(up._helper_script(old, missing, relaunch=False, pid=DEAD_PID),
-                    tmp_path / "apply.sh")
+                    tmp_path / _helper_name())
     assert "restored" in r.stderr
     assert old.exists()
     assert (old / "marker.txt").read_text() == "WORKING"
@@ -307,8 +325,12 @@ def test_a_failed_swap_restores_the_working_build(tmp_path):
 def test_the_helper_waits_for_this_process_before_touching_anything(tmp_path):
     body = up._helper_script(tmp_path / "a", tmp_path / "b", relaunch=True,
                              pid=4242)
-    assert "while kill -0 4242" in body
-    assert body.index("while kill -0 4242") < body.index("mv ")
+    if sys.platform == "win32":
+        assert '"PID eq 4242"' in body            # tasklist on the pid
+        assert body.index('"PID eq 4242"') < body.index("move ")
+    else:
+        assert "while kill -0 4242" in body
+        assert body.index("while kill -0 4242") < body.index("mv ")
 
 
 def test_apply_staged_refuses_a_source_checkout(tmp_path, monkeypatch):
@@ -491,7 +513,43 @@ def test_the_helper_gives_up_without_touching_the_build(tmp_path):
     # a pid that IS alive: this process
     body = up._helper_script(old, new, relaunch=False, pid=os.getpid())
     body = body.replace(f"if [ \"$n\" -gt {up.WAIT_SECONDS} ]", 'if [ "$n" -gt 1 ]')
-    r = _run_helper(body, tmp_path / "apply.sh")
+    body = body.replace(f"if %n% GTR {up.WAIT_SECONDS}", "if %n% GTR 1")
+    r = _run_helper(body, tmp_path / _helper_name())
     assert "did not exit" in r.stderr
     assert (old / "marker.txt").read_text() == "STILL RUNNING", "must be untouched"
     assert new.exists(), "the staged build must not be consumed"
+
+
+# --- the relaunch target ---------------------------------------------------
+#
+# Found by CI on Windows, and the same flaw existed on Linux: the helper was
+# relaunching the install DIRECTORY rather than jobscout. On Windows that opens
+# Explorer, on Linux it tries to execute a directory. Either way the user sees
+# an update that appears to do nothing.
+
+def test_relaunch_command_targets_the_executable_not_the_folder(monkeypatch, tmp_path):
+    # a folder name that is NOT the exe name, so the two are distinguishable
+    root = tmp_path / "installdir"
+
+    monkeypatch.setattr(up.sys, "platform", "win32")
+    cmd = up._relaunch_command(root)
+    assert str(root) + "\\jobscout.exe" in cmd, "must name the exe, not the folder"
+    assert cmd.startswith("start ")
+
+    monkeypatch.setattr(up.sys, "platform", "linux")
+    cmd = up._relaunch_command(root)
+    assert str(root) + "/jobscout" in cmd, "must name the exe, not the folder"
+
+
+def test_relaunch_of_a_macos_bundle_uses_open(monkeypatch, tmp_path):
+    """`open` is correct here because a .app IS the launchable thing."""
+    monkeypatch.setattr(up.sys, "platform", "darwin")
+    cmd = up._relaunch_command(tmp_path / "jobscout.app")
+    assert cmd.startswith("open ")
+    assert cmd.endswith(".app\"")
+
+
+def test_the_helper_relaunches_the_resolved_target(tmp_path):
+    root = tmp_path / "jobscout"
+    body = up._helper_script(root, tmp_path / "staged", relaunch=True, pid=DEAD_PID)
+    assert "jobscout" in body
