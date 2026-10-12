@@ -38,6 +38,7 @@ async function boot() {
     wireFilters();
     wirePanes();
     render();
+    checkForUpdates();          // async; never blocks the grid
   } catch (e) {
     fail(e);
   }
@@ -227,6 +228,8 @@ function wirePanes() {
   });
   $('settings-btn').addEventListener('click', openSettings);
   $('scan-btn').addEventListener('click', startScan);
+  $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
+  $('update-install').addEventListener('click', installUpdate);
   $('scan-cancel').addEventListener('click', () => pywebview.api.cancel_scan());
 
   document.addEventListener('keydown', (e) => {
@@ -495,6 +498,57 @@ function settingRow(r) {
   wrap.appendChild(note);
   wrap.appendChild(err);
   return wrap;
+}
+
+/* ---------- update ---------- */
+
+function showUpdate(text) {
+  const bar = $('update-bar');
+  $('update-text').innerHTML = text;
+  bar.hidden = false;
+}
+
+async function checkForUpdates(force) {
+  let info;
+  try {
+    info = await pywebview.api.update_check(!!force);
+  } catch (e) {
+    return;                                   // a check must never break boot
+  }
+  if (!info || info.disabled || !info.ok) return;
+  if (info.update_available) {
+    const size = info.asset && info.asset.size
+      ? ' (' + Math.round(info.asset.size / 1048576) + ' MB)' : '';
+    showUpdate('<b>jobscout ' + info.latest + '</b> is available' +
+      ' \u00b7 you have ' + info.current + size);
+  }
+}
+
+async function installUpdate() {
+  const btn = $('update-install');
+  btn.disabled = true;
+  btn.textContent = 'Downloading\u2026';
+  $('update-text').textContent = 'checking the download\u2026';
+
+  let res;
+  try {
+    res = await pywebview.api.update_install();
+  } catch (e) {
+    res = { ok: false, error: String(e) };
+  }
+  if (!res || !res.ok) {
+    btn.disabled = false;
+    btn.textContent = 'Install and restart';
+    showUpdate('<span class="up-err">Update failed: ' +
+      String((res && res.error) || 'unknown error') + '</span>');
+    return;
+  }
+  // The helper waits for this process to exit before swapping the build, so
+  // the window MUST close now -- holding it open blocks the update.
+  btn.textContent = 'Restarting\u2026';
+  showUpdate('Installing <b>' + (res.staged_version || 'the update') +
+    '</b> \u2014 jobscout will restart itself.');
+  setTimeout(() => pywebview.api.quit(), 900);
 }
 
 /* ---------- scan ---------- */

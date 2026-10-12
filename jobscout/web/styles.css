@@ -323,3 +323,14 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 }
 .s-tally { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .s-tally.warn { color: var(--warn); }
+
+/* ---- update notice ---- */
+.updatebar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 18px 10px; padding: 9px 12px;
+  background: var(--panel); border: 1px solid var(--blue);
+  border-radius: var(--radius);
+}
+.up-text { flex: 1; font-size: 12.5px; }
+.up-text b { font-weight: 600; }
+.up-text .up-err { color: var(--warn); }

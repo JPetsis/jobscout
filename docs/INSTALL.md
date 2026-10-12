@@ -150,6 +150,32 @@ want digests, goals or the terminal triage loop.
 
 ---
 
+## Updating
+
+If you installed a packaged build, jobscout updates itself. Open it and a
+notice appears when a newer release exists; press **Install and restart** and
+it downloads, verifies and swaps itself in, then reopens. From a terminal:
+
+```bash
+jobscout update --check     # just tell me
+jobscout update --yes       # actually do it
+```
+
+Two things worth knowing:
+
+- **No update prompt.** The first install has to get past Gatekeeper or
+  SmartScreen because your browser tags what it downloads. jobscout downloads
+  updates itself and does not tag them, so an update starts normally. If you
+  fetch a release by hand instead, you get the prompt again.
+- **You can update from a file.** `jobscout update --from ~/Downloads/jobscout-*.zip`
+  installs a build you already have, with the same verification. Useful if you
+  are behind a proxy, or off a network that can reach GitHub.
+
+Updates are verified against the checksum GitHub publishes for the download,
+and the previous build is restored automatically if the swap fails.
+
+---
+
 ## Uninstalling, and why you should back up first
 
 **A deep uninstaller will delete your jobscout data.** Tools that "deep

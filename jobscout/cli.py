@@ -20,6 +20,7 @@ from . import goals as goalsmod
 from . import liveness
 from . import salary as salmod
 from . import triage as triagemod
+from . import update as updatemod
 from . import ui
 from . import backup as backupmod
 from . import scanner
@@ -54,6 +55,94 @@ def cmd_init(args) -> int:
     print("  1. jobscout config --edit    (your roles, locations, sources)")
     print("  2. jobscout scan")
     print("  3. jobscout digest")
+    return 0
+
+
+def cmd_update(args) -> int:
+    """Check for a newer build, and stage or install it. Thin view over update.py."""
+    cfg = load_config()
+
+    if args.from_archive:
+        # Installing a build the user already has: no network, no version check.
+        try:
+            res = updatemod.update(cfg.root, from_archive=Path(args.from_archive),
+                                   apply=not args.stage_only,
+                                   relaunch=not args.no_relaunch,
+                                   progress=lambda m: print(ui.dim("  " + m)))
+        except updatemod.UpdateError as e:
+            print(ui.red(f"update failed: {e}"))
+            return 1
+        print(ui.bold("staged from a local build"))
+        print(ui.dim(f"  {res['staged']}"))
+        if res.get("updated"):
+            print(ui.dim("  jobscout will restart itself once this process exits."))
+        else:
+            print(ui.dim(f"  staged only. apply with: jobscout update --from {args.from_archive}"))
+        return 0
+
+    try:
+        info = updatemod.check(cfg.root, force=True, include_prerelease=args.prerelease)
+    except Exception as e:                                     # noqa: BLE001
+        print(ui.red(f"could not check for updates: {e}"))
+        return 1
+
+    if not info.get("ok"):
+        print(ui.red(f"could not check for updates: {info.get('error')}"))
+        return 1
+
+    cur = info["current"]
+    if not info.get("update_available"):
+        if info.get("latest") is None:
+            # Distinct from "you are current": nothing has been PUBLISHED yet
+            # (a draft is not downloadable by anyone but the owner), so there
+            # is nothing to compare against rather than nothing newer.
+            print(ui.bold("jobscout") + f" {cur}")
+            print(ui.dim("  no releases published yet — nothing to compare against"))
+            print(ui.dim(f"  {updatemod.HOMEPAGE}"))
+        else:
+            print(ui.bold("jobscout") + f" {cur}" +
+                  ui.dim(f"  is the latest release ({info['latest']})"))
+        return 0
+
+    print(ui.bold("update available") +
+          ui.dim(f"   {cur}  ->  ") + ui.bold(str(info.get("latest"))))
+    print(ui.dim(f"  {info.get('url') or updatemod.HOMEPAGE}"))
+    asset = info.get("asset")
+    if not asset:
+        print(ui.red("no build for this machine in that release") +
+              ui.dim(f"  ({info.get('asset_for_platform')})"))
+        print(ui.dim("  download manually from the release page above"))
+        return 1
+    print(ui.dim(f"  {asset['name']}  ({asset['size'] / 1048576:.0f} MB)"))
+
+    if args.check:
+        print(ui.dim("  (--check: nothing downloaded)"))
+        return 0
+
+    if updatemod.install_root() is None:
+        print()
+        print(ui.red("this is a source checkout, not a packaged build") +
+              ui.dim("  — nothing to replace."))
+        print(ui.dim("  update with:  git pull && uv sync --extra app"))
+        return 0
+
+    if not args.yes:
+        print()
+        print(ui.dim("  this replaces the installed app and restarts it."))
+        print(ui.dim("  re-run with --yes to proceed."))
+        return 0
+
+    try:
+        res = updatemod.update(cfg.root, apply=True, relaunch=not args.no_relaunch,
+                               progress=lambda m: print(ui.dim("  " + m)))
+    except updatemod.UpdateError as e:
+        print(ui.red(f"update failed: {e}"))
+        return 1
+    print(ui.bold(f"staged {res.get('staged_version')}"))
+    if res.get("updated"):
+        print(ui.dim("  a helper will swap it in and restart jobscout once you quit."))
+    else:
+        print(ui.dim(f"  staged at {res['staged']} (not applied)"))
     return 0
 
 
@@ -826,6 +915,20 @@ def main(argv=None) -> int:
     p.add_argument("--open", action="store_true")
     p.add_argument("--edit", action="store_true")
     p.set_defaults(fn=cmd_config)
+
+    p = sub.add_parser("update", help="check for and install a newer build")
+    p.add_argument("--check", action="store_true",
+                   help="only report whether an update exists")
+    p.add_argument("--yes", action="store_true", help="actually install it")
+    p.add_argument("--from", dest="from_archive", metavar="FILE",
+                   help="install a build you already downloaded (zip or tar.gz)")
+    p.add_argument("--stage-only", action="store_true",
+                   help="with --from: unpack but do not swap it in")
+    p.add_argument("--no-relaunch", action="store_true",
+                   help="do not restart jobscout after installing")
+    p.add_argument("--prerelease", action="store_true",
+                   help="consider prereleases too")
+    p.set_defaults(fn=cmd_update)
 
     p = sub.add_parser("backup",
                        help="archive the workspace (config, database, reports) to one file")

@@ -13,7 +13,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
-from . import api, db as dbm, scanner
+from . import api, db as dbm, scanner, update as updatemod
 from .config import load_config
 from .http import Fetcher
 
@@ -104,6 +104,9 @@ class JsApi:
     def __init__(self) -> None:
         self.cfg = load_config()
         self.conn = dbm.connect(self.cfg.root / "jobscout.db")
+        # filled by main(); quit() closes these so the update helper -- which
+        # waits for this process to exit -- can swap the build in.
+        self._windows: list = []
 
     def matches(self, limit: int = 400) -> list[dict]:
         """Matches under the stored profile, best first. Filtering is client-side."""
@@ -155,6 +158,43 @@ class JsApi:
 
     def cancel_scan(self) -> dict:
         return SCAN.cancel() if SCAN is not None else {"cancelled": False}
+
+    def update_check(self, force: bool = False) -> dict:
+        """Is there a newer build? Cached for a day unless forced."""
+        if self.cfg.prefs.get("updates", {}).get("check") is False:
+            return {"ok": True, "disabled": True, "update_available": False,
+                    "current": updatemod.current_version()}
+        try:
+            return updatemod.check(self.cfg.root, force=bool(force))
+        except Exception as e:                                 # noqa: BLE001
+            return {"ok": False, "error": f"{type(e).__name__}: {e}",
+                    "update_available": False}
+
+    def update_install(self) -> dict:
+        """Download, verify and stage the update, then hand off to the helper.
+
+        Returns once the helper is running. The front-end should let the window
+        close immediately afterwards: the helper waits for this process to exit
+        before it swaps the build, so holding the window open blocks it.
+        """
+        if updatemod.install_root() is None:
+            return {"ok": False,
+                    "error": "running from a source checkout; update with "
+                             "git pull && uv sync --extra app"}
+        try:
+            res = updatemod.update(self.cfg.root, apply=True, relaunch=True)
+        except updatemod.UpdateError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, **{k: v for k, v in res.items() if k != "archive"}}
+
+    def quit(self) -> dict:
+        """Close the window so the updater helper can do its swap."""
+        for w in list(self._windows):
+            try:
+                w.destroy()
+            except Exception:                                  # noqa: BLE001
+                pass
+        return {"ok": True}
 
     def open_url(self, url: str) -> dict:
         """Open in the real browser -- a job posting belongs in a browser tab."""
@@ -272,14 +312,14 @@ def main() -> int:
         _show_fatal(webview, str(e))
         return 1
 
-    webview.create_window(
+    api_obj._windows = [webview.create_window(
         "jobscout",
         url=str(WEB / "index.html"),
         js_api=api_obj,
         width=1180,
         height=860,
         min_size=(820, 560),
-    )
+    )]
     webview.start()
     return 0
 

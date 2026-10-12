@@ -27,6 +27,12 @@
   <button id="scan-cancel" class="ghost small">Cancel</button>
 </div>
 
+<div id="update-bar" class="updatebar" hidden role="status" aria-live="polite">
+  <span class="up-text" id="update-text"></span>
+  <button id="update-install" class="ghost small">Install and restart</button>
+  <button id="update-dismiss" class="ghost small" aria-label="Dismiss this notice">✕</button>
+</div>
+
 <section class="filters">
   <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">
   <div class="seg" id="band" role="group" aria-label="Score band">

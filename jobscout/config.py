@@ -311,6 +311,13 @@ sources:
     results_per_page: 25     # max 500
 
 
+# Update checks. jobscout asks GitHub whether a newer release exists, at most
+# once a day, and shows a notice in the window if there is one. Nothing is
+# downloaded or installed until you press the button. Set check: false to turn
+# the request off entirely.
+updates:
+  check: true
+
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>

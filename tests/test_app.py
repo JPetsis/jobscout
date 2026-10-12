@@ -6,6 +6,7 @@ whole reason these checks exist is that a user on the *other* platform finds
 out at launch, and a guard that only works on the platform it guards is untested.
 """
 import re
+import types
 import sys
 import threading
 import time
@@ -219,7 +220,9 @@ def test_the_error_page_escapes_html(monkeypatch):
 def test_happy_path_still_passes_the_api_object(monkeypatch, tmp_path):
     """The config-missing guard must not swallow the normal startup path."""
     calls = {}
-    sentinel = object()
+    # not a bare object(): main() attaches the window list to the api object so
+    # quit() can close it for the updater helper
+    sentinel = types.SimpleNamespace()
 
     class FakeWebview:
         @staticmethod

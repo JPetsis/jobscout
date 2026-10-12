@@ -101,3 +101,89 @@ def test_scanning_a_source_that_is_not_enabled_says_so(capsys, scan_env, monkeyp
     assert "themuse is not enabled" in out
     assert "sources.enabled" in out            # says how to fix it
     assert "Settings" in out
+
+
+# --- `jobscout update` ------------------------------------------------------
+#
+# The wording matters here: "you are current" and "nothing has been published"
+# are different states, and the second one is what a draft-only repo reports.
+
+def _update_env(monkeypatch, tmp_path, info):
+    import types as _t
+    from jobscout import update as updatemod
+    cfg = _t.SimpleNamespace(root=tmp_path, prefs={}, enabled=[],
+                             path=tmp_path / "config.yaml")
+    monkeypatch.setattr(cli, "load_config", lambda: cfg)
+    monkeypatch.setattr(updatemod, "check", lambda *a, **k: info)
+
+
+def test_update_says_current_when_a_release_is_newer_absent(capsys, monkeypatch, tmp_path):
+    _update_env(monkeypatch, tmp_path, {
+        "ok": True, "current": "0.1.0", "latest": "0.1.0", "update_available": False})
+    cli.cmd_update(types.SimpleNamespace(check=True, yes=False, from_archive=None,
+                                         stage_only=False, no_relaunch=False,
+                                         prerelease=False))
+    out = capsys.readouterr().out
+    assert "is the latest release" in out
+    assert "0.1.0" in out
+
+
+def test_update_distinguishes_no_published_release_from_being_current(capsys, monkeypatch, tmp_path):
+    """A draft release is not downloadable by users, so `latest` is None and
+    claiming "you are up to date" would be a guess."""
+    _update_env(monkeypatch, tmp_path, {
+        "ok": True, "current": "0.1.0", "latest": None, "update_available": False})
+    cli.cmd_update(types.SimpleNamespace(check=True, yes=False, from_archive=None,
+                                         stage_only=False, no_relaunch=False,
+                                         prerelease=False))
+    out = capsys.readouterr().out
+    assert "no releases published yet" in out
+    assert "latest release" not in out
+
+
+def test_update__check_does_not_download(capsys, monkeypatch, tmp_path):
+    _update_env(monkeypatch, tmp_path, {
+        "ok": True, "current": "0.1.0", "latest": "0.2.0",
+        "update_available": True, "asset": {"name": "jobscout-macos-arm64.zip",
+                                            "size": 100 * 1048576, "url": "u"},
+        "url": "https://example.invalid/rel", "asset_for_platform": "x"})
+    cli.cmd_update(types.SimpleNamespace(check=True, yes=False, from_archive=None,
+                                         stage_only=False, no_relaunch=False,
+                                         prerelease=False))
+    out = capsys.readouterr().out
+    assert "update available" in out
+    assert "0.2.0" in out and "100 MB" in out
+    assert "nothing downloaded" in out
+
+
+def test_update_without_yes_explains_and_does_nothing(capsys, monkeypatch, tmp_path):
+    from jobscout import update as updatemod
+    _update_env(monkeypatch, tmp_path, {
+        "ok": True, "current": "0.1.0", "latest": "0.2.0",
+        "update_available": True, "asset": {"name": "a.zip", "size": 10, "url": "u"},
+        "url": "https://example.invalid/rel", "asset_for_platform": "x"})
+    monkeypatch.setattr(updatemod, "install_root", lambda: tmp_path / "app")
+    called = []
+    monkeypatch.setattr(updatemod, "update",
+                        lambda *a, **k: called.append(1) or {})
+    cli.cmd_update(types.SimpleNamespace(check=False, yes=False, from_archive=None,
+                                         stage_only=False, no_relaunch=False,
+                                         prerelease=False))
+    out = capsys.readouterr().out
+    assert "--yes" in out
+    assert called == [], "must not install without --yes"
+
+
+def test_update_reports_a_source_checkout_instead_of_pretending(capsys, monkeypatch, tmp_path):
+    from jobscout import update as updatemod
+    _update_env(monkeypatch, tmp_path, {
+        "ok": True, "current": "0.1.0", "latest": "0.2.0",
+        "update_available": True, "asset": {"name": "a.zip", "size": 10, "url": "u"},
+        "url": "https://example.invalid/rel", "asset_for_platform": "x"})
+    monkeypatch.setattr(updatemod, "install_root", lambda: None)
+    cli.cmd_update(types.SimpleNamespace(check=False, yes=True, from_archive=None,
+                                         stage_only=False, no_relaunch=False,
+                                         prerelease=False))
+    out = capsys.readouterr().out
+    assert "source checkout" in out
+    assert "git pull" in out

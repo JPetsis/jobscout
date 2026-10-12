@@ -90,6 +90,7 @@ off when piped.
 | `jobscout rescore` | re-apply your current preferences to everything stored |
 | `jobscout stats` | per-source counts and recent runs |
 | `jobscout backup` | archive the workspace (config, database, reports) to one file; `--list` shows them |
+| `jobscout update` | check for a newer build; `--check` only reports, `--yes` installs it, `--from FILE` installs a build you already downloaded |
 
 ### Every flag
 
@@ -254,6 +255,38 @@ being hand-maintained: it reads the careers page (or a job URL), detects the
 board behind it, validates the token against the ATS API, appends it to
 `companies.<source>.tokens` in your config, and enables the source if it was
 not in `sources.enabled` yet.
+
+## Updating
+
+The window checks GitHub once a day for a newer release and shows a notice if
+there is one; nothing is downloaded until you press **Install and restart**.
+`jobscout update --check` does the same from a terminal, and
+`updates.check: false` in the config turns the request off entirely.
+
+The install is staged and verified before anything is replaced:
+
+1. the archive is downloaded and checked against the **sha256 GitHub publishes
+   for that asset**, so a truncated or corrupted download is refused;
+2. it is unpacked and confirmed to actually contain a jobscout build;
+3. a small helper waits for the app to exit, moves the old build aside, swaps
+   the new one in, and relaunches. If the swap fails it **restores the previous
+   build** — an update can never leave you with nothing that launches.
+
+`jobscout update --from FILE` installs a build you already have (a zip or
+tar.gz from the release page, or one you built yourself) using the same checks
+and the same swap. That is the path to use if the release host is unreachable,
+or if you would rather download it yourself.
+
+**Updates do not hit the Gatekeeper prompt.** A browser sets macOS's quarantine
+flag on what it downloads, which is why a first install needs the "Open Anyway"
+dance in `docs/INSTALL.md`. The in-app updater downloads over HTTPS itself and
+does not set that flag, so an updated build starts normally. Downloading the
+release by hand in a browser and using `--from` will prompt.
+
+**Nothing here is signed.** The download is verified against the hash GitHub
+returns for it, which protects against corruption in transit — it is not proof
+of who published the file, because there is no signature to check. See
+`docs/INSTALL.md` for what each platform shows on a manual install.
 
 ## Sources
 
