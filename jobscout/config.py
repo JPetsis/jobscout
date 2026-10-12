@@ -336,6 +336,16 @@ companies:
     tokens: []
 '''
 
+UI_SECTION_BODY = [
+    'theme: system           # system | light | dark. Also switchable in the',
+    '                        # window header; "system" follows your OS setting.',
+]
+
+# The template and the create-on-demand path (cfgwrite.ensure_section) both come
+# from UI_SECTION_BODY, so a fresh install and an existing config upgraded in
+# place cannot drift apart.
+DEFAULT_CONFIG += "\nui:\n" + "".join(f"  {line}\n" for line in UI_SECTION_BODY)
+
 SOURCE_DEFAULTS: dict[str, dict] = {
     "linkedin": {"max_requests": 24, "fresh_days": 14, "queries": []},
     "stepstone": {"queries": []},
@@ -376,8 +386,14 @@ SOURCE_DEFAULTS: dict[str, dict] = {
 
 
 def home() -> Path:
-    env = os.environ.get("JOBSCOUT_HOME")
-    return Path(env).expanduser() if env else Path.home() / ".jobscout"
+    """The workspace in use: the active profile, or the base ~/.jobscout.
+
+    Everything that reads or writes the workspace goes through here, which is
+    why switching profiles needs no other code to know profiles exist. The
+    resolution itself lives in jobscout/profiles.py.
+    """
+    from . import profiles
+    return profiles.resolve_root()
 
 
 @dataclass

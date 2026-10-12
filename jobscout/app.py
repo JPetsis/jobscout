@@ -239,6 +239,7 @@ class JsApi:
         self._windows: list = []
         self._staged: str | None = None          # a downloaded, verified build
         self._staged_version: str | None = None
+        self._asked = False                      # see launch()
 
     def matches(self, limit: int = 400) -> list[dict]:
         """Matches under the stored profile, best first. Filtering is client-side."""
@@ -275,6 +276,78 @@ class JsApi:
         out = api.write_setting(self.cfg.path, str(key), value)
         if out.get("changed"):
             self.cfg = load_config()          # re-read; the file just changed
+        return out
+
+    def theme(self) -> str:
+        """The stored colour scheme: system | light | dark."""
+        return api.read_theme(self.cfg.path)
+
+    def set_theme(self, mode: str) -> str:
+        """Persist the colour scheme. Nothing needs reloading: the palette is
+        resolved in the page, and no Python side reads ui.theme."""
+        return api.write_theme(self.cfg.path, str(mode))
+
+    # ------------------------------------------------------------ profiles
+
+    def launch(self) -> dict:
+        """What the window needs to decide whether to ask who is using it.
+
+        The question is asked once per run, and only when there is a choice to
+        make: with a single profile it would be a screen nobody needs to click
+        through. `_asked` is what stops it reappearing after a switch, because
+        switching reloads the page and the page asks again.
+        """
+        from . import profiles as profmod
+        rows = profmod.list_profiles()
+        ask = len(rows) > 1 and not self._asked
+        self._asked = True
+        return {"ask": ask, "profiles": rows,
+                "active": profmod.read_active()}
+
+    def switch_profile(self, name: str) -> dict:
+        """Point the window at another workspace.
+
+        Refused while a scan is running: ScanJob holds its own config and its
+        own connection, so a switch mid-scan would have it writing into the
+        profile you just left.
+        """
+        from . import profiles as profmod
+        global SCAN
+        if SCAN is not None and SCAN.running:
+            return {"ok": False, "error": "a scan is running — wait for it or cancel it"}
+        name = str(name or "")
+        if profmod.find(name) is None:
+            return {"ok": False, "error": f"no profile called '{name}'"}
+        profmod.write_active(name)
+        with dbm.LOCK:
+            try:
+                self.conn.close()
+            except Exception:                      # noqa: BLE001
+                pass                               # already closed is fine
+            self.cfg = load_config()
+            self.conn = dbm.connect(self.cfg.root / "jobscout.db")
+        SCAN = None                                # the next scan uses the new profile
+        return {"ok": True, "active": profmod.read_active(),
+                "root": str(self.cfg.root), "label": profmod.find(name)["label"]}
+
+    def create_profile(self, name: str, activate: bool = True) -> dict:
+        """Make a new, empty profile and optionally start using it."""
+        from . import profiles as profmod
+        clean = str(name or "").strip()
+        problem = profmod.name_problem(clean)
+        if problem:
+            return {"ok": False, "error": problem}
+        try:
+            profmod.create(clean)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        if not activate:
+            return {"ok": True, "created": clean, "activated": False}
+        # Reuse the switch path rather than repeating the rebind: creating a
+        # profile and switching to it must leave the window in exactly the
+        # state switching alone would.
+        out = self.switch_profile(clean)
+        out["created"] = clean
         return out
 
     def start_scan(self, only: str = "") -> dict:
@@ -475,7 +548,8 @@ def main() -> int:
         # Nothing to work with. Before saying so, check whether a backup is
         # sitting there -- a fresh workspace plus an existing backup is exactly
         # the state a user lands in after losing or removing their data.
-        root = Path(os.environ.get("JOBSCOUT_HOME") or (Path.home() / ".jobscout"))
+        from . import profiles
+        root = profiles.resolve_root()
         found = []
         if backupmod.workspace_is_empty(root):
             try:

@@ -20,21 +20,66 @@ const el = (tag, cls, text) => {
   return n;
 };
 
+/* ---------- theme ---------- */
+
+const DARK_MQ = window.matchMedia('(prefers-color-scheme: dark)');
+let THEME = 'system';                 // system | light | dark, as stored in config
+
+function applyTheme(mode) {
+  /* The resolver lives HERE rather than in a @media query, so styles.css keeps
+     one copy of each palette instead of a dark block that has to be written
+     twice (once for the media query, once for an explicit override) and then
+     drifts. A theme that cannot be saved still applies: this is a display
+     preference, not a command. */
+  const dark = mode === 'dark' || (mode === 'system' && DARK_MQ.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  for (const b of document.querySelectorAll('#theme button')) {
+    b.classList.toggle('on', b.dataset.v === mode);
+  }
+}
+
+function wireTheme(initial) {
+  THEME = initial || 'system';
+  applyTheme(THEME);
+  for (const b of document.querySelectorAll('#theme button')) {
+    b.addEventListener('click', async () => {
+      const mode = b.dataset.v;
+      const previous = THEME;
+      THEME = mode;
+      applyTheme(mode);                       // instant; do not wait for disk
+      try {
+        THEME = await pywebview.api.set_theme(mode);
+      } catch (e) {
+        THEME = previous;                     // did not save: show the truth
+        applyTheme(previous);
+      }
+    });
+  }
+  // "system" keeps following the OS while the window is open
+  DARK_MQ.addEventListener('change', () => {
+    if (THEME === 'system') applyTheme('system');
+  });
+}
+
 /* ---------- boot ---------- */
 
 window.addEventListener('pywebviewready', boot);
 
 async function boot() {
   try {
-    const [matches, stats, sources] = await Promise.all([
+    const [matches, stats, sources, theme, launch] = await Promise.all([
       pywebview.api.matches(400),
       pywebview.api.stats(),
       pywebview.api.sources(),
+      pywebview.api.theme(),
+      pywebview.api.launch(),
     ]);
     ALL = matches || [];
     STATS = stats || {};
     fillSources(sources || []);
     renderStats();
+    wireTheme(theme);
+    wireProfiles(launch);
     wireFilters();
     wirePanes();
     render();
@@ -304,6 +349,87 @@ function renderDetail(d) {
   body.appendChild(desc);
 }
 
+/* ---------- profiles ---------- */
+
+let PROFILES = { profiles: [], active: '' };
+
+function pickerError(msg) {
+  const e = $('picker-err');
+  e.textContent = msg;
+  e.hidden = false;
+}
+
+function openPicker(state) {
+  PROFILES = state || PROFILES;
+  const list = $('picker-list');
+  list.textContent = '';
+  for (const p of PROFILES.profiles || []) {
+    const b = el('button', 'picker-item');
+    b.type = 'button';
+    if (p.active) b.setAttribute('aria-current', 'true');
+    b.appendChild(el('span', 'pi-name', p.label));
+    // "empty" covers both no database at all and a database with nothing in
+    // it: to the person looking, those are the same thing.
+    const n = p.postings;
+    b.appendChild(el('span', 'pi-meta',
+      Number.isInteger(n) && n > 0 ? n.toLocaleString() + ' postings'
+                                   : 'no postings yet'));
+    b.addEventListener('click', () => chooseProfile(p));
+    list.appendChild(b);
+  }
+  const current = (PROFILES.profiles || []).find((p) => p.active);
+  const cancel = $('picker-cancel');
+  cancel.textContent = current ? 'Continue with ' + current.label : 'Close';
+  cancel.hidden = false;
+  $('picker-err').hidden = true;
+  $('picker-name').value = '';
+  $('picker').hidden = false;
+  // Focus the CURRENT row, not the first available one. Focusing a different
+  // row puts a second highlighted-looking row on screen, and the user cannot
+  // tell which one is in use -- reported from a render of this dialog.
+  const focus = list.querySelector('.picker-item[aria-current="true"]')
+             || list.querySelector('.picker-item');
+  if (focus) focus.focus();
+}
+
+function closePicker() { $('picker').hidden = true; }
+
+async function chooseProfile(p) {
+  if (p.active) { closePicker(); return; }   // already here: nothing to switch
+  let out;
+  try {
+    out = await pywebview.api.switch_profile(p.name);
+  } catch (e) {
+    return pickerError(String(e));
+  }
+  if (!out || !out.ok) return pickerError((out && out.error) || 'could not switch');
+  // Reload rather than patching the page: the whole view is derived from the
+  // workspace, so a fresh boot is both simpler and guaranteed consistent.
+  window.location.reload();
+}
+
+async function createProfile(name) {
+  let out;
+  try {
+    out = await pywebview.api.create_profile(name, true);
+  } catch (e) {
+    return pickerError(String(e));
+  }
+  if (!out || !out.ok) return pickerError((out && out.error) || 'could not create it');
+  window.location.reload();
+}
+
+function wireProfiles(launch) {
+  $('picker-new').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const name = $('picker-name').value.trim();
+    if (!name) return pickerError('a profile needs a name');
+    createProfile(name);
+  });
+  $('picker-cancel').addEventListener('click', closePicker);
+  if (launch && launch.ask) openPicker(launch);
+}
+
 /* ---------- settings ---------- */
 
 
@@ -324,6 +450,7 @@ async function openSettings() {
     return;
   }
   body.textContent = '';
+  body.appendChild(profileBlock());
 
   // group by the `group` field, keeping the order api.SETTINGS declares
   const groups = new Map();
@@ -337,6 +464,32 @@ async function openSettings() {
     for (const r of items) g.appendChild(settingRow(r));
     body.appendChild(g);
   }
+}
+
+function profileBlock() {
+  /* Which workspace you are in, and the way to a different one. Reuses the
+     pane's own classes, and opens the same picker the app asks with at launch
+     rather than a second, differently-behaving profile UI. */
+  const sec = el('section', 's-group');
+  sec.appendChild(el('h3', null, 'Profile'));
+  const row = el('div', 's-row');
+  const current = (PROFILES.profiles || []).find((p) => p.active);
+  const label = el('label', null, 'Using: ' + (current ? current.label : 'Default'));
+  row.appendChild(label);
+  row.appendChild(el('p', 's-help',
+    'Each profile is a separate workspace: its own settings, job boards and ' +
+    'saved postings. Nothing is shared between them.'));
+  const line = el('div', 's-check');
+  const btn = el('button', 'ghost small', 'Switch or create…');
+  btn.type = 'button';
+  btn.addEventListener('click', async () => {
+    const st = await pywebview.api.launch();   // fresh list, same endpoint
+    openPicker(st);
+  });
+  line.appendChild(btn);
+  row.appendChild(line);
+  sec.appendChild(row);
+  return sec;
 }
 
 function settingRow(r) {

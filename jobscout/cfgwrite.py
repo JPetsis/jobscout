@@ -410,11 +410,35 @@ def set_mapping(text: str, dotted: str, mapping: dict) -> str:
 
 # ---------------------------------------------------------------- file API
 
+def ensure_section(text: str, name: str, body: list) -> str:
+    """Append a documented top-level section that is not in the file yet.
+
+    `set_scalar` refuses to invent structure, and rightly so: appending a key to
+    the wrong parent silently corrupts a config. This is the deliberate
+    exception -- create ONE top-level section, only when it is genuinely absent,
+    so a setting introduced later can be stored in a config written before that
+    setting existed. Every existing line is left exactly as it was.
+
+    `body` is the section's inner lines, unindented; indentation is added here.
+    """
+    for line in text.splitlines():
+        if _key_of(line) == name and _indent_of(line) == 0:
+            return text                       # already there: nothing to do
+    out = text
+    if out and not out.endswith("\n"):
+        out += "\n"
+    if out.strip():
+        out += "\n"
+    out += f"{name}:\n"
+    out += "".join(f"  {ln}\n" for ln in body)
+    return out
+
+
 def _read(path: Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def _write_atomic(path: Path, text: str) -> None:
+def write_atomic(path: Path, text: str) -> None:
     """Replace a file in one step, so no reader ever sees a partial write."""
     path = Path(path)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".jobscout-", suffix=".tmp")
@@ -440,13 +464,14 @@ def edit(path: Path, op: str, dotted: str, value) -> bool:
     _LOCK.
     """
     path = Path(path)
-    fn = {"scalar": set_scalar, "list": set_list, "mapping": set_mapping}.get(op)
+    fn = {"scalar": set_scalar, "list": set_list, "mapping": set_mapping,
+          "section": ensure_section}.get(op)
     if fn is None:
         raise ConfigEditError(f"unknown op {op!r}")
     with _LOCK:
         before = _read(path)
         after = fn(before, dotted, value)
         if after != before:
-            _write_atomic(path, after)
+            write_atomic(path, after)
             return True
         return False

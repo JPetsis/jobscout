@@ -275,6 +275,44 @@ def write_setting(path, key: str, value) -> dict:
     return {"key": key, "value": clean, "changed": changed}
 
 
+# ---------------------------------------------------------------- theme
+
+THEMES = ("system", "light", "dark")
+
+
+def read_theme(path) -> str:
+    """The window's colour scheme.
+
+    Never raises. A missing or unreadable config means the default rather than
+    an error: this is a display preference, and it must not be able to stop the
+    app from starting.
+    """
+    from . import cfgwrite
+    try:
+        text = pathlib.Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return "system"
+    value = cfgwrite.get_value(text, "ui.theme")
+    return value if value in THEMES else "system"
+
+
+def write_theme(path, mode: str) -> str:
+    """Store the theme, adding the `ui:` section when the config predates it."""
+    from . import cfgwrite
+    from .config import UI_SECTION_BODY
+    if mode not in THEMES:
+        raise ValueError(f"theme must be one of {', '.join(THEMES)}, got {mode!r}")
+    path = pathlib.Path(path)
+    try:
+        cfgwrite.edit(path, "scalar", "ui.theme", mode)
+    except cfgwrite.ConfigEditError:
+        # A config written before `ui:` existed. set_scalar will not invent
+        # structure, so add the documented section explicitly, then set it.
+        cfgwrite.edit(path, "section", "ui", UI_SECTION_BODY)
+        cfgwrite.edit(path, "scalar", "ui.theme", mode)
+    return mode
+
+
 # ---------------------------------------------------------------- detail
 
 def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:

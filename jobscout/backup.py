@@ -79,11 +79,15 @@ def _counts(db: Path) -> dict:
 
 
 def backup(root: Path, dest_dir: Path, *, include_reports: bool = True,
-           now: datetime | None = None) -> dict:
+           now: datetime | None = None, prefix: str = "jobscout") -> dict:
     """Write one archive. Returns a summary dict; raises on failure.
 
     Raises rather than returning a soft error: a backup that quietly produced
     nothing is the one failure mode a user cannot detect until they need it.
+
+    `prefix` names the archive. It matters for a PROFILE backup: the directory
+    of archives is browsed by filename, and `jobscout-2026-...tar.gz` does not
+    say which profile is inside.
     """
     db = root / DB_NAME
     if not db.is_file():
@@ -92,13 +96,13 @@ def backup(root: Path, dest_dir: Path, *, include_reports: bool = True,
     dest_dir = Path(dest_dir).expanduser()
     dest_dir.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.now()).strftime("%Y-%m-%d-%H%M")
-    archive = dest_dir / f"jobscout-{stamp}.tar.gz"
+    archive = dest_dir / f"{prefix}-{stamp}.tar.gz"
     # Never overwrite an existing backup. Two runs inside the same minute would
     # otherwise collide and the first would be silently replaced, which loses a
     # restore point in the one command whose whole job is not losing things.
     if archive.exists():
         for n in range(2, 1000):
-            candidate = dest_dir / f"jobscout-{stamp}-{n}.tar.gz"
+            candidate = dest_dir / f"{prefix}-{stamp}-{n}.tar.gz"
             if not candidate.exists():
                 archive = candidate
                 break

@@ -240,3 +240,83 @@ def test_the_written_value_actually_drives_the_scanner_loader(cfgfile):
     api.write_setting(cfgfile, "sources.enabled", ["xing", "hn"])
     enabled = _yaml.safe_load(cfgfile.read_text(encoding="utf-8"))["sources"]["enabled"]
     assert [name for name, _ in iter_sources(enabled)] == ["xing", "hn"]
+
+
+# --- the theme --------------------------------------------------------------
+#
+# A display preference: it must never be able to stop the window from opening,
+# and it must be storable in a config written before ui.theme existed.
+
+def test_theme_defaults_to_system(tmp_path):
+    from jobscout import api
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    assert api.read_theme(f) == "system"
+
+
+def test_a_missing_config_does_not_raise(tmp_path):
+    from jobscout import api
+    assert api.read_theme(tmp_path / "nope.yaml") == "system"
+
+
+def test_a_nonsense_stored_theme_falls_back_to_system(tmp_path):
+    from jobscout import api
+    f = tmp_path / "config.yaml"
+    f.write_text("ui:\n  theme: chartreuse\n", encoding="utf-8")
+    assert api.read_theme(f) == "system"
+
+
+def test_theme_round_trips(tmp_path):
+    from jobscout import api
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    api.write_theme(f, "dark")
+    assert api.read_theme(f) == "dark"
+    api.write_theme(f, "light")
+    assert api.read_theme(f) == "light"
+
+
+def test_writing_a_theme_creates_the_section_in_an_older_config(tmp_path):
+    """Your config predates ui:, and set_scalar will not invent structure."""
+    from jobscout import api
+    import yaml
+    f = tmp_path / "config.yaml"
+    original = "preferences:\n  min_score: 6   # keep me\n"
+    f.write_text(original, encoding="utf-8")
+
+    api.write_theme(f, "dark")
+
+    text = f.read_text(encoding="utf-8")
+    assert yaml.safe_load(text)["ui"]["theme"] == "dark"
+    assert "keep me" in text
+
+
+def test_writing_a_theme_twice_does_not_grow_the_file(tmp_path):
+    import pathlib as _p
+    from jobscout import api
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    api.write_theme(f, "dark")
+    n = len(f.read_text(encoding="utf-8").splitlines())
+    api.write_theme(f, "light")
+    api.write_theme(f, "dark")
+    assert len(f.read_text(encoding="utf-8").splitlines()) == n
+
+
+def test_a_bad_theme_is_refused(tmp_path):
+    import pytest
+    from jobscout import api
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        api.write_theme(f, "chartreuse")
+    assert "ui:" not in f.read_text(encoding="utf-8"), "a refused write must not touch the file"
+
+
+def test_the_template_ships_the_ui_section():
+    """A fresh install must have somewhere to store the theme without a
+    create-on-demand step, and both paths come from one source."""
+    from jobscout.config import DEFAULT_CONFIG, UI_SECTION_BODY
+    import yaml
+    assert yaml.safe_load(DEFAULT_CONFIG)["ui"]["theme"] == "system"
+    assert any("theme:" in line for line in UI_SECTION_BODY)

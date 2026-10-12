@@ -225,12 +225,25 @@ cp -r ~/.jobscout ~/jobscout-backup
 If something does remove your workspace, open jobscout again: it will find the
 backup and offer to restore it. Or, from a terminal, `jobscout restore`.
 
+### If you use profiles
+
+Everything above still applies, and the data to protect is a little larger.
+Each profile is its own workspace under `~/.jobscout/profiles/<name>/`, with its
+own `config.yaml` and `jobscout.db`, so the folder to keep is the whole of
+`~/.jobscout/` — the base workspace and the `profiles/` directory inside it.
+Deep-uninstall tools will happily take both.
+
+Backups are unaffected: `jobscout backup` archives the profile you are currently
+using, and removing a profile with `jobscout profile remove NAME --yes` writes
+its own backup named after that profile before deleting anything.
+
 ### What is worth keeping, and what is not
 
 - `config.yaml` — worth keeping. It is heavily commented and hand-editable, and
   a fresh one is generic. Your edits are the valuable part.
 - `jobscout.db` — your triage state. The postings can be rebuilt by scanning
-  again, but your saved / applied / dismissed marks cannot be recreated.
+  again, but your saved / applied / dismissed marks cannot be recreated. With
+  profiles there is one of these per profile.
 - `reports/` — regenerable any time with `jobscout digest --all`.
 
 ### Removing everything

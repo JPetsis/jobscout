@@ -953,6 +953,84 @@ def cmd_goal(args) -> int:
     return 0
 
 
+def _abbrev(path: str) -> str:
+    """~/.jobscout instead of /Users/someone/.jobscout."""
+    try:
+        return "~/" + str(Path(path).relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def cmd_profile(args) -> int:
+    from . import profiles
+    action = (args.action or "list").lower()
+    name = (args.name or "").strip()
+
+    if action in ("list", "ls", "show"):
+        rows = profiles.list_profiles()
+        print(ui.bold("profiles") + ui.dim(
+            "  (each is a separate workspace: its own config, database and reports)"))
+        for r in rows:
+            mark = ui.cyan("→ ") if r["active"] else "  "
+            n = r["postings"]
+            count = f"{n:,} postings" if isinstance(n, int) else "empty"
+            print(f"{mark}{ui.bold(r['label']):<20} {ui.dim(count):<28} "
+                  f"{ui.dim(_abbrev(r['root']))}")
+        print(ui.dim("\nswitch: jobscout profile use <name>   ·   "
+                     "create: jobscout profile create <name>"))
+        return 0
+
+    # `Default` is spelled with a capital in the list, but accept any casing
+    if name.lower() == profiles.DEFAULT_LABEL.lower():
+        name = ""
+
+    if action in ("use", "switch", "on"):
+        if not name:
+            print(ui.red("which profile? — `jobscout profile list` shows them"))
+            return 1
+        if profiles.find(name) is None:
+            print(ui.red(f"no profile called '{name}' — see `jobscout profile list`"))
+            return 1
+        profiles.write_active(name)
+        row = profiles.find(name)
+        print(ui.cyan(f"now using: {row['label']}") + ui.dim(f"  ({_abbrev(row['root'])})"))
+        return 0
+
+    if action in ("create", "new", "add"):
+        problem = profiles.name_problem(name)
+        if problem:
+            print(ui.red(problem))
+            return 1
+        try:
+            root = profiles.create(name)
+        except ValueError as e:
+            print(ui.red(str(e)))
+            return 1
+        print(ui.cyan(f"created profile '{name}'") + ui.dim(f"  ({_abbrev(root)})"))
+        print(ui.dim("it starts empty, with the default config and no postings."))
+        print(ui.dim(f"switch to it with: jobscout profile use {name}"))
+        return 0
+
+    if action in ("remove", "rm", "delete"):
+        if not args.yes:
+            print(ui.red(f"this deletes the profile '{name}' and its database."))
+            print(ui.dim("a backup is taken first. add --yes to go ahead:"))
+            print(ui.dim(f"    jobscout profile remove {name} --yes"))
+            return 1
+        try:
+            archive = profiles.remove(name)
+        except ValueError as e:
+            print(ui.red(str(e)))
+            return 1
+        print(ui.cyan(f"removed profile '{name}'"))
+        print(ui.dim(f"safety copy kept at {_abbrev(str(archive))}"))
+        print(ui.dim("restore it by unpacking into that profile's folder."))
+        return 0
+
+    print(ui.red(f"unknown action '{action}' — use list, use, create or remove"))
+    return 1
+
+
 # ---------------------------------------------------------------- main
 
 def main(argv=None) -> int:
@@ -1039,6 +1117,15 @@ def main(argv=None) -> int:
     p.add_argument("--off", action="store_true", help="deactivate (full pool again)")
     p.add_argument("--clear", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_goal)
+
+    p = sub.add_parser("profile",
+                       help="switch between separate workspaces (profiles)")
+    p.add_argument("action", nargs="?", default="list",
+                   help="list (default), use <name>, create <name>, remove <name>")
+    p.add_argument("name", nargs="?")
+    p.add_argument("--yes", action="store_true",
+                   help="confirm removing a profile and its database")
+    p.set_defaults(fn=cmd_profile)
 
     p = sub.add_parser("show", help="show one posting (fetches the full description if needed)")
     p.add_argument("id", type=int)

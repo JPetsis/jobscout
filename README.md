@@ -63,6 +63,12 @@ non-technical user needs is in it:
 - **Edit your profile.** The job titles you want, your skills and how much you
   care about each, the countries and places you'll accept, and how strict the
   cutoffs are.
+- **Several people, or several searches.** If more than one profile exists the
+  window asks who's using it before it opens, and each profile is a separate
+  workspace with its own settings, job boards and saved postings. See
+  [Profiles](#profiles).
+- **Pick your colours.** A switcher in the header: follow the system, or pin
+  light or dark. Stored in `config.yaml` as `ui.theme`.
 - **Install updates.** When a newer release exists the window says so and
   offers to install it. Nothing is downloaded until you press the button, and
   jobscout only quits to replace itself when you tell it to. See
@@ -79,6 +85,47 @@ the window accepts are validated before they reach disk.
 
 Digests and the terminal triage loop stay in the CLI (`jobscout digest`,
 `jobscout triage`).
+
+
+## Profiles
+
+A profile is a whole workspace, not a filter over a shared pool:
+
+```
+~/.jobscout/                    the base, and the "Default" profile
+  config.yaml
+  jobscout.db
+  active-profile                which profile is in use
+  profiles/
+    Archaeology/                a profile: its own config, database and reports
+    Freelance/
+```
+
+That distinction matters for two cases. A **second person** on the same computer
+gets a genuinely empty app rather than the first person's postings filtered
+differently. And one person can keep **two searches configured completely
+differently** — different titles, different skills, different countries —
+without either contaminating the other.
+
+A new profile starts from the shipped template with no database at all, so it
+never inherits the profile you were just using. Switch from the window
+(Settings → the Profile block, or the picker that opens at launch whenever more
+than one profile exists), or from a terminal:
+
+```
+jobscout profile                     # what exists, and what is in use
+jobscout profile create Archaeology  # a new, empty workspace
+jobscout profile use Archaeology     # switch to it
+jobscout profile remove Archaeology --yes
+```
+
+`remove` takes a backup into `~/jobscout-backups/` first and deletes nothing if
+that backup fails. The archive is named after the profile, because a directory
+of backups gets browsed by filename, and `jobscout-2026-...tar.gz` does not say
+which profile is inside it.
+
+Your existing install simply *is* the Default profile — the base root has not
+moved, so there is nothing to migrate.
 
 ## Commands
 
@@ -103,6 +150,7 @@ off when piped.
 | `jobscout rescore` | re-apply your current preferences to everything stored |
 | `jobscout stats` | per-source counts and recent runs |
 | `jobscout discover` | for URLs a source blocks, find and test a public API to check liveness against (reads URLs on stdin) |
+| `jobscout profile` | list profiles; `use NAME` switches, `create NAME` makes an empty one, `remove NAME --yes` deletes one (after taking a backup) |
 | `jobscout backup` | archive the workspace (config, database, reports) to one file; `--list` shows them |
 | `jobscout restore` | put a backup back; `--from FILE` picks one, `--overwrite` replaces an existing workspace |
 | `jobscout update` | check for a newer build; `--check` only reports, `--yes` installs it, `--from FILE` installs a build you already downloaded |

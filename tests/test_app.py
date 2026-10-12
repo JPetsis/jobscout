@@ -449,3 +449,100 @@ def test_main_still_shows_the_error_when_there_is_no_backup(tmp_path, monkeypatc
 
     assert appmod.main() == 1
     assert "no config found" in created.get("html", "")
+
+
+# --- profiles through the window's API --------------------------------------
+#
+# The picker's correctness rests on these: who gets asked, that a switch really
+# rebinds the workspace, and that a switch cannot strand a running scan.
+
+@pytest.fixture()
+def api(tmp_path, monkeypatch):
+    """A JsApi on a throwaway workspace with one extra profile."""
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout import profiles
+    from jobscout.config import init_workspace
+    init_workspace(profiles.base_root())
+    profiles.create("Second")
+    return appmod.JsApi()
+
+
+def test_launch_asks_when_there_is_a_choice(api):
+    out = api.launch()
+    assert out["ask"] is True
+    assert len(out["profiles"]) == 2
+
+
+def test_launch_asks_only_once_per_run(api):
+    """After a switch the page reloads and asks again; it must be told no."""
+    assert api.launch()["ask"] is True
+    assert api.launch()["ask"] is False
+
+
+def test_launch_does_not_ask_with_a_single_profile(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout.config import init_workspace
+    from jobscout import profiles
+    init_workspace(profiles.base_root())
+    out = appmod.JsApi().launch()
+    assert out["ask"] is False, "one profile is not a choice worth a screen"
+
+
+def test_switching_rebinds_config_and_database(api):
+    before = api.cfg.root
+    out = api.switch_profile("Second")
+    assert out["ok"] is True
+    assert api.cfg.root != before
+    assert api.cfg.root.name == "Second"
+    # ask sqlite which file it actually has open, rather than trusting the
+    # config: the point of the switch is that the CONNECTION moved too
+    opened = api.conn.execute("PRAGMA database_list").fetchone()[2]
+    assert opened.endswith("profiles/Second/jobscout.db"), opened
+
+
+def test_switching_writes_the_choice_to_disk(api):
+    from jobscout import profiles
+    api.switch_profile("Second")
+    assert profiles.read_active() == "Second"
+
+
+def test_switching_to_something_that_is_not_there_is_refused(api):
+    out = api.switch_profile("ghost")
+    assert out["ok"] is False
+    assert "ghost" in out["error"]
+
+
+def test_a_switch_is_refused_while_a_scan_is_running(api, monkeypatch):
+    """ScanJob keeps its own config and connection, so switching mid-scan would
+    have it writing into the profile you just left."""
+    class Busy:
+        running = True
+
+    monkeypatch.setattr(appmod, "SCAN", Busy())
+    out = api.switch_profile("Second")
+    assert out["ok"] is False
+    assert "scan is running" in out["error"]
+
+
+def test_creating_from_the_window_makes_and_activates_it(api):
+    from jobscout import profiles
+    out = api.create_profile("Archaeology")
+    assert out["ok"] is True
+    assert out["created"] == "Archaeology"
+    assert profiles.read_active() == "Archaeology"
+    assert api.cfg.root.name == "Archaeology", "and the window follows it"
+
+
+def test_creating_reports_a_bad_name_instead_of_raising(api):
+    out = api.create_profile("../escape")
+    assert out["ok"] is False
+    assert "letters, numbers" in out["error"]
+
+
+def test_creating_without_activating_leaves_the_workspace_alone(api):
+    from jobscout import profiles
+    before = api.cfg.root
+    out = api.create_profile("Idle", activate=False)
+    assert out["ok"] is True
+    assert profiles.read_active() == ""
+    assert api.cfg.root == before

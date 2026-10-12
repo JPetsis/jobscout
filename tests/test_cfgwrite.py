@@ -491,3 +491,68 @@ def test_no_temp_files_are_left_behind(tmp_path):
     cfgwrite.edit(p, "scalar", "preferences.min_score", 9)
     leftovers = [f.name for f in tmp_path.iterdir() if f.name.startswith(".jobscout-")]
     assert leftovers == [], leftovers
+
+
+# --- ensure_section --------------------------------------------------------
+#
+# set_scalar refuses to invent structure, and rightly. This is the one
+# deliberate exception, so it is tested for the damage it could do: appending a
+# section that is already there, or eating the file's comments.
+
+def test_ensure_section_appends_a_missing_section():
+    text = "preferences:\n  min_score: 6\n"
+    out = cfgwrite.ensure_section(text, "ui", ["theme: dark"])
+    assert "ui:\n  theme: dark\n" in out
+    assert "preferences:\n  min_score: 6\n" in out
+
+
+def test_ensure_section_is_a_no_op_when_the_section_exists():
+    text = "preferences:\n  min_score: 6\n\nui:\n  theme: light\n"
+    assert cfgwrite.ensure_section(text, "ui", ["theme: dark"]) == text
+
+
+def test_ensure_section_does_not_mistake_a_comment_for_the_section():
+    """A commented-out `# ui:` is documentation, not the section."""
+    text = "# ui:\n#   theme: light\npreferences:\n  min_score: 6\n"
+    out = cfgwrite.ensure_section(text, "ui", ["theme: dark"])
+    assert out != text
+    assert out.count("\nui:\n") == 1
+
+
+def test_ensure_section_does_not_match_a_nested_key():
+    """A `ui:` nested under something else is not a top-level section."""
+    text = "preferences:\n  ui:\n    theme: light\n"
+    out = cfgwrite.ensure_section(text, "ui", ["theme: dark"])
+    assert out != text
+
+
+def test_ensure_section_keeps_every_comment():
+    text = "# top\npreferences:\n  # inline\n  min_score: 6   # trailing\n"
+    out = cfgwrite.ensure_section(text, "ui", ["theme: dark"])
+    for line in text.splitlines():
+        assert line in out, line
+
+
+def test_ensure_section_result_is_valid_yaml():
+    import yaml
+    text = "preferences:\n  min_score: 6\n"
+    out = cfgwrite.ensure_section(text, "ui", ["theme: dark"])
+    assert yaml.safe_load(out) == {"preferences": {"min_score": 6},
+                                  "ui": {"theme": "dark"}}
+
+
+def test_ensure_section_adds_the_missing_newline_first():
+    """A file with no trailing newline must not swallow the new section."""
+    out = cfgwrite.ensure_section("preferences:\n  min_score: 6", "ui",
+                                  ["theme: dark"])
+    import yaml
+    assert yaml.safe_load(out)["ui"] == {"theme": "dark"}
+
+
+def test_ensure_section_through_edit_is_atomic(tmp_path):
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    assert cfgwrite.edit(f, "section", "ui", ["theme: dark"]) is True
+    assert "ui:" in f.read_text(encoding="utf-8")
+    # and again: no second section, no change reported
+    assert cfgwrite.edit(f, "section", "ui", ["theme: dark"]) is False

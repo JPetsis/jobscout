@@ -1,3 +1,9 @@
+/* The palette. Light is the default; dark is a sibling block rather than a
+   @media query, because the window resolves "system" to one of these two in JS
+   and sets data-theme accordingly. That keeps ONE copy of each palette: a
+   prefers-color-scheme block alongside an explicit override would mean writing
+   every dark token twice, and the two would drift.
+   color-scheme makes native parts (scrollbars, form controls) follow too. */
 :root {
   --bg: #f6f6f7;
   --panel: #ffffff;
@@ -10,21 +16,21 @@
   --ok: #1a7f37;
   --warn: #9a6700;
   --radius: 10px;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16171a;
-    --panel: #1e1f23;
-    --line: #32343a;
-    --ink: #ececf0;
-    --muted: #9a9aa2;
-    --gold: #e3b341;
-    --blue: #7aa2ff;
-    --chip: #232a3d;
-    --ok: #3fb950;
-    --warn: #d29922;
-  }
+:root[data-theme="dark"] {
+  --bg: #16171a;
+  --panel: #1e1f23;
+  --line: #32343a;
+  --ink: #ececf0;
+  --muted: #9a9aa2;
+  --gold: #e3b341;
+  --blue: #7aa2ff;
+  --chip: #232a3d;
+  --ok: #3fb950;
+  --warn: #d29922;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -116,6 +122,8 @@ body {
 }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--chip); color: var(--blue); font-weight: 600; }
+/* the theme switcher is icon-only: glyphs are narrower than words */
+.seg.theme button { padding: 7px 9px; font-size: 13px; line-height: 1; }
 
 .count { font-size: 12.5px; color: var(--muted); margin-left: auto; }
 
@@ -340,3 +348,48 @@ button.ghost.primary {
   background: var(--blue); border-color: var(--blue); color: #fff;
 }
 button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
+
+/* ---- the profile picker ---- */
+.picker {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.picker-card {
+  width: 100%; max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 18px 48px rgba(0,0,0,.18);
+}
+.picker-card h2 { margin: 0 0 6px; font-size: 17px; }
+.picker-card > .muted { margin: 0 0 16px; font-size: 12.5px; line-height: 1.5; }
+.picker-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.picker-item {
+  display: flex; align-items: baseline; gap: 10px;
+  width: 100%; text-align: left;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 13px; font: inherit; cursor: pointer;
+}
+.picker-item:hover { border-color: var(--blue); }
+.picker-item .pi-name { font-weight: 600; }
+.picker-item .pi-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
+.picker-item[aria-current="true"] { border-color: var(--blue); background: var(--chip); }
+/* keyboard focus is a ring, never a fill: the same look as "this is the one in
+   use" would make two rows read as selected */
+.picker-item:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.picker-new { display: flex; gap: 8px; }
+.picker-new input {
+  flex: 1; font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+.picker-new input:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+.picker-err { margin: 10px 0 0; font-size: 12.5px; color: var(--warn); }
+.linkish {
+  display: block; margin: 14px auto 0; background: none; border: 0;
+  color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
+  text-decoration: underline;
+}

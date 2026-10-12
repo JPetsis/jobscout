@@ -5,8 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>jobscout</title>
 <link rel="stylesheet" href="styles.css">
+<script>
+/* Decide the palette before the first paint. The OS preference is available
+   synchronously; the stored choice arrives from the bridge a moment later and
+   corrects this if the user picked the opposite. Without it a dark-mode user
+   on a light OS gets a white flash before their saved choice lands. */
+document.documentElement.dataset.theme =
+  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+</script>
 </head>
 <body>
+
+<!-- Who is using jobscout? Shown once per run, and only when there is more
+     than one profile to choose between. Also reachable from Settings. -->
+<div id="picker" class="picker" role="dialog" aria-modal="true"
+     aria-labelledby="picker-title" hidden>
+  <div class="picker-card">
+    <h2 id="picker-title">Who's using jobscout?</h2>
+    <p class="muted">Each profile keeps its own settings, job boards and saved
+      postings — nothing is shared between them.</p>
+    <div id="picker-list" class="picker-list"></div>
+    <form id="picker-new" class="picker-new" autocomplete="off">
+      <input id="picker-name" type="text" maxlength="40" autocomplete="off"
+             placeholder="Name for a new profile"
+             aria-label="Name for a new profile">
+      <button id="picker-create" class="ghost" type="submit">Create</button>
+    </form>
+    <p class="picker-err" id="picker-err" hidden></p>
+    <button id="picker-cancel" class="linkish" type="button" hidden>Cancel</button>
+  </div>
+</div>
 
 <header class="bar">
   <div class="brand">
@@ -15,6 +43,11 @@
   </div>
   <div class="stats" id="stats"><span class="muted">loading…</span></div>
   <div class="bar-actions">
+    <div class="seg theme" id="theme" role="group" aria-label="Colour scheme">
+      <button data-v="system" title="Follow the system setting" aria-label="Follow the system setting">◐</button>
+      <button data-v="light" title="Light" aria-label="Light">☀</button>
+      <button data-v="dark" title="Dark" aria-label="Dark">☾</button>
+    </div>
     <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
     <button id="settings-btn" class="ghost" title="Edit your profile: titles, skills, locations, strictness">Settings</button>
   </div>
