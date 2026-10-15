@@ -135,16 +135,25 @@ def _inject(text: str, source: str, token: str) -> tuple[str, str]:
             return "".join(lines), "added"
         tokens_here = [rest] if rest else []          # block list
         last_item = i
+        item_indent = None
         for j in range(i + 1, sub_end):
-            item_m = re.match(r"^\s*-\s*(\S.*?)\s*$", lines[j])
+            item_m = re.match(r"^(\s*)-\s*(\S.*?)\s*$", lines[j])
             if item_m:
-                tokens_here.append(item_m.group(1))
+                if item_indent is None:
+                    # Reuse the EXISTING items' indent: yaml.safe_dump puts
+                    # items at the key's own indent, hand-written configs
+                    # indent them by 2 more. A deeper insert folds the new
+                    # item into the previous scalar (silent corruption:
+                    # ["teamviewer", "sandboxinteractive"] became
+                    # ["teamviewer - sandboxinteractive"]).
+                    item_indent = item_m.group(1)
+                tokens_here.append(item_m.group(2))
                 last_item = j
             elif lines[j].strip():
                 break
         if token in tokens_here:
             return text, "exists"
-        lines.insert(last_item + 1, f"{indent}  - {token}\n")
+        lines.insert(last_item + 1, f"{item_indent or (indent + '  ')}- {token}\n")
         return "".join(lines), "added"
 
     lines.insert(sub + 1, f"    tokens: [{token}]\n")
@@ -161,15 +170,44 @@ def add_token(path: Path, source: str, token: str) -> str:
 
 
 def _enable_in_list(text: str, source: str) -> tuple[str, str]:
-    """Add ``source`` to ``sources.enabled`` (inline list). (new_text, status)."""
+    """Add ``source`` to ``sources.enabled``. (new_text, status).
+
+    Handles both styles: the template's inline flow list and a block list
+    (what yaml.safe_dump produces, i.e. any config that has been through a
+    YAML round-trip tool). Block items keep their own indent for the same
+    reason _inject does.
+    """
     m = re.search(r"(?m)^(\s*)enabled\s*:\s*\[(.*?)\]", text, re.S)
+    if m:
+        inner = m.group(2)
+        if source in [t.strip() for t in inner.split(",") if t.strip()]:
+            return text, "exists"
+        new_inner = (inner.rstrip() + f", {source}") if inner.strip() else f" {source}"
+        return text[:m.start(2)] + new_inner + text[m.end(2):], "added"
+
+    m = re.search(r"(?m)^(\s*)enabled\s*:\s*(?:#.*)?\n", text)
     if not m:
         return text, "missing"
-    inner = m.group(2)
-    if source in [t.strip() for t in inner.split(",") if t.strip()]:
+    key_indent = m.group(1)
+    item_rx = re.compile(r"^(\s*)-\s*(\S.*?)\s*$")
+    pos = last_end = m.end()
+    item_indent = None
+    found: list[str] = []
+    while pos < len(text):
+        nl = text.find("\n", pos)
+        line = text[pos:nl if nl != -1 else len(text)]
+        im = item_rx.match(line)
+        if im and (item_indent is None or im.group(1) == item_indent):
+            item_indent = item_indent or im.group(1)
+            found.append(im.group(2))
+            last_end = (nl + 1) if nl != -1 else len(text)
+            pos = last_end
+        else:
+            break
+    if source in found:
         return text, "exists"
-    new_inner = (inner.rstrip() + f", {source}") if inner.strip() else f" {source}"
-    return text[:m.start(2)] + new_inner + text[m.end(2):], "added"
+    indent = item_indent or (key_indent + "  ")
+    return text[:last_end] + f"{indent}- {source}\n" + text[last_end:], "added"
 
 
 def enable_source(path: Path, source: str) -> str:

@@ -151,3 +151,25 @@ def test_inject_and_enable_teamtailor_on_template():
     new2, status2 = companies._enable_in_list(DEFAULT_CONFIG, "teamtailor")
     assert status2 == "added"
     assert yaml.safe_load(new2)["sources"]["enabled"][-1] == "teamtailor"
+
+
+def test_inject_block_list_reuses_item_indent():
+    """yaml.safe_dump renders block lists at the KEY's indent; a deeper insert
+    folds into the previous scalar and silently corrupts the list (seen in a
+    lab config: ["teamviewer", "sandboxinteractive"] -> "teamviewer - sandboxinteractive")."""
+    text = "companies:\n  teamtailor:\n    tokens:\n    - teamviewer\n"
+    new, status = companies._inject(text, "teamtailor", "sandboxinteractive")
+    assert status == "added"
+    assert _load(new)["teamtailor"]["tokens"] == ["teamviewer", "sandboxinteractive"]
+
+
+def test_enable_source_block_list():
+    text = "sources:\n  enabled:\n  - hn\n  - lever\n"
+    new, status = companies._enable_in_list(text, "teamtailor")
+    assert status == "added"
+    assert yaml.safe_load(new)["sources"]["enabled"] == ["hn", "lever", "teamtailor"]
+    assert companies._enable_in_list(new, "teamtailor") == (new, "exists")
+    empty = "sources:\n  enabled:\n"
+    new2, status2 = companies._enable_in_list(empty, "hn")
+    assert status2 == "added"
+    assert yaml.safe_load(new2)["sources"]["enabled"] == ["hn"]
