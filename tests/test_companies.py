@@ -124,3 +124,30 @@ def test_enable_source_on_real_template():
     assert after[-1] == "lever"                 # appended
     assert after[:-1] == before                 # nothing else disturbed
     assert DEFAULT_CONFIG.count("#") == new.count("#")   # comments untouched
+
+
+def test_detect_teamtailor():
+    assert ("teamtailor", "teamviewer") in companies.detect(
+        "", "https://teamviewer.teamtailor.com/jobs")
+    html = '<a href="https://heydata.teamtailor.com/jobs/7042212-x">join us</a>'
+    assert ("teamtailor", "heydata") in companies.detect(html)
+    # infrastructure subdomains are not boards
+    assert companies.detect("", "https://www.teamtailor.com/") == []
+    assert companies.detect("", "https://cdn.teamtailor.com/x") == []
+
+
+def test_validate_teamtailor_counts_items():
+    fetcher = FakeFetcher((200, json.dumps({"items": [1, 2, 3, 4]})))
+    ok, detail = companies.validate(fetcher, "teamtailor", "teamviewer")
+    assert ok and "4 open role(s)" in detail
+
+
+def test_inject_and_enable_teamtailor_on_template():
+    new, status = companies._inject(DEFAULT_CONFIG, "teamtailor", "teamviewer")
+    assert status == "added"
+    assert "teamviewer" in _load(new)["teamtailor"]["tokens"]
+    before = yaml.safe_load(DEFAULT_CONFIG)["sources"]["enabled"]
+    assert "teamtailor" not in before              # ships disabled until set up
+    new2, status2 = companies._enable_in_list(DEFAULT_CONFIG, "teamtailor")
+    assert status2 == "added"
+    assert yaml.safe_load(new2)["sources"]["enabled"][-1] == "teamtailor"

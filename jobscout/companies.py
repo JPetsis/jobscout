@@ -24,7 +24,12 @@ PATTERNS = [
     ("lever", re.compile(r"jobs\.lever\.co/([A-Za-z0-9_-]+)", re.I)),
     ("workable", re.compile(r"apply\.workable\.com/([A-Za-z0-9_-]+)", re.I)),
     ("smartrecruiters", re.compile(r"jobs\.smartrecruiters\.com/([A-Za-z0-9_-]+)", re.I)),
+    # Teamtailor boards live at <token>.teamtailor.com; the token is the
+    # subdomain. Infrastructure subdomains must not be mistaken for boards.
+    ("teamtailor", re.compile(r"([A-Za-z0-9-]+)\.teamtailor\.com", re.I)),
 ]
+
+_TT_INFRA = {"www", "api", "cdn", "app", "support", "help", "blog", "status"}
 
 VALIDATE = {
     "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{t}/jobs",
@@ -33,13 +38,16 @@ VALIDATE = {
     "lever": "https://api.lever.co/v0/postings/{t}?mode=json",
     "workable": "https://apply.workable.com/api/v1/widget/accounts/{t}?details=true",
     "smartrecruiters": "https://api.smartrecruiters.com/v1/companies/{t}/postings",
+    # Teamtailor boards expose a public JSON Feed; "items" is the role list.
+    "teamtailor": "https://{t}.teamtailor.com/jobs.json",
 }
 _HINT = {"greenhouse": "https://boards.greenhouse.io/<token>",
          "ashby": "https://jobs.ashbyhq.com/<token>",
          "recruitee": "https://<company>.recruitee.com",
          "lever": "https://jobs.lever.co/<token>",
          "workable": "https://apply.workable.com/<token>/",
-         "smartrecruiters": "https://jobs.smartrecruiters.com/<id>"}
+         "smartrecruiters": "https://jobs.smartrecruiters.com/<id>",
+         "teamtailor": "https://<token>.teamtailor.com/jobs"}
 
 
 def detect(text: str = "", *urls: str) -> list[tuple[str, str]]:
@@ -47,6 +55,8 @@ def detect(text: str = "", *urls: str) -> list[tuple[str, str]]:
     out, seen = [], set()
 
     def add(src: str, tok: str) -> None:
+        if src == "teamtailor" and tok.lower() in _TT_INFRA:
+            return
         if (src, tok) not in seen:
             seen.add((src, tok))
             out.append((src, tok))
@@ -77,7 +87,7 @@ def validate(fetcher: Fetcher, source: str, token: str) -> tuple[bool, str]:
     except ValueError:
         return False, "API answered, but not JSON"
     if isinstance(data, dict):
-        for key in ("jobs", "content", "results"):
+        for key in ("jobs", "content", "results", "items"):
             if isinstance(data.get(key), list):
                 return True, f"{len(data[key])} open role(s)"
         return True, "board answered"

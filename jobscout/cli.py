@@ -765,8 +765,8 @@ def cmd_add_company(args) -> int:
             return 1
         cands = companiesmod.detect(body, url)
     if not cands:
-        print(ui.red("no Greenhouse / Ashby / Lever / Workable / SmartRecruiters board "
-                     "found on that page"))
+        print(ui.red("no Greenhouse / Ashby / Lever / Workable / SmartRecruiters / "
+                     "Teamtailor board found on that page"))
         print(ui.dim("  hint: open the careers page, click into a role, and pass the URL "
                      "of the job listing itself"))
         return 1
@@ -1155,7 +1155,8 @@ def main(argv=None) -> int:
     p.set_defaults(fn=cmd_verify)
 
     p = sub.add_parser("add-company",
-                       help="find the Greenhouse/Ashby/Lever board behind a careers page and add it")
+                       help="find the ATS board behind a careers page (Greenhouse/Ashby/Lever/"
+                            "Workable/SmartRecruiters/Teamtailor) and add it")
     p.add_argument("url", help="careers page or job-listing URL")
     p.set_defaults(fn=cmd_add_company)
 
