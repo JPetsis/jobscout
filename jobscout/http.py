@@ -1,4 +1,4 @@
-"""Polite HTTP client: browser UA, per-host pacing, retries, gzip.
+"""Polite HTTP client: browser UA, per-host pacing, retries, gzip, declared charsets.
 
 Never raises for plain HTTP error statuses (callers inspect them); raises
 FetchError only when the network itself failed after retries.
@@ -75,7 +75,16 @@ class Fetcher:
                     data = r.read()
                     if r.headers.get("Content-Encoding") == "gzip":
                         data = gzip.decompress(data)
-                    return r.status, data.decode("utf-8", "replace")
+                    # Honour the charset the server declares: myScience
+                    # serves ISO-8859-15, and decoding it as UTF-8 turned
+                    # every umlaut into \ufffd. No declaration -> UTF-8,
+                    # which is what the other boards and feeds speak.
+                    charset = r.headers.get_content_charset() or "utf-8"
+                    try:
+                        text = data.decode(charset, "replace")
+                    except LookupError:
+                        text = data.decode("utf-8", "replace")
+                    return r.status, text
             except urllib.error.HTTPError as e:
                 body = b""
                 try:

@@ -52,18 +52,20 @@ BROAD_CAPABLE = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
     "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
+    "myscience",
 }
 
 # Adapters that take `{"keywords", "location", "pages"}` verbatim. Anything
 # else (RSS/board sources like hn, larajobs, himalayas) is not query-driven
 # and must not be given generated queries. Each of the 2026-10-15 additions
 # maps `keywords` to its own parameter (query/SearchWhat/q/k/keyword);
-# jobware and governmentjobs do NOT honour `location` and say so loudly in
-# fetcher.errors instead of dropping it silently.
+# jobware, governmentjobs and myscience do NOT honour `location` and say so
+# loudly in fetcher.errors instead of dropping it silently.
 QUERY_DRIVEN = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
     "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
+    "myscience",
 }
 
 # `location` semantics differ per board, so one profile value cannot be shared.

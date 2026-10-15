@@ -186,7 +186,8 @@ sources:
             arbeitnow, berlinstartupjobs, ams, eures, jobsat, hn, remotive, wwr, remoteok,
             larajobs, workingnomads, nodesk, himalayas, greenhouse, ashby, recruitee,
             themuse, germantechjobs, swissdevjobs, jobup, jobscout24, jobware, talent,
-            englishjobs, governmentjobs, jobicy, wordpressjobs, pythonjobs, fossjobs]
+            englishjobs, governmentjobs, jobicy, wordpressjobs, pythonjobs, fossjobs,
+            academics, wissenschaftskarriere, euraxess, myscience]
 
   linkedin:
     # LinkedIn's public guest search (no login). Keep the budget small or
@@ -353,6 +354,28 @@ sources:
     # which is why it is off by default.
     max_pages: 2             # 100 postings per page
 
+  academics:
+    # academics.de (ZEIT group): universities, research institutes and the
+    # public sector, every discipline. The listing URL ignores keyword
+    # search, so the newest pages are walked: `pages` x 50 postings.
+    pages: 2
+
+  wissenschaftskarriere:
+    # Wissenschaftskarriere (DUZ) academic board. Plain HTTP reaches the
+    # newest 20 offers; the rest of its result page loads by script.
+
+  euraxess:
+    # EURAXESS, the EU's official researcher-jobs portal (all disciplines
+    # incl. fellowships). 10 per page, newest first; the site's own paging
+    # is zero-based, `pages` here is 1-based like everywhere else.
+    pages: 2
+
+  myscience:
+    # myScience: science jobs in Germany, Switzerland and Austria. Keyword
+    # search via ?q=; one page (21 postings) per query. Does not take a
+    # location parameter.
+    queries: []              # from your profile unless set
+
 # Update checks. jobscout asks GitHub whether a newer release exists, at most
 # once a day, and shows a notice in the window if there is one. Nothing is
 # downloaded or installed until you press the button. Set check: false to turn
@@ -444,6 +467,10 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "wordpressjobs": {},
     "pythonjobs": {},
     "fossjobs": {},
+    "academics": {"pages": 2},
+    "wissenschaftskarriere": {},
+    "euraxess": {"pages": 2},
+    "myscience": {"queries": []},
 }
 
 

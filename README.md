@@ -429,6 +429,10 @@ Working today (all verified live, all free):
 | `teamtailor` | EU / DACH employers | per-company JSON Feed at `<token>.teamtailor.com/jobs.json`; add employers under `companies.teamtailor.tokens` |
 | `join` | DACH SMB employers | per-company boards `join.com/companies/<slug>`; add employers under `companies.join.tokens` |
 | `wordpressjobs` / `pythonjobs` / `fossjobs` | niches | small RSS feeds: WordPress, Python.org, FOSS jobs |
+| `academics` | DE (+AT/CH employers) | academics.de (ZEIT group): universities, institutes, public sector — every discipline. Walks the newest pages (50 cards each); keyword search on the listing URL is ignored |
+| `wissenschaftskarriere` | DE/AT/CH | DUZ academic board; plain HTTP reaches the newest 20 offers, the rest of its listing loads by script |
+| `euraxess` | EU | the EU's official researcher-jobs portal, 10 per page newest-first (the site's own paging is zero-based); keywords are GET-ignored, so it walks the feed |
+| `myscience` | DE/CH/AT | myScience science jobs; keyword search via `q` (21 postings per query); the only ISO-8859-15 source, which is why the Fetcher honours declared charsets |
 
 The two keyed sources ship **disabled**. Enable them in Settings once you have a
 key. If you enable one without a key, the scan says so by name and prints the
@@ -460,6 +464,10 @@ Known limitations, on purpose:
   results; do not pursue), hiring.cafe answers 403, remote.co fails TLS in
   every variant, and join.com's sitemap files are Cloudflare-403 while its
   board pages stay open.
+  The academic boards jobvector.de, hochschul-jobs.de and
+  science-jobs-de.de answer the same interactive check to plain HTTP;
+  the reachable academic sources are `academics`,
+  `wissenschaftskarriere`, `euraxess` and `myscience`.
 - XING/StepStone don't show per-card dates for some layouts — those postings
   simply have no `posted` date (they're never dropped for it).
 
@@ -555,7 +563,7 @@ What the spec puts in, and why it matters:
 | `jobscout/web/*` (`index.html`, `app.js`, `styles.css`) | loaded from disk at runtime (`app.py`); miss it and the window is blank |
 | `geonamescache` data (`cities*.json`) | offline location resolution (`geo.py` tier 2) |
 | `certifi`'s CA bundle | the TLS context used for `europa.eu` sources |
-| `hiddenimports` for all 25 `jobscout.sources.*` adapters | they are imported by name at runtime, so static analysis cannot see them |
+| `hiddenimports` for all 47 `jobscout.sources.*` adapters | they are imported by name at runtime, so static analysis cannot see them |
 | the pywebview backend for the build platform | also resolved by name at runtime (`webview/guilib.py`) |
 
 **Never bundled:** `~/.jobscout/config.yaml`, `~/.jobscout/jobscout.db` and
