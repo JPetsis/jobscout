@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Python.org Jobs Feed</title><link>https://www.python.org/jobs/</link><description>Python jobs from Python.org</description><atom:link href="https://www.python.org/jobs/feed/rss/" rel="self"/><language>en-us</language><lastBuildDate>Thu, 15 Oct 2026 18:22:44 +0000</lastBuildDate><item><title>Software Engineer - Full Stack, 3Gimbals</title><link>https://www.python.org/jobs/8177/</link><description>Remote, United States
+&lt;p&gt;3GIMBALS is seeking a Full-Stack Software Engineer with a strong front-end focus to help design, build, and deliver capabilities for OMEN™, our multi-domain data fusion and analytics platform. This role is ideal for an engineer with strong front-end development experience who is also comfortable working across the full application stack.&lt;/p&gt;
+&lt;p&gt;The Full-Stack Software Engineer will build responsive, intuitive user experiences using TypeScript and React, develop and integrate backend services and APIs using Python and FastAPI, and take features from initial design through deployment and operation in AWS. The position works closely with developers, analysts, and subject matter experts to translate complex mission and user requirements into practical software capabilities.&lt;/p&gt;
+&lt;p&gt;As part of a small, multidisciplinary team, this role provides meaningful ownership of the features developed and the opportunity to influence both the user experience and technical direction of the platform.&lt;/p&gt;
+&lt;p&gt;Key Responsibilities&lt;/p&gt;
+&lt;ul class="simple"&gt;
+&lt;li&gt;Design, develop, and maintain responsive, user-facing applications using TypeScript and React.&lt;/li&gt;
+&lt;li&gt;Translate complex workflows, data, and analytic capabilities into intuitive and effective user experiences.&lt;/li&gt;
+&lt;li&gt;Design, build, and maintain RESTful APIs and backend services using Python and FastAPI.&lt;/li&gt;
+&lt;li&gt;Integrate front-end applications with backend APIs, data services, and other OMEN platform capabilities.&lt;/li&gt;
+&lt;li&gt;Own software features throughout the development lifecycle, from requirements and technical design through implementation, testing, deployment, and sustainment.&lt;/li&gt;
+&lt;li&gt;Design and manage database schema changes and migrations using Alembic.&lt;/li&gt;
+&lt;li&gt;Build and maintain GitLab CI/CD pipelines to automate testing and application deployment.&lt;/li&gt;
+&lt;li&gt;Deploy, monitor, troubleshoot, and scale applications in AWS environments.&lt;/li&gt;
+&lt;li&gt;Write clean, maintainable, well-tested, and documented code.&lt;/li&gt;
+&lt;li&gt;Participate in code reviews, architecture and design discussions, and technical planning.&lt;/li&gt;
+&lt;li&gt;Collaborate with developers, analysts, subject matter experts, and other stakeholders to understand user needs and deliver effective solutions.&lt;/li&gt;
+&lt;li&gt;Contribute to engineering standards, development practices, and continuous improvement across the OMEN team.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;ul class="simple"&gt;
+&lt;li&gt;3–5 years of professional software engineering experience developing production applications.&lt;/li&gt;
+&lt;li&gt;Strong proficiency in Python.&lt;/li&gt;
+&lt;li&gt;US Citizenship&lt;/li&gt;
+&lt;li&gt;Professional experience developing modern front-end applications using TypeScript and React.&lt;/li&gt;
+&lt;li&gt;Hands-on experience developing APIs and backend services using FastAPI.&lt;/li&gt;
+&lt;li&gt;Experience managing database schema migrations using Alembic.&lt;/li&gt;
+&lt;li&gt;Experience using GitLab for source control and CI/CD pipelines.&lt;/li&gt;
+&lt;li&gt;Experience deploying and operating applications in AWS.&lt;/li&gt;
+&lt;li&gt;Solid understanding of software design principles, testing, debugging, and application performance.&lt;/li&gt;
+&lt;li&gt;Demonstrated ability to develop and deliver features across both the front end and backend of an application.&lt;/li&gt;
+&lt;li&gt;Strong written and verbal communication skills and the ability to collaborate effectively within a multidisciplinary team.&lt;/li&gt;
+&lt;/ul&gt;
+</description><guid>https://www.python.org/jobs/8177/</guid></item><item><title>Junior Machine Learning Engineer, HFT Architecture</title><link>https://www.python.org/jobs/8176/</link><description>Remote, Worldwide
+&lt;p&gt;HFT Architecture builds short-horizon price prediction and the trading system around it. This role works on the pipeline that turns order-book records into validated models, next to more experienced engineers: data preparation, experiments end to end, and the checks that keep the future out of a training set.&lt;/p&gt;
+&lt;p&gt;Fully remote, from anywhere in the world. Junior.&lt;/p&gt;
+&lt;p&gt;Base salary: USD 125,000–155,000 a year.&lt;/p&gt;
+&lt;p&gt;To apply: a link to your résumé, LinkedIn or GitHub, and one sentence on any of our articles. No file, no cover letter.&lt;/p&gt;
+&lt;p&gt;Apply: &lt;a class="reference external" href="https://hftarchitecture.com/careers/junior-machine-learning-engineer?utm_source=pythonorg&amp;amp;utm_medium=jobboard&amp;amp;utm_campaign=careers-2026-10" rel="noopener noreferrer"&gt;https://hftarchitecture.com/careers/junior-machine-learning-engineer?utm_source=pythonorg&amp;amp;utm_medium=jobboard&amp;amp;utm_campaign=careers-2026-10&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;You write Python every day, with tests; can explain the machine learning basics, including why ordinary cross-validation breaks on time series; and have one project of your own you can show and talk through.&lt;/p&gt;
+</description><guid>https://www.python.org/jobs/8176/</guid></item></channel></rss>

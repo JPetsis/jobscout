@@ -185,7 +185,8 @@ sources:
   enabled: [linkedin, stepstone, xing, stellenanzeigen, karriere_at, jobs_ch,
             arbeitnow, berlinstartupjobs, ams, eures, jobsat, hn, remotive, wwr, remoteok,
             larajobs, workingnomads, nodesk, himalayas, greenhouse, ashby, recruitee,
-            themuse]
+            themuse, germantechjobs, swissdevjobs, jobup, jobscout24, jobware, talent,
+            englishjobs, governmentjobs, jobicy, wordpressjobs, pythonjobs, fossjobs]
 
   linkedin:
     # LinkedIn's public guest search (no login). Keep the budget small or
@@ -310,6 +311,47 @@ sources:
     keyword: ""              # "" = everything
     results_per_page: 25     # max 500
 
+  jobup:
+    # jobup.ch (French-speaking Switzerland): the same public API family as jobs.ch.
+    queries: []              # from your profile unless set
+
+  jobscout24:
+    # jobscout24.ch (Switzerland). Search param: SearchWhat; pager: `p`
+    # (`page=` is silently ignored - use `p` in hand-written queries too).
+    queries: []              # from your profile unless set
+
+  jobware:
+    # jobware.de (Germany). Result cards are buttons, not links - see
+    # sources/jobware.py before touching the parser.
+    queries: []              # from your profile unless set
+
+  talent:
+    # talent.com (aggregator, German front); k/l/p query parameters.
+    queries: []              # from your profile unless set
+
+  englishjobs:
+    # English-speaking jobs in Germany. Category pages, not keyword search.
+    categories: [remote]     # e.g. remote, visa-sponsorship, part-time
+    pages: 2
+
+  governmentjobs:
+    # US public-sector board (NEOGOV), keyword search.
+    queries: []              # from your profile unless set
+
+  jobicy:
+    # Free remote-jobs API, no key. Its notice asks for a visible credit
+    # wherever its jobs are shown (the README credits it).
+    count: 50                # max 50 per request
+    max_pages: 3             # cursor pages walked per scan
+    geo: ""                  # e.g. germany (server-side filter)
+    industry: ""
+    tag: ""
+
+  teamtailor:
+    # Every Teamtailor board exposes a JSON Feed. Add employers under
+    # companies.teamtailor.tokens; with none added this source does nothing,
+    # which is why it is off by default.
+    max_pages: 2             # 100 postings per page
 
 # Update checks. jobscout asks GitHub whether a newer release exists, at most
 # once a day, and shows a notice in the window if there is one. Nothing is
@@ -333,6 +375,12 @@ companies:
     tokens: []
   workable:
     # account names from https://apply.workable.com/<account>/
+    tokens: []
+  teamtailor:
+    # board tokens from https://<token>.teamtailor.com/jobs (e.g. teamviewer)
+    tokens: []
+  join:
+    # company slugs from https://join.com/companies/<slug>
     tokens: []
 '''
 
@@ -382,6 +430,20 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "lever": {},
     "smartrecruiters": {},
     "workable": {},
+    "germantechjobs": {},
+    "swissdevjobs": {},
+    "jobup": {"queries": []},
+    "jobscout24": {"queries": []},
+    "jobware": {"queries": []},
+    "talent": {"queries": []},
+    "englishjobs": {"categories": ["remote"], "pages": 2},
+    "governmentjobs": {"queries": []},
+    "jobicy": {"count": 50, "max_pages": 3},
+    "teamtailor": {"max_pages": 2},
+    "join": {},
+    "wordpressjobs": {},
+    "pythonjobs": {},
+    "fossjobs": {},
 }
 
 

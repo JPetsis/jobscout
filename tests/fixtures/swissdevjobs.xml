@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title>SwissDevJobs - tech &amp; IT jobs with salary info in Switzerland</title>
+        <link>https://swissdevjobs.ch/</link>
+        <description>Jobs from https://swissdevjobs.ch. Transparent IT Job board with mandatory info about salary and tech stacks.</description>
+        <lastBuildDate>Thu, 15 Oct 2026 08:29:12 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>awesome</generator>
+        <language>en</language>
+        <image>
+            <title>SwissDevJobs - tech &amp; IT jobs with salary info in Switzerland</title>
+            <url>https://static.swissdevjobs.ch/pictures/software-developer-mountains.png</url>
+            <link>https://swissdevjobs.ch/</link>
+        </image>
+        <copyright>All rights reserved 2018, SwissDevJobs</copyright>
+        <category>Technology</category>
+        <category>Software Engineering</category>
+        <category>Developer Jobs</category>
+        <atom:link href="https://swissdevjobs.ch/rss" rel="self" type="application/rss+xml"/>
+        <item>
+            <title><![CDATA[Senior/Professional Java Application Engineer @ BACHMANN people consulting GmbH [CHF 100'000 - 140'000]]]></title>
+            <link>https://swissdevjobs.ch/jobs/BACHMANN-people-consulting-GmbH-SeniorProfessional-Java-Application-Engineer?utm_source=our_rss_feed&amp;utm_medium=our_rss_feed</link>
+            <guid isPermaLink="false">https://swissdevjobs.ch/jobs/BACHMANN-people-consulting-GmbH-SeniorProfessional-Java-Application-Engineer?utm_source=our_rss_feed&amp;utm_medium=our_rss_feed</guid>
+            <pubDate>Mon, 12 Oct 2026 08:32:44 GMT</pubDate>
+            <description><![CDATA[<p><b>Salary: CHF 100'000 - 140'000 per year</b></p>
+    <b>Requirements:</b>
+    <ul><li>Fundierte technische IT Ausbildung</li><li>Mehrere Jahre Erfahrung in Software-Engineering im Java und Spring (Spring Boot) Ökosystem</li><li>Gute Kenntnisse in Software Architektur (MicroServices, Event-basierte Systeme)</li><li>Solide Deutschkenntnisse und Grundlage für Arbeit in der Schweiz (Aufenthaltsbewilligung/Arbeitsbewilligung)</li></ul>
+    <b>Responsibilities:</b>
+    <ul><li>Wir suchen Dich!</li><li>Deine Leidenschaft ist die Softwareentwicklung im Java Technologie-Stack?</li><li>Du liebst es flexible und nachhaltige Applikationen zu designen?</li><li>Neue Technologien, Frameworks und Tools spornen dich an?</li><li>Sende uns jetzt deine Bewerbung!</li></ul>
+    <b>Technologies:</b>
+    <ul><li>Angular</li><li>Docker</li><li>Frontend</li><li>Java</li><li>Kafka</li><li>Kubernetes</li><li>OpenShift</li><li>Spring</li><li>Spring Boot</li><li>microservices</li><li>CI/CD</li><li>DevOps</li></ul>
+    <p><b>More:</b></p>
+    <p>Wer sind wir:<br>Wir suchen dich für die Schweizer Niederlassungen eines international tätiges Consulting Unternehmen, welches Software-Entwicklungs-Dienstleistungen für ihre spannende Kunden in Bern oder Zürich umsetzt. Präferenz ist Festanstellung, Contracting-Modelle sind auch möglich.<br><br>Was bieten wir:<br>Flexible Arbeitsmodelle (Anteil Home Office / flexible Arbeitszeiten)<br>Gute Weiterbildungsmöglichkeiten<br>Internationale Karrieremöglichkeiten<br>Spannende Projekte, dynamisches Umfeld, guter Team-Spirit<br><br>Sende uns dein Lebenslauf mit Zertifikaten und Arbeitszeugnissen! Deine Angaben werden vertraulich behandelt.<br>Wir freuen uns auf deine Bewerbung!</p>
+    <p>last updated 42 week of 2026</p>]]></description>
+            <content:encoded><![CDATA[<p><b>Salary: CHF 100'000 - 140'000 per year</b></p>
+    <b>Requirements:</b>
+    <ul><li>Fundierte technische IT Ausbildung</li><li>Mehrere Jahre Erfahrung in Software-Engineering im Java und Spring (Spring Boot) Ökosystem</li><li>Gute Kenntnisse in Software Architektur (MicroServices, Event-basierte Systeme)</li><li>Solide Deutschkenntnisse und Grundlage für Arbeit in der Schweiz (Aufenthaltsbewilligung/Arbeitsbewilligung)</li></ul>
+    <b>Responsibilities:</b>
+    <ul><li>Wir suchen Dich!</li><li>Deine Leidenschaft ist die Softwareentwicklung im Java Technologie-Stack?</li><li>Du liebst es flexible und nachhaltige Applikationen zu designen?</li><li>Neue Technologien, Frameworks und Tools spornen dich an?</li><li>Sende uns jetzt deine Bewerbung!</li></ul>
+    <b>Technologies:</b>
+    <ul><li>Angular</li><li>Docker</li><li>Frontend</li><li>Java</li><li>Kafka</li><li>Kubernetes</li><li>OpenShift</li><li>Spring</li><li>Spring Boot</li><li>microservices</li><li>CI/CD</li><li>DevOps</li></ul>
+    <p><b>More:</b></p>
+    <p>Wer sind wir:<br>Wir suchen dich für die Schweizer Niederlassungen eines international tätiges Consulting Unternehmen, welches Software-Entwicklungs-Dienstleistungen für ihre spannende Kunden in Bern oder Zürich umsetzt. Präferenz ist Festanstellung, Contracting-Modelle sind auch möglich.<br><br>Was bieten wir:<br>Flexible Arbeitsmodelle (Anteil Home Office / flexible Arbeitszeiten)<br>Gute Weiterbildungsmöglichkeiten<br>Internationale Karrieremöglichkeiten<br>Spannende Projekte, dynamisches Umfeld, guter Team-Spirit<br><br>Sende uns dein Lebenslauf mit Zertifikaten und Arbeitszeugnissen! Deine Angaben werden vertraulich behandelt.<br>Wir freuen uns auf deine Bewerbung!</p>
+    <p>last updated 42 week of 2026</p>]]></content:encoded>
+            <enclosure url="https://static.swissdevjobs.ch/social-media-images/6313076be3f58101d34f7316.png" length="0" type="image/png"/>
+        </item>
+        </channel></rss>

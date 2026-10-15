@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>WordPress Jobs</title>
+	<atom:link href="https://jobs.wordpress.net/feed/" rel="self" type="application/rss+xml" />
+	<link>https://jobs.wordpress.net</link>
+	<description>WordPress related Job Postings</description>
+	<lastBuildDate>Tue, 13 Oct 2026 08:08:33 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=7.1.3</generator>
+
+<image>
+	<url>https://jobs.wordpress.net/wp-content/uploads/2018/01/cropped-wp-icon-1-32x32.png</url>
+	<title>WordPress Jobs</title>
+	<link>https://jobs.wordpress.net</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+<site xmlns="com-wordpress:feed-additions:1">254003294</site>	<item>
+		<title>Remote WordPress Freelancers for Client Website Projects</title>
+		<link>https://jobs.wordpress.net/job/remote-wordpress-freelancers-for-client-website-projects/</link>
+		
+		<dc:creator><![CDATA[jobposter]]></dc:creator>
+		<pubDate>Tue, 13 Oct 2026 08:07:58 +0000</pubDate>
+				<guid isPermaLink="false">https://jobs.wordpress.net/?post_type=job&#038;p=64925</guid>
+
+					<description><![CDATA[Mix3Design is a web design agency. We&#8217;re inviting freelancers from anywhere in the world to join us in designing and maintaining client websites built with WordPress. What you&#8217;ll do Design and build WordPress websites Maintain and update existing client sites Collaborate with our team to deliver projects on time What we offer 100% remote work [&#8230;]]]></description>
+										<content:encoded><![CDATA[<p>Mix3Design is a web design agency. We&#8217;re inviting freelancers from anywhere in the world to join us in designing and maintaining client websites built with WordPress.</p>
+<p><strong>What you&#8217;ll do</strong></p>
+<ul>
+<li>Design and build WordPress websites</li>
+<li>Maintain and update existing client sites</li>
+<li>Collaborate with our team to deliver projects on time</li>
+</ul>
+<p><strong>What we offer</strong></p>
+<ul>
+<li>100% remote work</li>
+<li>Payment per project</li>
+<li>Ongoing work for people who deliver great results</li>
+</ul>]]></content:encoded>
+					
+		
+		
+		<post-id xmlns="com-wordpress:feed-additions:1">64925</post-id>	</item>
+		</channel></rss>

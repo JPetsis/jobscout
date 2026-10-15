@@ -418,6 +418,17 @@ Working today (all verified live, all free):
 | `workday` | US / global | the API behind a large share of large-employer careers sites (NVIDIA, Salesforce…), **no key**. Add employers under `companies.workday.tokens`; a token is `tenant:wdN:site` or just the careers URL — `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite` is accepted verbatim |
 | `adzuna` | 9 countries incl. US/GB | official search API, **free key** from [developer.adzuna.com/signup](https://developer.adzuna.com/signup). `country` is a path segment and picks both the market and the salary currency (`us`, `gb`, `de`, `at`, `ch`, `nl`, `fr`, `au`, `ca`). Free tier is 25 requests/min and 250/day, so one request per scan is the default |
 | `usajobs` | US federal | official USAJOBS API, **free key** from [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/) (a form, the key is emailed). Needs `key` and a real `email`, which is sent as the User-Agent because that is how USAJOBS identifies callers |
+| `germantechjobs`, `swissdevjobs` | DE + CH | public RSS boards (830 + 250 postings live on 2026-10-15); the salary sits in the description text |
+| `jobup` | CH (French) | jobup.ch public search API — the same platform family as jobs.ch, `documents[]` JSON |
+| `jobscout24` | CH | server-rendered search; param `SearchWhat`, pager `p` (`page=` is silently ignored) |
+| `jobware` | DE | server-rendered search (`q`); result cards are buttons with `data-job-detail-url`, not links |
+| `talent` | DE + US | talent.com server-rendered search (`k`/`l`/`p`), German front |
+| `englishjobs` | DE (English-speaking) | category listings; job links are signed redirects that resolve to the publisher's own page |
+| `governmentjobs` | US public sector | NEOGOV server-rendered search (`keyword`), no key |
+| `jobicy` | remote | free JSON API, no key; jobs provided by [Jobicy](https://jobicy.com) — credited here as its notice asks |
+| `teamtailor` | EU / DACH employers | per-company JSON Feed at `<token>.teamtailor.com/jobs.json`; add employers under `companies.teamtailor.tokens` |
+| `join` | DACH SMB employers | per-company boards `join.com/companies/<slug>`; add employers under `companies.join.tokens` |
+| `wordpressjobs` / `pythonjobs` / `fossjobs` | niches | small RSS feeds: WordPress, Python.org, FOSS jobs |
 
 The two keyed sources ship **disabled**. Enable them in Settings once you have a
 key. If you enable one without a key, the scan says so by name and prints the
@@ -444,6 +455,11 @@ Known limitations, on purpose:
   keep the "no accounts" promise.
 - **willhaben (AT)**: job board returns 404 for scripted access; karriere.at
   covers Austria.
+- **Newly measured walls (2026-10-15)**: kimeta.de and its white-label
+  jobs.heise.de answer an anti-bot check on `/search` (client-rendered
+  results; do not pursue), hiring.cafe answers 403, remote.co fails TLS in
+  every variant, and join.com's sitemap files are Cloudflare-403 while its
+  board pages stay open.
 - XING/StepStone don't show per-card dates for some layouts — those postings
   simply have no `posted` date (they're never dropped for it).
 

@@ -44,19 +44,26 @@ ADDED to it, never replace it, so hand-tuned queries keep working.
 from __future__ import annotations
 
 # Sources verified to accept an empty keyword and return a recent-postings
-# sweep (measured 2026-10-03 with the real adapters). A source not listed here
-# simply gets no `broad` query, which is safe: it keeps role/stack queries.
+# sweep (measured 2026-10-03; extended 2026-10-15: jobup, jobscout24,
+# jobware, talent and governmentjobs all return a sweep for an empty
+# keyword). A source not listed here simply gets no `broad` query, which is
+# safe: it keeps role/stack queries.
 BROAD_CAPABLE = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
+    "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
 }
 
 # Adapters that take `{"keywords", "location", "pages"}` verbatim. Anything
 # else (RSS/board sources like hn, larajobs, himalayas) is not query-driven
-# and must not be given generated queries.
+# and must not be given generated queries. Each of the 2026-10-15 additions
+# maps `keywords` to its own parameter (query/SearchWhat/q/k/keyword);
+# jobware and governmentjobs do NOT honour `location` and say so loudly in
+# fetcher.errors instead of dropping it silently.
 QUERY_DRIVEN = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
+    "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
 }
 
 # `location` semantics differ per board, so one profile value cannot be shared.

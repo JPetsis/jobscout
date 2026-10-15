@@ -19,6 +19,9 @@ SOURCE_NAMES = [
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
     "adzuna", "usajobs",
+    "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
+    "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
+    "wordpressjobs", "pythonjobs", "fossjobs",
 ]
 
 REGISTRY = {name: import_module(f".{name}", __package__) for name in SOURCE_NAMES}

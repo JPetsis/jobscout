@@ -25,8 +25,8 @@ against the source rather than assumed:
   not as a packaging bug.
 * ``jobscout/sources/<name>.py`` is imported *by name*
   (``importlib.import_module(f".{name}", __package__)`` in
-  jobscout/sources/__init__.py), which static analysis cannot see. The 25
-  adapters are listed below and cross-checked against the directory, so adding
+  jobscout/sources/__init__.py), which static analysis cannot see. Every
+  adapter is listed below and cross-checked against the directory, so adding
   an adapter without touching this file fails the build loudly instead of
   shipping an app that silently loads nothing.
 * ``geonamescache`` ships as a package with a JSON gazetteer that it opens via
@@ -78,7 +78,7 @@ ENTRY = Path(SPECPATH).resolve() / "jobscout_entry.py"      # noqa: F821
 if not ENTRY.is_file():
     raise SystemExit(f"missing frozen-app entry script: {ENTRY}")
 
-# --- the 25 dynamically imported source adapters ---------------------------
+# --- the dynamically imported source adapters -------------------------------
 # Keep in sync with SOURCE_NAMES in jobscout/sources/__init__.py; the check
 # below turns a drift into a build error.
 SOURCE_MODULES = [
@@ -88,6 +88,9 @@ SOURCE_MODULES = [
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
     "adzuna", "usajobs",
+    "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
+    "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
+    "wordpressjobs", "pythonjobs", "fossjobs",
 ]
 _on_disk = sorted(p.stem for p in (PACKAGE / "sources").glob("*.py") if p.name != "__init__.py")
 if sorted(SOURCE_MODULES) != _on_disk:
