@@ -14,6 +14,14 @@ Rule families (lists and weights live in [preferences] of the config):
                both this and stack_terms is paid for ONCE, at this weight.
   description  description_terms hit the DESCRIPTION -> +description_weight each, capped
                description_deny filters on the DESCRIPTION
+  permanence   permanent_terms hit title + description + the contract note a
+               source parsed from its listing -> +permanent_boost each, capped at
+               permanent_cap. A POSITIVE signal only: no word, no points, so
+               nothing is punished for staying silent. Marks open-ended contracts.
+  academic     academic_deny filters on the TITLE with the BOUNDARY-FRIENDLY
+               matcher (like scoring lists), because the denies are German
+               compounds: 'Universitaetsprofessur' must hit 'professur' and
+               whole-word matching would escape it. Empty list = off.
   keywords     keywords hit title/company/location/description -> +keyword_weight each, capped
                exclude_terms filter anywhere
   location     country_allow (ISO-3166, offline resolution) -> gate: a posting
@@ -207,6 +215,14 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
     if term:
         s.filtered, s.reason = True, f"title_deny:{term}"
         return s
+    # Academic-rank filter. Boundary-FRIENDLY on purpose: the denies are
+    # German compounds ("Universitätsprofessur", "Juniorprofessur",
+    # "W2-Professur") that whole-word matching would escape, and the list is
+    # specific enough that a compound hit is a true positive.
+    term = _first_hit(prefs.get("academic_deny", []), title, strict=False)
+    if term:
+        s.filtered, s.reason = True, f"academic:{term}"
+        return s
     term = _first_hit(prefs.get("description_deny", []), desc)
     if term:
         s.filtered, s.reason = True, f"description_deny:{term}"
@@ -279,6 +295,15 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
            _num(prefs, "description_weight", 1), _num(prefs, "description_cap", 6))
     _boost(s, prefs.get("keywords", []), text, "kw",
            _num(prefs, "keyword_weight", 1), _num(prefs, "keyword_cap", 8))
+
+    # Permanence: a POSITIVE signal only -- no word, no points, so nothing
+    # is punished for staying silent. Scanned text: title + description; the
+    # description carries the contract note a source parsed from its listing
+    # (academics.de badges are written there at parse time).
+    perm_terms = prefs.get("permanent_terms", [])
+    if perm_terms:
+        _boost(s, perm_terms, f"{title} {desc}", "perm",
+               _num(prefs, "permanent_boost", 4), _num(prefs, "permanent_cap", 4))
 
     # `locations_prefer` (preferred cities) is only a ranking boost; the legacy
     # `locations_allow` keeps working as a gate when `country_allow` is absent.

@@ -263,7 +263,10 @@ unchanged for anyone who wants the old word-list behaviour.
    Each field has its own list and weight: **title** (`title_terms`, `title_deny`),
    **stack** (`stack_terms`, searched in title + description, with
    `stack_min_hits` as a "must have at least N" gate), **description**
-   (`description_terms`, `description_deny`), anywhere (`keywords`,
+   (`description_terms`, `description_deny`), **permanence**
+   (`permanent_terms` -> `permanent_boost`; a positive-only signal for
+   open-ended contracts, and a source may write its parsed contract note
+   into the description), anywhere (`keywords`,
    `exclude_terms`), and **location** (`country_allow`,
    `locations_prefer`, `remote_bonus`). Every point is stored as a reason
    and digests show the exact breakdown
@@ -271,14 +274,20 @@ unchanged for anyone who wants the old word-list behaviour.
    All scoring terms match whole words and compound parts (so `entwickler` hits
    `Softwareentwickler`, but `git` does not hit `digital`); filter lists
    (`title_deny`, `description_deny`, `exclude_terms`) match whole words only
-   (so `sales` does not drop `Salesforce Developer`). Stack points only count
+   (so `sales` does not drop `Salesforce Developer`). `academic_deny` is the
+   documented exception: academic-rank titles filter with compound matching
+   on purpose, so `Universitätsprofessur` and `W2-Professur` both hit
+   `professur`. Stack points only count
    when the title is role-relevant (`stack_needs_title_match`), which keeps
    boilerplate-heavy non-dev listings from inflating. Bands: `min_score`
    (default 6) and `strong_threshold` (default 12); `jobscout stats` prints a
    score histogram whenever you want to recalibrate.
    `jobscout rescore` re-applies edited preferences to everything already stored
    without re-fetching, and `jobscout scan` does that automatically when it
-   notices the preferences changed since the last run.
+   notices the preferences changed since the last run. New matches within one
+   permanence boost of `strong_threshold` get their detail page completed once
+   (`detail_probe_per_scan`, default 6 per run) and are rescored; the scan
+   prints `promoted` when that completion pushes a row over the threshold.
    Pay ranges are parsed out of compensation fields and description text
    (EUR/USD/GBP/PLN/CHF; hourly, daily, monthly, yearly; B2B and German
    `ab X € monatlich` styles) and shown as a chip (`€60k–80k/yr`, `$45–70/hr`);

@@ -104,6 +104,22 @@ preferences:
   description_cap: 6
   description_deny: []    # e.g. [reisebereitschaft, schichtarbeit] -> filtered
 
+  # --- PERMANENCE (a positive signal only: no word, no points) ---
+  # Open-ended contract. Scanned: title + description, and the description
+  # may carry a contract note a source parsed from its listing (academics.de).
+  permanent_terms: [unbefristet, permanent]
+  permanent_boost: 4
+  permanent_cap: 4
+  # Academic-rank titles are filtered before scoring. Boundary-FRIENDLY
+  # matching on purpose, so compounds hit ("Universitätsprofessur" ->
+  # "professur"). Empty list switches it off.
+  academic_deny: [professur, professorship, professor, postdoc, postdoktorand,
+                  doktorand, doktorat, phd, w1, w2, w3, tenure, universitätsassistent]
+  # Complete the detail page of a NEW near-threshold match once (within one
+  # permanence boost of strong_threshold) and rescore: catches a contract
+  # type that only the detail page states. 0 = off.
+  detail_probe_per_scan: 6
+
   # --- ANYWHERE keywords (title + company + location + description) ---
   keywords: [agile, scrum, kanban]
   keyword_weight: 1

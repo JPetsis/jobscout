@@ -36,6 +36,9 @@ _H2 = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
 _COMPANY = re.compile(r'alt="([^"]+?) - Logo"')
 _CITY = re.compile(r'bg-primary-transparency[^"]*"[^>]*>\s*<span class="truncate">\s*([^<]+?)\s*</span>')
 _DATE = re.compile(r'<span class="truncate">\s*(\d{2})\.(\d{2})\.(\d{4})\s*</span>')
+_BADGE = re.compile(r'<span class="truncate">\s*([^<]+?)\s*</span>')
+_CONTRACT = re.compile(r"^(unbefristet|befristet)$", re.I)
+_WORKTIME = re.compile(r"^(vollzeit|teilzeit|vollzeit/teilzeit)$", re.I)
 
 
 def parse(text: str) -> list[Posting]:
@@ -58,6 +61,14 @@ def parse(text: str) -> list[Posting]:
         company = _COMPANY.search(chunk)
         city = _CITY.search(chunk)
         date = _DATE.search(chunk)
+        # The verdict badges feed scoring: "Befristung: Unbefristet" in the
+        # description is what the permanence boost looks for.
+        badges = [b.strip() for b in _BADGE.findall(chunk)]
+        contract = next((b for b in badges if _CONTRACT.match(b)), "")
+        worktime = next((b for b in badges if _WORKTIME.match(b)), "")
+        note = " · ".join(x for x in (
+            (f"Arbeitszeit: {worktime}" if worktime else ""),
+            (f"Befristung: {contract}" if contract else "")) if x)
         out.append(Posting(
             source=NAME,
             title=title,
@@ -66,6 +77,7 @@ def parse(text: str) -> list[Posting]:
             url="https://www.academics.de" + href,
             external_id=jid,
             posted_at=(f"{date.group(3)}-{date.group(2)}-{date.group(1)}" if date else ""),
+            description=note,
         ))
     return out
 

@@ -30,6 +30,51 @@ OnEvent = Callable[[Event], None]
 Cancel = Callable[[], bool]
 
 
+def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
+                        strong_th: float, dup) -> float | None:
+    """Complete the detail page of a near-threshold match once, then rescore.
+
+    WHY: a posting sitting within one permanence boost of the strong
+    threshold may only LOOK weak because its contract type lives on the
+    detail page -- measured on the Uni-Leipzig developer job, whose
+    myScience teaser does not say "unbefristet" while its detail page states
+    "Befristung unbefristet". The probe is bounded by
+    `detail_probe_per_scan` per run, happens once per posting
+    (detail_fetched_at gate) and only for rows a detail fetcher can
+    actually complete. Returns the new score when the rescore changed it.
+    """
+    if budget.get("left", 0) <= 0 or sc.filtered or dup is not None:
+        return None
+    if any(str(label).startswith("perm:") for label, _ in sc.reasons):
+        return None                     # permanence already visible
+    gap = strong_th - sc.score
+    boost = float(cfg.prefs.get("permanent_boost", 4) or 4)
+    if gap <= 0 or gap > boost:
+        return None
+    fn = getattr(mod, "fetch_detail", None)
+    if fn is None:
+        return None
+    row = conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()
+    if row is None or row["detail_fetched_at"]:
+        return None
+    budget["left"] -= 1
+    try:
+        desc = fn(dbm.row_to_posting(row), fetcher)
+    except Exception as e:              # a probe must never kill the run
+        fetcher.errors.append(f"{p.source}: detail probe failed: "
+                              f"{type(e).__name__}: {e}")
+        return None
+    if not desc:
+        return None
+    dbm.set_description(conn, pid, desc)
+    row = conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()
+    sc2 = score_posting(cfg.prefs, dbm.row_to_posting(row))
+    if sc2.score == sc.score and bool(sc2.filtered) == bool(sc.filtered):
+        return None
+    dbm.set_score(conn, pid, sc2)
+    return sc2.score
+
+
 def scan(cfg, conn, fetcher, *,
          only: set[str] | None = None,
          on_event: OnEvent | None = None,
@@ -48,6 +93,8 @@ def scan(cfg, conn, fetcher, *,
     only = only or set()
     min_score = float(cfg.prefs.get("min_score", 6))
     strong_th = float(cfg.prefs.get("strong_threshold", 12))
+    probe_budget = {"left": int(cfg.prefs.get("detail_probe_per_scan", 0) or 0)}
+    probe_start = probe_budget["left"]
     new_hash = prefs_hash(cfg.prefs)
 
     prev_run = dbm.get_run(conn)
@@ -111,6 +158,17 @@ def scan(cfg, conn, fetcher, *,
                 if not sc.filtered and dup is None and sc.score >= min_score:
                     match_count += 1
                     matches.append((pid, sc.score, p.title, p.company, p.location))
+            probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
+                                         probe_budget, strong_th, dup)
+            if probed is not None:
+                if probed >= strong_th:
+                    emit({"kind": "promoted", "id": pid, "score": probed,
+                          "title": p.title})
+                if is_new:
+                    for i, m in enumerate(matches):
+                        if m[0] == pid:
+                            matches[i] = (pid, probed, p.title, p.company, p.location)
+                            break
         stats["sources"][name] = {
             "fetched": len(postings),
             "new": new_count,
@@ -134,6 +192,9 @@ def scan(cfg, conn, fetcher, *,
         emit({"kind": "source_done", "name": name, "index": index, "of": len(names),
               "fetched": len(postings), "new": new_count, "matches": match_count})
 
+    used_probes = probe_start - probe_budget["left"]
+    if used_probes:
+        stats["detail_probes"] = used_probes
     extra = post_sources() if post_sources is not None else None
     stats["requests"] = fetcher.requests
     stats["errors"] = list(fetcher.errors)

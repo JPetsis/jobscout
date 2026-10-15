@@ -390,3 +390,27 @@ def test_signal_only_lets_a_wanted_post_beat_a_broad_stack_one():
     php = score_posting(SIGNAL, mk(title="Senior Engineer", location="",
                                    description="php laravel"))
     assert php.score > broad.score
+
+def test_permanence_is_positive_only_and_capped():
+    prefs = dict(PREFS, permanent_terms=["unbefristet", "permanent"],
+                 permanent_boost=4, permanent_cap=4)
+    sc = score_posting(prefs, mk(title="Python Engineer",
+                                 description="Eine unbefristete Stelle, permanent."))
+    # title:engineer +3, kw:python +1, one perm boost of 4 (capped)
+    assert sc.score == 8
+    assert [l for l, _ in sc.reasons].count("perm:unbefristet") == 1
+    sc2 = score_posting(prefs, mk(title="Python Engineer",
+                                  description="Die Stelle ist befristet."))
+    assert sc2.score == 4                      # title + kw only, no perm points
+    assert not any(l.startswith("perm:") for l, _ in sc2.reasons)
+
+
+def test_academic_deny_matches_compounds_but_not_plain_dev_titles():
+    prefs = dict(PREFS, academic_deny=["professur", "postdoc", "w2", "doktorand"])
+    for title in ("W2-Professur für Software-Engineering",
+                  "Universitätsprofessur für Informatik",
+                  "Postdoc in Software Engineering",
+                  "Doktorand:in Softwareentwicklung"):
+        sc = score_posting(prefs, mk(title=title))
+        assert sc.filtered and sc.reason.startswith("academic:"), title
+    assert not score_posting(prefs, mk(title="Full Stack Softwareentwickler")).filtered

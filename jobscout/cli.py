@@ -272,6 +272,9 @@ def cmd_scan(args) -> int:
         elif kind == "pruned":
             print(f"  {ui.dim(e['name'])} {ui.dim('pruned')} {ui.red(str(e['removed']))} "
                   f"{ui.dim('unverifiable row(s), no publisher expiry')}")
+        elif kind == "promoted":
+            print(f"  {ui.gold('promoted')} #{e['id']} to score {e['score']:g} "
+                  + ui.dim(f"· {e['title'][:52]}"))
         elif kind == "not_enabled":
             for n in e["names"]:
                 print(ui.red(f"  {n} is not enabled") +

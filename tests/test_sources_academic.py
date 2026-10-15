@@ -55,6 +55,7 @@ def test_academics_parse(fixture_text):
     assert p.url.startswith("https://www.academics.de/jobs/")
     assert p.external_id == "1111819"
     assert p.posted_at == "2026-10-15"
+    assert p.description == "Arbeitszeit: Vollzeit · Befristung: Unbefristet"
 
 
 def test_academics_fetch_pages(fixture_text):
