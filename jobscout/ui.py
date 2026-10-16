@@ -66,14 +66,15 @@ def score_text(text: str, value: float, min_score: float, strong_threshold: floa
 
 
 def contract_pill(label: str) -> str:
-    """Colored tag for a contract marker from contract_label_from_reasons."""
-    if not label:
-        return ""
-    family, _, term = label.partition(":")
+    """Colored tag for a contract marker; CANONICAL English names, because
+    the boards mix languages ("unbefristet" and "permanent" are one and the
+    same signal, and the reader of this UI reads English). The exact matched
+    wording stays visible in the why-breakdown."""
+    family = (label or "").partition(":")[0]
     if family == "perm":
-        return green(f"[{term}]")
+        return green("[permanent]")
     if family == "tmp":
-        return dim(f"[{term}]")
+        return dim("[fixed-term]")
     return ""
 
 

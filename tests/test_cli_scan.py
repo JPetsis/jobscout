@@ -279,5 +279,5 @@ def test_scan_top_matches_render_the_contract_pill(capsys, scan_env, monkeypatch
                                             (9, 9.0, "Moodle Developer",
                                              "Uni Tübingen", "Tübingen", "tmp:befristet")]))
     out = capsys.readouterr().out
-    assert "[unbefristet]" in out
-    assert "[befristet]" in out
+    assert "[permanent]" in out
+    assert "[fixed-term]" in out

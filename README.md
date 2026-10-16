@@ -163,7 +163,7 @@ jobscout digest   [--run N] [--all] [--top N] [--open]
 
 jobscout list     [--min-score N] [--status new|saved|applied|dismissed]
                   [--source NAME] [--filtered] [--limit N] [--json]
-                  [--goal NAME] [--all-goals]
+                  [--goal NAME ...] [--all-goals]
 
 jobscout goals
 jobscout goal     use <name> | <name> | --off
@@ -171,7 +171,7 @@ jobscout goal     use <name> | <name> | --off
 jobscout show     ID [--refresh] [--json]
 
 jobscout triage   [--limit N] [--min-score N] [--source NAME]
-                  [--goal NAME] [--all-goals]
+                  [--goal NAME ...] [--all-goals]
 
 jobscout verify   [--status saved,applied] [--all] [--limit N] [--quiet]
 
@@ -190,7 +190,10 @@ true at once. Coherence is the acceptance test.
 Many goals can be defined, exactly one is active. The active goal is the
 **default view** for `list` and `triage`, so the count you see is a count you
 can act on; `--all-goals` escapes to the full pool and `--goal NAME` peeks at
-another without switching. Goals are **optional**: with no `goals:` block in
+another without switching,
+and `--goal` is **repeatable**: `--goal permanent --goal austria` shows the
+intersection (every given goal must match). Definitions stay single-dimension,
+the view composes. Goals are **optional**: with no `goals:` block in
 your config jobscout behaves exactly as it did before, and a goal only ever
 narrows the base profile, it never resurrects a row the rule engine filtered.
 
@@ -265,8 +268,9 @@ unchanged for anyone who wants the old word-list behaviour.
    `stack_min_hits` as a "must have at least N" gate), **description**
    (`description_terms`, `description_deny`), **permanence**
    (`permanent_terms` -> `permanent_boost`; a positive-only signal for
-   open-ended contracts, shown as a `[unbefristet]` pill in listings;
-   `temporary_terms` marks the inverse with a 0-point `[befristet]`, and a
+   open-ended contracts, shown as a `[permanent]` pill in listings (canonical
+   English name; the matched wording stays in the why-breakdown);
+   `temporary_terms` marks the inverse with a 0-point `[fixed-term]`, and a
    source may write its parsed contract note into the description), anywhere (`keywords`,
    `exclude_terms`), and **location** (`country_allow`,
    `locations_prefer`, `remote_bonus`). Every point is stored as a reason

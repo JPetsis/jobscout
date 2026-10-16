@@ -390,19 +390,23 @@ def cmd_list(args) -> int:
         return 0
     min_score = args.min_score if args.min_score is not None else float(cfg.prefs.get("min_score", 6))
     strong_th = float(cfg.prefs.get("strong_threshold", 12))
-    goal = None if getattr(args, "all_goals", False) else _active_goal(cfg, getattr(args, "goal", None))
+    goals_sel = [] if getattr(args, "all_goals", False) else _selected_goals(cfg, getattr(args, "goal", None))
     rows = dbm.list_postings(conn, min_score=min_score, status=args.status,
-                             source=args.source, limit=100000 if goal else args.limit)
-    if goal:
-        # a goal only narrows the base profile; it never resurrects a filtered row
-        rows = [r for r in rows if goalsmod.match(r, goal)][:args.limit]
+                             source=args.source, limit=100000 if goals_sel else args.limit)
+    if goals_sel:
+        # goals only narrow the base profile; they never resurrect a filtered row
+        rows = [r for r in rows
+                if all(goalsmod.match(r, g) for g in goals_sel)][:args.limit]
     if args.json:
         print(json.dumps([dict(r) for r in rows], ensure_ascii=False, indent=2))
         return 0
     if not rows:
-        if goal:
-            print(ui.dim(f"nothing matches goal '{goal.name}' ({goal.describe()})"))
-            print(ui.dim(f"  {goal_note_full(goal)}"))
+        if goals_sel:
+            names = "+".join(g.name for g in goals_sel)
+            desc = " + ".join(g.describe() for g in goals_sel)
+            print(ui.dim(f"nothing matches goals '{names}' ({desc})"))
+            if len(goals_sel) == 1:
+                print(ui.dim(f"  {goal_note_full(goals_sel[0])}"))
             print(ui.dim(f"  see the full pool: jobscout list --all-goals"))
         else:
             print(ui.dim("nothing here — run `jobscout scan` first, or loosen the filters"))
@@ -410,7 +414,7 @@ def cmd_list(args) -> int:
     for r in rows:
         meta = " · ".join(x for x in (r["company"], r["location"], salmod.fmt_row(r)) if x)
         marks = []
-        if goal:
+        if goals_sel:
             marks.append(ui.cyan("🎯"))
         if r["status"] != "new":
             marks.append(ui.magenta(f"[{r['status']}]"))
@@ -423,8 +427,9 @@ def cmd_list(args) -> int:
         badge = ui.score_text(f"{r['score']:5g}", r["score"], min_score, strong_th)
         tail = ui.dim(f"  {meta[:62]}") if meta else ""
         print(f"  {rid}  {badge}{status}{pill}  {r['title'][:58]}{tail}")
-    if goal:
-        print(ui.dim(f"\n{len(rows)} shown for goal '{goal.name}' · "
+    if goals_sel:
+        names = "+".join(g.name for g in goals_sel)
+        print(ui.dim(f"\n{len(rows)} shown for goal '{names}' · "
                      f"`--all-goals` shows the full pool"))
         return 0
     print(ui.dim(f"\n{len(rows)} shown · min score {min_score:g} · strong ≥ {strong_th:g} · "
@@ -680,22 +685,29 @@ def cmd_triage(args) -> int:
     conn = dbm.connect(cfg.root / "jobscout.db")
     min_score = args.min_score if args.min_score is not None else float(cfg.prefs.get("min_score", 6))
     strong_th = float(cfg.prefs.get("strong_threshold", 12))
-    goal = None if getattr(args, "all_goals", False) else _active_goal(cfg, getattr(args, "goal", None))
+    goals_sel = [] if getattr(args, "all_goals", False) else _selected_goals(cfg, getattr(args, "goal", None))
     rows = [r for r in dbm.list_postings(conn, min_score=min_score, status="new",
-                                         source=args.source, limit=100000 if goal else args.limit)
+                                         source=args.source, limit=100000 if goals_sel else args.limit)
             if not r["filtered"]]
-    if goal:
-        rows = [r for r in rows if goalsmod.match(r, goal)][:args.limit]
+    if goals_sel:
+        rows = [r for r in rows
+                if all(goalsmod.match(r, g) for g in goals_sel)][:args.limit]
     if not rows:
-        if goal:
-            print(ui.dim(f"no unmarked matches for goal '{goal.name}' ({goal.describe()})"))
-            print(ui.dim(f"  {goal_note_full(goal)}"))
+        if goals_sel:
+            names = "+".join(g.name for g in goals_sel)
+            desc = " + ".join(g.describe() for g in goals_sel)
+            print(ui.dim(f"no unmarked matches for goals '{names}' ({desc})"))
+            if len(goals_sel) == 1:
+                print(ui.dim(f"  {goal_note_full(goals_sel[0])}"))
             print(ui.dim(f"  the full pool: jobscout triage --all-goals"))
         else:
             print(ui.dim("no unmarked matches to review — run `jobscout scan`, or see `jobscout list`"))
         return 0
-    if goal:
-        print(ui.cyan(f"🎯 goal: {goal.name}") + ui.dim(f"  ({goal.describe()})")
+    if goals_sel:
+        names = "+".join(g.name for g in goals_sel)
+        desc = " + ".join(g.describe() for g in goals_sel)
+        label = "goal" if len(goals_sel) == 1 else "goals"
+        print(ui.cyan(f"🎯 {label}: {names}") + ui.dim(f"  ({desc})")
               + ui.dim(f"  ·  --all-goals for the full pool"))
     if sys.stdin.isatty():
         reader = _read_key
@@ -709,10 +721,10 @@ def cmd_triage(args) -> int:
     print("\n" + ui.rule())
     print(triagemod.summary_text(counts))
     if not counts["quit"]:
-        if goal:
+        if goals_sel:
             left = sum(1 for r in dbm.list_postings(conn, min_score=min_score, status="new",
                                                    limit=100000)
-                       if not r["filtered"] and goalsmod.match(r, goal))
+                       if not r["filtered"] and all(goalsmod.match(r, g) for g in goals_sel))
             if left:
                 print(ui.dim(f"{left} unmarked goal match(es) left — run `jobscout triage` again"))
             else:
@@ -861,20 +873,29 @@ def cmd_stats(args) -> int:
     return 0
 
 
-def _active_goal(cfg, override=None):
-    """The active goal, or None. Goals are always optional."""
-    if override is not None:
-        if override == "":
-            return None
-        g = cfg.goals.get(override)
-        if g is None:
-            print(ui.red(f"no goal named '{override}' — see `jobscout goals`"))
-            return None
-        return g
-    if not cfg.active_goal:
-        return None
-    return cfg.goals.get(cfg.active_goal)
+def _selected_goals(cfg, override=None):
+    """Goals to INTERSECT for this view. `override` is None (fall back to the
+    active goal), a name, "" (none), or a list from repeated --goal flags.
 
+    Definitions stay one-dimensional; composing happens only here, at view
+    time, so the per-goal counts in `jobscout goals` keep meaning what they
+    say ("Austria" is still 12 matches even when viewed next to "permanent").
+    """
+    if override is None:
+        if not cfg.active_goal:
+            return []
+        g = cfg.goals.get(cfg.active_goal)
+        return [g] if g else []
+    names = [override] if isinstance(override, str) else list(override)
+    names = [n for n in names if n != ""]
+    out = []
+    for n in names:
+        g = cfg.goals.get(n)
+        if g is None:
+            print(ui.red(f"no goal named '{n}' — see `jobscout goals`"))
+            continue
+        out.append(g)
+    return out
 
 def _goal_note(cfg, g) -> str:
     return ui.dim(f"  goal: {g.name} ({g.describe()})") if g else ""
@@ -1124,7 +1145,8 @@ def main(argv=None) -> int:
                    help="show postings that were filtered out, with reasons")
     p.add_argument("--limit", type=int, default=40)
     p.add_argument("--json", action="store_true")
-    p.add_argument("--goal", help="view this goal instead of the active one")
+    p.add_argument("--goal", action="append", metavar="NAME",
+                   help="view this goal instead of the active one; repeatable, ALL given goals must match")
     p.add_argument("--all-goals", action="store_true", dest="all_goals",
                    help="ignore the active goal and show the full pool")
     p.set_defaults(fn=cmd_list)
@@ -1160,7 +1182,8 @@ def main(argv=None) -> int:
     p.add_argument("--limit", type=int, default=25, help="how many to review (default 25)")
     p.add_argument("--min-score", type=float, dest="min_score")
     p.add_argument("--source")
-    p.add_argument("--goal", help="review this goal instead of the active one")
+    p.add_argument("--goal", action="append", metavar="NAME",
+                   help="review this goal instead of the active one; repeatable, ALL given goals must match")
     p.add_argument("--all-goals", action="store_true", dest="all_goals",
                    help="ignore the active goal and review the full pool")
     p.set_defaults(fn=cmd_triage)
