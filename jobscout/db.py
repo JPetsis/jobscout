@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -142,7 +143,8 @@ def alt_key(p: Posting) -> str | None:
     return _sha1(f"{norm(p.company)}|{norm(p.title)}|{norm(p.location)}")
 
 
-def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: str):
+def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: str,
+           prefs: dict | None = None):
     """Insert or refresh a posting.
 
     Returns (id, is_new, dup_of). ``dup_of`` is set when the same role was
@@ -160,6 +162,13 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         desc = row["description"] or ""
         if p.description and len(p.description) > len(desc):
             desc = p.description
+        # The STORED text can be richer than the fresh parse (the scan's
+        # detail probe writes the full advert in). The score must describe
+        # what is stored, or every re-scan demotes a promoted row back to
+        # its teaser-based points -- measured: a probed row fell 16 -> 12
+        # and 13 -> 9 on the next scan before this line existed.
+        if prefs and desc and desc != (p.description or ""):
+            sc = score_posting(prefs, replace(p, description=desc))
         conn.execute(
             """UPDATE postings SET last_seen_at=?, last_seen_run=?, title=?, company=?, location=?,
                    url=?, posted_at=?, description=?, salary_min=?, salary_max=?, salary_currency=?,

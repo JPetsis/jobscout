@@ -284,10 +284,12 @@ unchanged for anyone who wants the old word-list behaviour.
    score histogram whenever you want to recalibrate.
    `jobscout rescore` re-applies edited preferences to everything already stored
    without re-fetching, and `jobscout scan` does that automatically when it
-   notices the preferences changed since the last run. New matches within one
-   permanence boost of `strong_threshold` get their detail page completed once
-   (`detail_probe_per_scan`, default 6 per run) and are rescored; the scan
-   prints `promoted` when that completion pushes a row over the threshold.
+   notices the preferences changed since the last run. New matches whose
+   permanence is not yet visible get their detail page completed once
+   (`detail_probe_per_scan`, default 10 per run) and are rescored, so the
+   permanence boost applies to every match rather than only to near-misses;
+   the scan prints `promoted` when the completion pushes a row over
+   `strong_threshold`.
    Pay ranges are parsed out of compensation fields and description text
    (EUR/USD/GBP/PLN/CHF; hourly, daily, monthly, yearly; B2B and German
    `ab X € monatlich` styles) and shown as a chip (`€60k–80k/yr`, `$45–70/hr`);

@@ -115,10 +115,12 @@ preferences:
   # "professur"). Empty list switches it off.
   academic_deny: [professur, professorship, professor, postdoc, postdoktorand,
                   doktorand, doktorat, phd, w1, w2, w3, tenure, universitätsassistent]
-  # Complete the detail page of a NEW near-threshold match once (within one
-  # permanence boost of strong_threshold) and rescore: catches a contract
-  # type that only the detail page states. 0 = off.
-  detail_probe_per_scan: 6
+  # Complete the detail page of a new MATCH once when its permanence is not
+  # yet visible, then rescore -- so the permanence boost applies to every
+  # match, not only to near-misses (a permanent 13 must outrank a fixed-term
+  # 12). Rows are probed at most once ever; this is the per-scan budget.
+  # 0 = off.
+  detail_probe_per_scan: 10
 
   # --- ANYWHERE keywords (title + company + location + description) ---
   keywords: [agile, scrum, kanban]

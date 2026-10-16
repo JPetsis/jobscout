@@ -31,26 +31,33 @@ Cancel = Callable[[], bool]
 
 
 def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
-                        strong_th: float, dup) -> float | None:
-    """Complete the detail page of a near-threshold match once, then rescore.
+                        dup) -> float | None:
+    """Complete the detail page of a match once, then rescore.
 
-    WHY: a posting sitting within one permanence boost of the strong
-    threshold may only LOOK weak because its contract type lives on the
-    detail page -- measured on the Uni-Leipzig developer job, whose
-    myScience teaser does not say "unbefristet" while its detail page states
-    "Befristung unbefristet". The probe is bounded by
-    `detail_probe_per_scan` per run, happens once per posting
-    (detail_fetched_at gate) and only for rows a detail fetcher can
-    actually complete. Returns the new score when the rescore changed it.
+    WHY: a match may only LOOK weaker than it is because its contract type
+    lives on the detail page -- measured on the Uni-Leipzig developer job,
+    whose myScience teaser does not say "unbefristet" while its detail page
+    states "Befristung unbefristet".
+
+    POLICY: EVERY match (score >= min_score) whose permanence is not yet
+    visible gets completed, deliberately including rows already at or above
+    strong_threshold. The point is not only to tip near-misses over the
+    line: the permanence boost must apply CONSISTENTLY, so a permanent 13
+    outranks a fixed-term 12 instead of the ordering depending on whether
+    the contract happened to be in the teaser. Rows below min_score are not
+    probed -- they are not displayed, and a dev title virtually always
+    carries a title-term hit that already puts it over that line.
+
+    Bounded by `detail_probe_per_scan` per run and once per posting ever
+    (detail_fetched_at gate; a failed fetch is retried on a later scan).
+    Returns the new score when the rescore changed it.
     """
     if budget.get("left", 0) <= 0 or sc.filtered or dup is not None:
         return None
+    if sc.score < float(cfg.prefs.get("min_score", 6) or 0):
+        return None
     if any(str(label).startswith("perm:") for label, _ in sc.reasons):
         return None                     # permanence already visible
-    gap = strong_th - sc.score
-    boost = float(cfg.prefs.get("permanent_boost", 4) or 4)
-    if gap <= 0 or gap > boost:
-        return None
     fn = getattr(mod, "fetch_detail", None)
     if fn is None:
         return None
@@ -152,14 +159,14 @@ def scan(cfg, conn, fetcher, *,
                 continue
             salmod.fill(p)
             sc = score_posting(cfg.prefs, p)
-            pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now)
+            pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now, cfg.prefs)
             if is_new:
                 new_count += 1
                 if not sc.filtered and dup is None and sc.score >= min_score:
                     match_count += 1
                     matches.append((pid, sc.score, p.title, p.company, p.location))
             probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                         probe_budget, strong_th, dup)
+                                         probe_budget, dup)
             if probed is not None:
                 if probed >= strong_th:
                     emit({"kind": "promoted", "id": pid, "score": probed,

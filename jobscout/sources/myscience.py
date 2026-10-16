@@ -37,6 +37,12 @@ _LOCATION = re.compile(r'<span class="location">([^<]+)</span>')
 _DATE = re.compile(r'<time datetime="([^"]+)"')
 _ORG = re.compile(r'<span class="results_organization">([^<]+)</span>')
 _DESC = re.compile(r'<span class="abs" itemprop="description">(.*?)</span>', re.S)
+# The per-job page publishes the advert as HTML inside the body's
+# `itemprop="description"` region. The generic extractor only finds the
+# og/meta blurb (~330 chars), which hides most of the text -- measured on
+# the Leipzig DevOps row, whose rescore lost its PHP mention because the
+# blurb does not name the stack.
+_BODY = re.compile(r'itemprop="description"[^>]*>')
 
 
 def parse(text: str) -> list[Posting]:
@@ -90,5 +96,17 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
 
 
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
+    try:
+        status, text = fetcher.get(p.url)
+    except Exception:
+        status, text = 0, ""
+    if status == 200 and text:
+        m = _BODY.search(text or "")
+        if m:
+            end = text.find("<footer", m.end())
+            body = text[m.end(): end if end > 0 else len(text)]
+            desc = clean_html(body)
+            if len(desc) > 600:
+                return desc[:6000]
     from .. import detail as detailmod
     return detailmod.html_detail(p.url, fetcher)

@@ -34,7 +34,7 @@ def test_probe_promotes_a_near_threshold_row_once(tmp_path):
     conn, p, sc, pid, mod, cfg, fetcher = _env(tmp_path, "Die Stelle ist unbefristet.")
     assert sc.score == 6 and not sc.filtered
     out = scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                      {"left": 1}, 10, None)
+                                      {"left": 1}, None)
     assert out == 10                            # detail revealed the permanence
     row = conn.execute("SELECT score, description, detail_fetched_at "
                        "FROM postings WHERE id=?", (pid,)).fetchone()
@@ -44,20 +44,54 @@ def test_probe_promotes_a_near_threshold_row_once(tmp_path):
     sc2 = score_posting(PREFS, dbm.row_to_posting(
         conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()))
     assert scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc2, fetcher,
-                                       {"left": 1}, 14, None) is None
+                                       {"left": 1}, None) is None
 
 
-def test_probe_skips_out_of_window_budget_dups_and_visible_permanence(tmp_path):
+def test_probe_also_bumps_rows_already_over_the_threshold(tmp_path):
+    """The boost must apply on its merits, not only to near-misses: a match
+    that already sits at 12 gets its detail completed and climbs to 16, so a
+    permanent 13+ outranks a fixed-term 12 instead of depending on where the
+    contract happened to be written."""
+    from jobscout.score import Score
+    conn, p, sc, pid, mod, cfg, fetcher = _env(tmp_path, "Die Stelle ist unbefristet.")
+    sc_strong = Score(score=12.0, reasons=[["title:software", 3.0]])
+    out = scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc_strong, fetcher,
+                                      {"left": 1}, None)
+    # fired despite score >= strong; returns the RESCORED truth, not 12+4
+    assert out == 10.0
+
+
+def test_rescan_does_not_demote_a_probed_row(tmp_path):
+    """A later scan re-parses the TEASER only; the stored detail text must win,
+    or the promoted score silently regresses (measured 16 -> 12)."""
+    conn, p, sc, pid, mod, cfg, fetcher = _env(tmp_path, "Die Stelle ist unbefristet.")
+    scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, {"left": 1}, None)
+    assert conn.execute("SELECT score FROM postings WHERE id=?",
+                        (pid,)).fetchone()[0] == 10.0
+    fresh = Posting(source="fake", title="Softwareentwickler", external_id="1",
+                    url="https://example.invalid/1", description="Team gesucht.")
+    sc_fresh = score_posting(PREFS, fresh)
+    dbm.upsert(conn, fresh, sc_fresh, 2, "2026-10-16T00:00:00+00:00", PREFS)
+    row = conn.execute("SELECT score, description FROM postings WHERE id=?",
+                       (pid,)).fetchone()
+    assert row["score"] == 10.0                 # not 6: scored from the STORED text
+    assert row["description"].startswith("Die Stelle")
+
+
+def test_probe_skips_budget_dups_below_min_and_visible_permanence(tmp_path):
     conn, p, sc, pid, mod, cfg, fetcher = _env(tmp_path, "unbefristet")
     assert scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                       {"left": 0}, 10, None) is None       # no budget
+                                       {"left": 0}, None) is None           # no budget
     assert scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                       {"left": 1}, 20, None) is None       # far gap
-    assert scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                       {"left": 1}, 10, 7) is None          # dup row
+                                       {"left": 1}, 7) is None              # dup row
+    p_low = Posting(source="fake3", title="Software", external_id="3")
+    sc_low = score_posting(PREFS, p_low)        # 3 < min_score, not displayed
+    assert sc_low.score == 3
+    assert scanner._maybe_probe_detail(conn, cfg, mod, p_low, pid, sc_low, fetcher,
+                                       {"left": 1}, None) is None
     p2 = Posting(source="fake2", title="Softwareentwickler", external_id="2",
                  description="Die Stelle ist unbefristet.")
     sc_vis = score_posting(PREFS, p2)
     assert any(l.startswith("perm:") for l, _ in sc_vis.reasons)
     assert scanner._maybe_probe_detail(conn, cfg, mod, p2, pid, sc_vis, fetcher,
-                                       {"left": 1}, 14, None) is None       # already visible
+                                       {"left": 1}, None) is None           # already visible

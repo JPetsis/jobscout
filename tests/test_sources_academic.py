@@ -133,6 +133,18 @@ def test_myscience_parse(fixture_text):
     assert "ETH Zurich invites" in p.description
 
 
+def test_myscience_detail_reads_the_body_region(fixture_text):
+    """The generic extractor only sees the ~330-char meta blurb; the advert
+    lives in the body's itemprop="description" region. Regression for the
+    DevOps row, whose rescore lost its PHP chip to the blurb."""
+    ps = myscience.parse(fixture_text("myscience_list.html"))
+    f = FakeGet([(200, fixture_text("myscience_detail.html"))])
+    desc = myscience.fetch_detail(ps[0], f)
+    assert desc and len(desc) > 1000
+    assert "Das sind Ihre Aufgaben" in desc
+    assert "PHP" in desc
+
+
 def test_myscience_query_and_location_warning(fixture_text):
     html = fixture_text("myscience_list.html")
     f = FakeGet([(200, html)])
