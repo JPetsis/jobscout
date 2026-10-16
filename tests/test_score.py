@@ -429,3 +429,20 @@ def test_temporary_marker_is_reason_only_and_never_fires_on_unbefristet():
                                   description="Eine unbefristete Stelle."))
     assert not any(l.startswith("tmp:") for l, _ in sc2.reasons)
     assert contract_label_from_reasons(sc2.reasons) == "perm:unbefristet"
+
+
+def test_festanstellung_is_the_at_de_boards_word_for_permanent():
+    """karriere.at's keyfact reads "Anstellungsart: Vollzeit (Festanstellung)"
+    and never says "unbefristet" or "permanent"; without this term every
+    Austrian posting stayed pill-less even though the data was right there."""
+    prefs = dict(PREFS, permanent_terms=["unbefristet", "permanent", "festanstellung"],
+                 permanent_boost=4, permanent_cap=4)
+    sc = score_posting(prefs, mk(title="Software Entwickler",
+                                 description="Anstellungsart: Vollzeit (Festanstellung)"))
+    assert ["perm:festanstellung", 4] in sc.reasons
+    base = score_posting(dict(prefs, permanent_terms=[]),
+                         mk(title="Software Entwickler",
+                            description="Anstellungsart: Vollzeit (Festanstellung)")).score
+    assert sc.score == base + 4           # the term adds exactly the boost
+    # and it must not leak into the inverse marker path
+    assert not any(str(l).startswith("tmp:") for l, _ in sc.reasons)

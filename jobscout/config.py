@@ -107,7 +107,7 @@ preferences:
   # --- PERMANENCE (a positive signal only: no word, no points) ---
   # Open-ended contract. Scanned: title + description, and the description
   # may carry a contract note a source parsed from its listing (academics.de).
-  permanent_terms: [unbefristet, permanent]
+  permanent_terms: [unbefristet, permanent, festanstellung]
   permanent_boost: 4
   permanent_cap: 4
   # The inverse marker (0 points): no permanence word, but the text says
