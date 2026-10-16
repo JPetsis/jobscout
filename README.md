@@ -265,8 +265,9 @@ unchanged for anyone who wants the old word-list behaviour.
    `stack_min_hits` as a "must have at least N" gate), **description**
    (`description_terms`, `description_deny`), **permanence**
    (`permanent_terms` -> `permanent_boost`; a positive-only signal for
-   open-ended contracts, and a source may write its parsed contract note
-   into the description), anywhere (`keywords`,
+   open-ended contracts, shown as a `[unbefristet]` pill in listings;
+   `temporary_terms` marks the inverse with a 0-point `[befristet]`, and a
+   source may write its parsed contract note into the description), anywhere (`keywords`,
    `exclude_terms`), and **location** (`country_allow`,
    `locations_prefer`, `remote_bonus`). Every point is stored as a reason
    and digests show the exact breakdown

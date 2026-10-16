@@ -268,3 +268,16 @@ def test_restore_with_nothing_available_says_so(capsys, monkeypatch, tmp_path):
     assert rc == 1
     assert "no backups found" in out
     assert "jobscout backup" in out       # says how to make one
+
+
+def test_scan_top_matches_render_the_contract_pill(capsys, scan_env, monkeypatch):
+    """The contract signal must be visible where matches are listed, not only
+    inside the why-breakdown: the Leipzig unicorn was found, but 'unbefristet'
+    was invisible in the scan summary until this pill existed."""
+    _run(monkeypatch, _summary(matches_top=[(7, 13.0, "Full Stack Entwickler",
+                                             "Uni Leipzig", "Leipzig", "perm:unbefristet"),
+                                            (9, 9.0, "Moodle Developer",
+                                             "Uni Tübingen", "Tübingen", "tmp:befristet")]))
+    out = capsys.readouterr().out
+    assert "[unbefristet]" in out
+    assert "[befristet]" in out

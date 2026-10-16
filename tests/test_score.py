@@ -414,3 +414,18 @@ def test_academic_deny_matches_compounds_but_not_plain_dev_titles():
         sc = score_posting(prefs, mk(title=title))
         assert sc.filtered and sc.reason.startswith("academic:"), title
     assert not score_posting(prefs, mk(title="Full Stack Softwareentwickler")).filtered
+
+
+def test_temporary_marker_is_reason_only_and_never_fires_on_unbefristet():
+    from jobscout.score import contract_label_from_reasons
+    prefs = dict(PREFS, permanent_terms=["unbefristet"], temporary_terms=["befristet"],
+                 permanent_boost=4, permanent_cap=4)
+    sc = score_posting(prefs, mk(title="Python Engineer",
+                                 description="Die Stelle ist befristet bis 2030."))
+    assert ["tmp:befristet", 0] in sc.reasons
+    assert sc.score == 4                       # title:engineer +3, kw:python +1
+    assert contract_label_from_reasons(sc.reasons) == "tmp:befristet"
+    sc2 = score_posting(prefs, mk(title="Python Engineer",
+                                  description="Eine unbefristete Stelle."))
+    assert not any(l.startswith("tmp:") for l, _ in sc2.reasons)
+    assert contract_label_from_reasons(sc2.reasons) == "perm:unbefristet"

@@ -65,5 +65,17 @@ def score_text(text: str, value: float, min_score: float, strong_threshold: floa
     return dim(text)
 
 
+def contract_pill(label: str) -> str:
+    """Colored tag for a contract marker from contract_label_from_reasons."""
+    if not label:
+        return ""
+    family, _, term = label.partition(":")
+    if family == "perm":
+        return green(f"[{term}]")
+    if family == "tmp":
+        return dim(f"[{term}]")
+    return ""
+
+
 def rule(width: int = 58) -> str:
     return dim("─" * width)

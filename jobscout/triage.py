@@ -9,13 +9,20 @@ import json
 
 from . import salary as salmod
 from . import ui
+from .score import contract_label_from_reasons
 
 HELP = "keys: o open · s saved · a applied · x dismiss · n next · q quit"
 
 
 def _render(write, r, idx: int, total: int, min_score: float, strong_th: float) -> None:
     badge = ui.score_text(f"{r['score']:g}", r["score"], min_score, strong_th)
-    write(f"\n[{idx}/{total}]  {badge}  {ui.bold(r['title'])}")
+    try:
+        reasons = json.loads(r["reasons"] or "[]")
+    except (ValueError, TypeError):
+        reasons = []
+    pill = ui.contract_pill(contract_label_from_reasons(reasons))
+    pill = f"  {pill}" if pill else ""
+    write(f"\n[{idx}/{total}]  {badge}{pill}  {ui.bold(r['title'])}")
     meta = " · ".join(x for x in (r["company"], r["location"], salmod.fmt_row(r)) if x)
     if meta:
         write("        " + ui.dim(meta))
@@ -25,10 +32,6 @@ def _render(write, r, idx: int, total: int, min_score: float, strong_th: float) 
     write("        " + ui.dim(src))
     if r["url"]:
         write("        " + ui.cyan(r["url"]))
-    try:
-        reasons = json.loads(r["reasons"] or "[]")
-    except ValueError:
-        reasons = []
     if reasons:
         write("        " + ui.dim("why: " + " · ".join(f"{lab} +{pts:g}" for lab, pts in reasons)))
     write("        " + ui.dim(HELP))

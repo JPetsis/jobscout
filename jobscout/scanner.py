@@ -22,7 +22,7 @@ from . import db as dbm
 from . import salary as salmod
 from .config import source_settings
 from .http import FetchError
-from .score import prefs_hash, score_posting
+from .score import contract_label_from_reasons, prefs_hash, score_posting
 from .sources import iter_sources
 
 Event = dict
@@ -50,7 +50,7 @@ def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
 
     Bounded by `detail_probe_per_scan` per run and once per posting ever
     (detail_fetched_at gate; a failed fetch is retried on a later scan).
-    Returns the new score when the rescore changed it.
+    Returns the new Score when the rescore changed it.
     """
     if budget.get("left", 0) <= 0 or sc.filtered or dup is not None:
         return None
@@ -76,10 +76,14 @@ def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
     dbm.set_description(conn, pid, desc)
     row = conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()
     sc2 = score_posting(cfg.prefs, dbm.row_to_posting(row))
-    if sc2.score == sc.score and bool(sc2.filtered) == bool(sc.filtered):
+    # Reasons count as change too: a 0-point marker (tmp:befristet) moves
+    # no score but must be stored and reported; a score-only comparison
+    # silently dropped it and the pill never appeared.
+    if (sc2.score == sc.score and sc2.reasons == sc.reasons
+            and bool(sc2.filtered) == bool(sc.filtered)):
         return None
     dbm.set_score(conn, pid, sc2)
-    return sc2.score
+    return sc2
 
 
 def scan(cfg, conn, fetcher, *,
@@ -164,17 +168,20 @@ def scan(cfg, conn, fetcher, *,
                 new_count += 1
                 if not sc.filtered and dup is None and sc.score >= min_score:
                     match_count += 1
-                    matches.append((pid, sc.score, p.title, p.company, p.location))
+                    matches.append((pid, sc.score, p.title, p.company, p.location,
+                                    contract_label_from_reasons(sc.reasons)))
             probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
                                          probe_budget, dup)
             if probed is not None:
-                if probed >= strong_th:
-                    emit({"kind": "promoted", "id": pid, "score": probed,
+                if probed.score >= strong_th:
+                    emit({"kind": "promoted", "id": pid, "score": probed.score,
                           "title": p.title})
                 if is_new:
                     for i, m in enumerate(matches):
                         if m[0] == pid:
-                            matches[i] = (pid, probed, p.title, p.company, p.location)
+                            matches[i] = (pid, probed.score, p.title, p.company,
+                                          p.location,
+                                          contract_label_from_reasons(probed.reasons))
                             break
         stats["sources"][name] = {
             "fetched": len(postings),

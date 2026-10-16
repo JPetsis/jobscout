@@ -298,11 +298,15 @@ def cmd_scan(args) -> int:
     if summary["matches_top"]:
         print("\n" + ui.rule())
         print(ui.bold("top new matches"))
-        for pid, sc, title, company, loc in summary["matches_top"][:8]:
+        for m in summary["matches_top"][:8]:
+            pid, sc, title, company, loc = m[:5]
+            mark = m[5] if len(m) > 5 else ""
             meta = " · ".join(x for x in (company[:30], loc[:26]) if x)
             badge = ui.score_text(f"{sc:5g}", sc, min_score, strong_th)
+            pill = ui.contract_pill(mark)
+            pill = f"  {pill}" if pill else ""
             tail = ui.dim("  " + meta) if meta else ""
-            print(f"  {ui.dim(f'#{pid}')}  {badge}  {title[:58]}{tail}")
+            print(f"  {ui.dim(f'#{pid}')}  {badge}{pill}  {title[:58]}{tail}")
     print("\n" + ui.rule())
     print(f"{ui.bold(str(summary['new']))} new · {ui.cyan(str(summary['matches']))} matches this run · "
           f"{summary['total_matches']} matching overall · {ui.gold(str(summary['strong']))} strong")
@@ -332,6 +336,16 @@ def cmd_scan(args) -> int:
         print(ui.dim("next: jobscout digest --all    (everything matching)   ·   "
                      "jobscout digest   (this run)"))
     return 0
+def _contract_of(row) -> str:
+    """Contract marker ('perm:X'/'tmp:X') from a row's stored reasons."""
+    from .score import contract_label_from_reasons
+    try:
+        reasons = json.loads(row["reasons"] or "[]")
+    except (ValueError, TypeError):
+        reasons = []
+    return contract_label_from_reasons(reasons)
+
+
 def _print_top(top, min_score: float, strong_th: float) -> None:
     for pid, title, company, score in top:
         badge = ui.score_text(f"{score:5g}", score, min_score, strong_th)
@@ -403,10 +417,12 @@ def cmd_list(args) -> int:
         if (r["verify_status"] or "") == "dead":
             marks.append(ui.red("[dead]"))
         status = " " + " ".join(marks) if marks else ""
+        pill = ui.contract_pill(_contract_of(r))
+        pill = f" {pill}" if pill else ""
         rid = ui.dim(f"#{r['id']}")
         badge = ui.score_text(f"{r['score']:5g}", r["score"], min_score, strong_th)
         tail = ui.dim(f"  {meta[:62]}") if meta else ""
-        print(f"  {rid}  {badge}{status}  {r['title'][:58]}{tail}")
+        print(f"  {rid}  {badge}{status}{pill}  {r['title'][:58]}{tail}")
     if goal:
         print(ui.dim(f"\n{len(rows)} shown for goal '{goal.name}' · "
                      f"`--all-goals` shows the full pool"))
@@ -470,6 +486,9 @@ def cmd_show(args) -> int:
         reasons = json.loads(row["reasons"] or "[]")
     except ValueError:
         reasons = []
+    label = _contract_of(row)
+    if label:
+        print("  " + ui.dim("contract:".ljust(13)) + ui.contract_pill(label))
     if reasons:
         print("  " + ui.dim("why:".ljust(13)) + " · ".join(f"{lab} +{pts:g}" for lab, pts in reasons))
     print("\n" + ui.rule() + "\n")

@@ -110,6 +110,10 @@ preferences:
   permanent_terms: [unbefristet, permanent]
   permanent_boost: 4
   permanent_cap: 4
+  # The inverse marker (0 points): no permanence word, but the text says
+  # fixed-term -> a "befristet" pill in listings. "befristet" never fires
+  # on "unbefristet" (the elif against a real perm hit guards it).
+  temporary_terms: [befristet, fixed-term, fixed term]
   # Academic-rank titles are filtered before scoring. Boundary-FRIENDLY
   # matching on purpose, so compounds hit ("Universitätsprofessur" ->
   # "professur"). Empty list switches it off.

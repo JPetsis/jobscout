@@ -304,6 +304,15 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
     if perm_terms:
         _boost(s, perm_terms, f"{title} {desc}", "perm",
                _num(prefs, "permanent_boost", 4), _num(prefs, "permanent_cap", 4))
+        # The inverse marker: no permanence word found, but the text says
+        # fixed-term -> a 0-point reason, so listings can show a
+        # "befristet" pill. "befristet" cannot simply be a scoring term:
+        # it also sits inside "unbefristet", hence the elif.
+        if not any(str(lab).startswith("perm:") for lab, _ in s.reasons):
+            tmp = _first_hit(prefs.get("temporary_terms", []),
+                             f"{title} {desc}", strict=False)
+            if tmp:
+                s.reasons.append([f"tmp:{tmp}", 0])
 
     # `locations_prefer` (preferred cities) is only a ranking boost; the legacy
     # `locations_allow` keeps working as a gate when `country_allow` is absent.
@@ -382,6 +391,21 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
         s.reasons.append(["remote", bonus])
 
     return s
+
+
+def contract_label_from_reasons(reasons) -> str:
+    """The contract marker a reasons list implies: 'perm:X', 'tmp:X' or ''.
+
+    SINGLE SOURCE OF TRUTH for the pills in scan/list/triage output and
+    the web cards, so every surface shows the same marker. A permanence
+    hit outranks a fixed-term hit by construction (score_posting never
+    writes both).
+    """
+    for prefix in ("perm:", "tmp:"):
+        for label, _pts in reasons or []:
+            if str(label).startswith(prefix):
+                return str(label)
+    return ""
 
 
 def reasons_text(sc: Score) -> str:

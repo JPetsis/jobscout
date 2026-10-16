@@ -14,7 +14,8 @@ from jobscout.score import score_posting
 
 PREFS = {"min_score": 6, "strong_threshold": 10,
          "title_boost": 3, "title_cap": 6, "title_terms": ["entwickler", "software"],
-         "permanent_terms": ["unbefristet"], "permanent_boost": 4, "permanent_cap": 4}
+         "permanent_terms": ["unbefristet"], "permanent_boost": 4, "permanent_cap": 4,
+         "temporary_terms": ["befristet"]}
 
 
 def _env(tmp_path, detail_text):
@@ -35,7 +36,7 @@ def test_probe_promotes_a_near_threshold_row_once(tmp_path):
     assert sc.score == 6 and not sc.filtered
     out = scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
                                       {"left": 1}, None)
-    assert out == 10                            # detail revealed the permanence
+    assert out is not None and out.score == 10.0  # detail revealed the permanence
     row = conn.execute("SELECT score, description, detail_fetched_at "
                        "FROM postings WHERE id=?", (pid,)).fetchone()
     assert row["score"] == 10 and row["description"].startswith("Die Stelle")
@@ -58,7 +59,7 @@ def test_probe_also_bumps_rows_already_over_the_threshold(tmp_path):
     out = scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc_strong, fetcher,
                                       {"left": 1}, None)
     # fired despite score >= strong; returns the RESCORED truth, not 12+4
-    assert out == 10.0
+    assert out is not None and out.score == 10.0
 
 
 def test_rescan_does_not_demote_a_probed_row(tmp_path):
@@ -76,6 +77,20 @@ def test_rescan_does_not_demote_a_probed_row(tmp_path):
                        (pid,)).fetchone()
     assert row["score"] == 10.0                 # not 6: scored from the STORED text
     assert row["description"].startswith("Die Stelle")
+
+
+def test_probe_persists_a_reason_only_marker(tmp_path):
+    """A 0-point marker (tmp:befristet) changes no score but MUST be stored and
+    reported; a score-only change check silently dropped it (measured: the
+    Tuebingen row got no [befristet] pill)."""
+    conn, p, sc, pid, mod, cfg, fetcher = _env(tmp_path, "Die Stelle ist befristet bis 2030.")
+    out = scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
+                                      {"left": 1}, None)
+    assert out is not None
+    assert any(str(l).startswith("tmp:") for l, _ in out.reasons)
+    stored = conn.execute("SELECT reasons FROM postings WHERE id=?",
+                          (pid,)).fetchone()[0]
+    assert "tmp:befristet" in stored
 
 
 def test_probe_skips_budget_dups_below_min_and_visible_permanence(tmp_path):
