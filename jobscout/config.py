@@ -18,6 +18,11 @@ DEFAULT_CONFIG = '''\
 
 preferences:
   max_age_days: 21        # drop postings older than this when a date is known
+  # How recent a posting from the employer's own board has to be to count as
+  # "fresh from the source" in the app. Only that tier gets the mark: an
+  # aggregator carrying the same role later is a republisher, and the window
+  # is the point at which you are early.
+  insider_days: 7
   # rough score anchors: 6 = right title + one more signal; 10 = right title
   # + a technology you actually want. Calibrate anytime with `jobscout stats`.
   min_score: 6            # below this a posting is stored but not shown in digests

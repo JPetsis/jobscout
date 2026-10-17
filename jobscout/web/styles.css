@@ -176,6 +176,23 @@ body {
 .chip.st-saved { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.12); }
 .chip.st-applied { color: var(--blue); border-color: transparent; background: var(--chip); }
 .chip.st-dismissed { color: var(--muted); }
+/* "direct" means the employer publishes here themselves. The fresh variant is
+   the one that matters: recent, and no board has republished it yet. */
+.chip.direct { color: var(--blue); border-color: transparent; background: var(--chip); }
+.chip.direct.fresh { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.14); font-weight: 600; }
+.chip.also { color: var(--muted); border-style: dashed; }
+.fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.fresh input { accent-color: var(--accent, #1a7f37); margin: 0; }
+.fresh input:checked + #fresh-text { color: var(--fg); }
 .spacer { margin-left: auto; }
 
 .title {

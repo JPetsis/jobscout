@@ -89,6 +89,74 @@ def group_of(name: str) -> str:
     return GROUPS.get(name, GROUP_OTHER)
 
 
+# WHERE THE VACANCY COMES FROM: a channel where the employer or the institution
+# publishes its OWN vacancy, rather than a board republishing somebody else's.
+# The value is the reason, shown verbatim in the app, because the claim has to
+# be the true one for that particular board:
+#
+#   "the employer's own board"           we poll the employer's hiring system
+#   "... publishes its own vacancies"    the field's standard announcement
+#                                        channel, where the ad is placed BY
+#                                        the employer
+#
+# DELIBERATELY NARROW. xing, linkedin, stepstone, arbeitnow and the remote
+# boards also carry ads the employer placed, and they also carry republished
+# and agency copies of the same role. A label that is right for some of a
+# source's rows and wrong for others is worse than no label, so those stay out.
+# `test_every_source_is_classified` fails when a source is added without a
+# decision, and unlisted names are simply not direct.
+DIRECT_SOURCES = {
+    # the employer's own applicant-tracking board: one employer each, and the
+    # place the posting appears before it is syndicated anywhere
+    "greenhouse": "the employer's own board",
+    "ashby": "the employer's own board",
+    "recruitee": "the employer's own board",
+    "lever": "the employer's own board",
+    "smartrecruiters": "the employer's own board",
+    "workable": "the employer's own board",
+    "teamtailor": "the employer's own board",
+    "workday": "the employer's own board",
+    "join": "the employer's own board",
+    # research and higher education: the institution places the advert here
+    "euraxess": "the EU research portal, where institutions publish their own vacancies",
+    "academics": "the UK academic board, where institutions publish their own vacancies",
+    "myscience": "the German research portal, where institutions publish their own vacancies",
+    "wissenschaftskarriere": "the German academic board, where institutions publish their own vacancies",
+    # public sector: the state's own hiring site for its own vacancies
+    "usajobs": "the US government's own hiring site",
+    "governmentjobs": "the public-sector hiring system employers publish into",
+}
+
+
+def is_direct(name: str) -> bool:
+    """Is this a channel where the employer publishes the vacancy itself?"""
+    return name in DIRECT_SOURCES
+
+
+# The sources deliberately LEFT OUT, named rather than implied: a new board has
+# to be classified on purpose, and `test_every_source_is_classified` fails until
+# it is. Not being direct is the safe default (no badge, no claim), so this list
+# exists to record the decision, not to change behaviour.
+NOT_DIRECT = frozenset({
+    # DACH boards and job centres: employers post here, and so do agencies and
+    # republishers, so a per-row claim is impossible
+    "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch", "ams",
+    "jobsat", "jobscout24", "jobware", "englishjobs", "talent",
+    "berlinstartupjobs", "germantechjobs", "swissdevjobs", "jobup",
+    "arbeitnow",
+    # European and US boards that mix sources
+    "eures", "themuse", "adzuna",
+    # worldwide and remote boards, which mix employer ads with republished ones
+    "linkedin", "hn", "remotive", "wwr", "remoteok", "larajobs", "workingnomads",
+    "nodesk", "himalayas", "jobicy", "wordpressjobs", "pythonjobs", "fossjobs",
+})
+
+
+def direct_note(name: str) -> str:
+    """Why this source counts as direct, in words the app can show."""
+    return DIRECT_SOURCES.get(name, "")
+
+
 def iter_sources(enabled):
     """Yield (name, module) for the enabled sources, in config order."""
     for name in enabled:

@@ -14,19 +14,124 @@ from __future__ import annotations
 
 import json
 import pathlib
+from datetime import datetime, timezone
 
 from . import db as dbm
 from . import salary as salmod
+from . import sources
 
 VALID_STATUSES = ("new", "saved", "applied", "dismissed")
 
 
-def posting_dict(row) -> dict:
+def _cell(row, name: str) -> str:
+    """One column as text from either a sqlite3.Row or a plain dict.
+
+    Missing means empty: a row from an older DB, or a test's hand-made dict, must
+    read as "we do not know" rather than blowing up the whole view.
+    """
+    try:
+        value = row[name]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return str(value or "")
+
+
+def posting_age_days(row, now=None) -> float | None:
+    """How long ago this posting was published, in days, or None if unknown.
+
+    `posted_at` is the board's own date and is the right clock when it exists
+    (every source that provides one writes `YYYY-MM-DD`). When it is missing the
+    honest fallback is `first_seen_at`, when WE first saw it, which can only
+    make a posting look younger than it is -- never older. A date in the future
+    (some boards pre-publish, karriere_at does) clamps to 0 rather than going
+    negative and reading as "fresher than new".
+    """
+    raw = _cell(row, "posted_at").strip() or _cell(row, "first_seen_at").strip()
+    if not raw:
+        return None
+    for parse in (lambda s: datetime.fromisoformat(s),
+                  lambda s: datetime.fromisoformat(s[:10])):
+        try:
+            when = parse(raw.replace("Z", "+00:00"))
+            break
+        except (ValueError, TypeError):
+            continue
+    else:
+        return None
+    now = now or datetime.now(timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (now - when).total_seconds() / 86400.0)
+
+
+def republished_as(conn, pid: int, source: str = "") -> list[dict]:
+    """Boards that carried the same role AFTER we first saw it.
+
+    A row whose `dup_of` points here is the same company+title+location arriving
+    later, so this is the answer to "has it gone public yet": an empty list means
+    the employer's own board is still the only place we know it from.
+
+    Twins from the SAME board are left out, and that is not pedantry: arbeitnow
+    reposts a role under a new slug, so a row there can be its own duplicate.
+    Measured on a real store, most dup rows are exactly that. Telling the user
+    "also on arbeitnow" while they are looking at arbeitnow would be a lie about
+    the one thing this feature exists to say.
+    """
+    out = []
+    for r in conn.execute(
+            "SELECT p.source AS twin_source, p.first_seen_at, p.url, "
+            "       parent.source AS parent_source "
+            "FROM postings p JOIN postings parent ON parent.id = p.dup_of "
+            "WHERE p.dup_of=? ORDER BY p.first_seen_at", (int(pid),)):
+        if source and r["twin_source"] == source:
+            continue
+        if r["twin_source"] == r["parent_source"]:
+            continue
+        out.append({"source": r["twin_source"], "seen_at": r["first_seen_at"],
+                    "direct": sources.is_direct(r["twin_source"]),
+                    "url": r["url"] or ""})
+    return out
+
+
+def republished_map(conn, rows: list[tuple[int, str]]) -> dict[int, list[dict]]:
+    """`republished_as` for many rows at once, so the grid is not N+1 queries.
+
+    `rows` is (id, source) pairs -- the source is needed to drop a board's
+    duplicates of its own listing.
+    """
+    found: dict[int, list[dict]] = {}
+    pairs = [(int(i), str(s or "")) for i, s in rows]
+    for start in range(0, len(pairs), 500):        # SQLite's parameter limit
+        chunk = pairs[start:start + 500]
+        if not chunk:
+            continue
+        marks = ",".join("?" * len(chunk))
+        src_of = dict(chunk)
+        for r in conn.execute(
+                f"SELECT p.dup_of, p.source AS twin_source, p.first_seen_at, p.url, "
+                f"       parent.source AS parent_source "
+                f"FROM postings p JOIN postings parent ON parent.id = p.dup_of "
+                f"WHERE p.dup_of IN ({marks}) ORDER BY p.first_seen_at",
+                [i for i, _ in chunk]):
+            dup_of = int(r["dup_of"])
+            if r["twin_source"] == r["parent_source"] or r["twin_source"] == src_of.get(dup_of):
+                continue
+            found.setdefault(dup_of, []).append(
+                {"source": r["twin_source"], "seen_at": r["first_seen_at"],
+                 "direct": sources.is_direct(r["twin_source"]), "url": r["url"] or ""})
+    return found
+
+
+def posting_dict(row, twins: list[dict] | None = None) -> dict:
     """One stored posting as a JSON-safe dict.
 
     `reasons` is stored as JSON *text* in the DB; the UI needs the parsed list
     to render its "why" chips. A malformed value yields `[]` rather than raising,
     because a hand-edited or partially-migrated DB must not break the whole view.
+
+    `direct` / `direct_note` / `age_days` / `republished` are what the card needs
+    to say "this is fresh from the employer's board and nobody else has it",
+    which is the only version of an insider tip this data can honestly support.
     """
     out = {k: row[k] for k in row.keys()} if hasattr(row, "keys") else dict(row)
     raw = out.get("reasons") or ""
@@ -40,6 +145,10 @@ def posting_dict(row) -> dict:
     except Exception:                                        # noqa: BLE001
         out["salary"] = ""
     out["score"] = float(out.get("score") or 0.0)
+    out["direct"] = sources.is_direct(out.get("source") or "")
+    out["direct_note"] = sources.direct_note(out.get("source") or "")
+    out["age_days"] = posting_age_days(row)
+    out["republished"] = list(twins or [])
     return out
 
 
@@ -56,8 +165,10 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
     with dbm.LOCK:
         rows = dbm.list_postings(conn, min_score=min_score, status=status,
                                  source=source, limit=limit or 100000)
-        out = [posting_dict(r) for r in rows
-               if not r["filtered"] and r["dup_of"] is None]
+        keep = [r for r in rows if not r["filtered"] and r["dup_of"] is None]
+        # one query for every republished twin on the page, not one per card
+        twins = republished_map(conn, [(r["id"], r["source"]) for r in keep])
+        out = [posting_dict(r, twins.get(r["id"])) for r in keep]
     out.sort(key=lambda r: r["score"], reverse=True)
     if limit:
         out = out[:limit]
@@ -102,6 +213,9 @@ def stats(conn, prefs: dict) -> dict:
         "strong": strong,
         "min_score": min_score,
         "strong_threshold": strong_th,
+        # the window the "fresh from the source" filter uses; the filter itself
+        # runs in the window, which already has the rows
+        "insider_days": float(prefs.get("insider_days", 7)),
         "histogram": hist,
         "run": ({k: run[k] for k in run.keys()} if run is not None else None),
     }
@@ -161,6 +275,15 @@ SETTINGS = [
      "group": "How strict",
      "label": "Ignore postings older than this",
      "help": "In days."},
+    {"key": "preferences.insider_days", "op": "scalar", "kind": "number",
+     "default": 7,
+     "group": "How strict",
+     "label": "How recent counts as fresh from the source",
+     "help": "In days. A posting from the employer's own board (or an "
+             "institution's own announcement channel) younger than this is "
+             "marked on the card, and 'Fresh from the source' in the filter "
+             "bar shows only those. Nobody republishing it yet is part of the "
+             "marking, so this is the window in which you are early."},
     {"key": "preferences.query_budget", "op": "scalar", "kind": "number",
      "group": "How strict",
      "label": "How many queries per source",
@@ -405,7 +528,7 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
             desc = fresh
             note = ""
 
-    out = posting_dict(row)
+    out = posting_dict(row, republished_as(conn, row["id"], row["source"]))
     out["description"] = desc
     # What to say when there is no text to show. Already-known deadness is
     # free; the rest is decided above. Never a silent empty box.

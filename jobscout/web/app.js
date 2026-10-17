@@ -8,7 +8,7 @@
 
 let ALL = [];                 // every match, unfiltered
 let STATS = {};               // header numbers
-const F = { q: '', band: 'all', source: 'all', status: 'new' };
+const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false };
 let CURRENT = null;           // posting shown in the detail pane
 let POLL = null;              // scan poll timer
 
@@ -136,10 +136,30 @@ function fillSources(list) {
 
 /* ---------- filters ---------- */
 
+/* "Fresh from the source": the employer publishes into these boards itself, so
+   a young posting there is the earliest public appearance -- and while no other
+   board carries it, it is also the moment when applying costs the least. All
+   three parts are data the API sends: r.direct, r.age_days, r.republished. */
+function freshFromSource(r) {
+  if (!r.direct) return false;
+  const days = Number(STATS.insider_days ?? 7);
+  if (r.age_days === null || r.age_days === undefined) return false;
+  if (Number(r.age_days) > days) return false;
+  return !(r.republished || []).length;
+}
+
+function fmtAge(days) {
+  const d = Number(days);
+  if (!isFinite(d)) return '';
+  if (d < 1) return 'today';
+  return Math.floor(d) + 'd';
+}
+
 function wireFilters() {
   $('q').addEventListener('input', (e) => { F.q = e.target.value.trim().toLowerCase(); render(); });
   $('source').addEventListener('change', (e) => { F.source = e.target.value; render(); });
   $('status').addEventListener('change', (e) => { F.status = e.target.value; render(); });
+  $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
 
   for (const b of document.querySelectorAll('#band button')) {
     b.addEventListener('click', () => {
@@ -159,6 +179,7 @@ function visible() {
     if (F.source !== 'all' && r.source !== F.source) return false;
     if (F.band === 'strong' && r.score < strongTh) return false;
     if (F.band === 'match' && r.score < minSc) return false;
+    if (F.fresh && !freshFromSource(r)) return false;
     if (F.q) {
       const hay = ((r.title || '') + ' ' + (r.company || '') + ' ' +
                    (r.location || '') + ' ' + (r.source || '')).toLowerCase();
@@ -168,8 +189,6 @@ function visible() {
   });
 }
 
-/* ---------- render ---------- */
-
 function render() {
   const rows = visible();
   const grid = $('grid');
@@ -177,10 +196,23 @@ function render() {
   $('count').textContent = rows.length + ' shown';
   $('empty').hidden = rows.length > 0;
 
+  // The freshness view is about being early, so it sorts by how recent it is
+  // rather than by score: the best match is worth less by the time it is a week
+  // old. Every other view keeps score order.
+  if (F.fresh) {
+    rows.sort((a, b) => (Number(a.age_days ?? 1e9) - Number(b.age_days ?? 1e9)));
+  }
+
   const strongTh = Number(STATS.strong_threshold ?? 10);
   const frag = document.createDocumentFragment();
   for (const r of rows) frag.appendChild(card(r, strongTh));
   grid.appendChild(frag);
+
+  // say how many there are, so the switch is worth flipping before you flip it
+  const nFresh = ALL.filter(freshFromSource).length;
+  $('fresh-text').textContent = nFresh
+    ? 'Fresh from the source (' + nFresh + ')'
+    : 'Fresh from the source';
 
   $('footer-note').textContent = ALL.length + ' loaded · click a card for details · ' +
     'S / A / X to triage';
@@ -194,6 +226,26 @@ function card(r, strongTh) {
   const top = el('div', 'top');
   top.appendChild(el('span', 'score' + (r.score >= strongTh ? ' strong' : ''), String(Math.round(r.score))));
   top.appendChild(el('span', 'chip', r.source));
+  // Where the vacancy comes from, and how young. "fresh" is the badge that
+  // means something: the employer's own board, recent, nobody republishing it.
+  if (r.direct) {
+    const isFresh = freshFromSource(r);
+    const age = (r.age_days === null || r.age_days === undefined) ? '' : ' · ' + fmtAge(r.age_days);
+    const chip = el('span', 'chip direct' + (isFresh ? ' fresh' : ''),
+                    (isFresh ? 'fresh from the source' : 'direct') + age);
+    chip.title = isFresh
+      ? 'Fresh from the source: posted on ' + (r.direct_note || 'the employer\u2019s own board') +
+        '. No other board has carried it yet.'
+      : 'Posted on ' + (r.direct_note || 'the employer\u2019s own board') + ', but no longer new.';
+    top.appendChild(chip);
+  }
+  // A republisher picked it up. Worth showing rather than hiding: it is the
+  // clock running out on the head start, and the date says how fast.
+  for (const tw of (r.republished || [])) {
+    const c2 = el('span', 'chip also', 'also on ' + tw.source);
+    c2.title = 'Another board carried this role on ' + String(tw.seen_at || '').slice(0, 10) + '.';
+    top.appendChild(c2);
+  }
   if (r.salary) top.appendChild(el('span', 'chip salary', r.salary));
   if (r.status && r.status !== 'new') {
     top.appendChild(el('span', 'chip st-' + r.status, r.status));
@@ -334,6 +386,15 @@ function renderDetail(d) {
   put('Score', d.score != null ? Math.round(d.score) : null);
   put('Source', d.source);
   put('Posted', (d.posted_at || '').slice(0, 10));
+  // Where the vacancy comes from, and whether the head start is still there.
+  // The card shows the short version; here it can be said in words.
+  if (d.direct) {
+    put('From', (d.direct_note || 'the employer\u2019s own board') +
+      (freshFromSource(d) ? ' \u00b7 fresh, and no other board has it yet' : ''));
+  }
+  for (const tw of (d.republished || [])) {
+    put('Also on', tw.source + ' since ' + String(tw.seen_at || '').slice(0, 10));
+  }
   const sal = d.salary && (d.salary.text || d.salary.raw);
   put('Salary', sal);
   if (d.liveness && d.liveness.status) {
