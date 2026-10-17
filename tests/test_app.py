@@ -552,3 +552,55 @@ def test_creating_without_activating_leaves_the_workspace_alone(api):
     assert out["ok"] is True
     assert profiles.read_active() == ""
     assert api.cfg.root == before
+
+
+# --- the update settings through the window's API ---------------------------
+#
+# Three separate questions, and conflating them is how the original bug happened:
+# may the app ask on its own (`check`), may it install by itself (`auto`), and
+# what happens when a person presses the button.
+
+@pytest.fixture()
+def upd_api(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout import profiles
+    from jobscout.config import init_workspace
+    init_workspace(profiles.base_root())
+    return appmod.JsApi()
+
+
+def test_the_automatic_check_is_not_made_when_the_setting_is_off(upd_api, monkeypatch):
+    upd_api.cfg.raw["updates"] = {"check": False}
+    called = []
+    monkeypatch.setattr(appmod.updatemod, "check",
+                        lambda *a, **k: called.append(1) or {"ok": True})
+
+    out = upd_api.update_check()
+
+    assert out.get("disabled") is True
+    assert called == [], "the app must not phone home when told not to"
+
+
+def test_the_button_checks_even_when_the_setting_is_off(upd_api, monkeypatch):
+    """Pressing "Check now" is the instruction; `check: false` is about what the
+    app does on its own. Same rule as `jobscout update` in a terminal."""
+    upd_api.cfg.raw["updates"] = {"check": False}
+    called = []
+    monkeypatch.setattr(
+        appmod.updatemod, "check",
+        lambda *a, **k: called.append(k) or {"ok": True, "update_available": False})
+
+    out = upd_api.update_check(force=True)
+
+    assert len(called) == 1, "the button must ask GitHub"
+    assert called[0].get("force") is True, "and it must skip the day-old cache"
+    assert out["update_available"] is False
+
+
+def test_the_window_is_told_whether_to_install_by_itself(upd_api, monkeypatch):
+    monkeypatch.setattr(appmod.updatemod, "check",
+                        lambda *a, **k: {"ok": True, "update_available": False})
+    assert upd_api.update_check(force=True)["auto"] is True
+
+    upd_api.cfg.raw["updates"] = {"auto": False}
+    assert upd_api.update_check(force=True)["auto"] is False

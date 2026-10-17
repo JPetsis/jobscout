@@ -604,8 +604,45 @@ async function openSettings() {
     const g = el('section', 's-group');
     g.appendChild(el('h3', null, name));
     for (const r of items) g.appendChild(settingRow(r));
+    // The two switches govern what the app does ON ITS OWN. This is the other
+    // half: asking right now, which is a different question and works even
+    // when they are both off.
+    if (items.some((r) => r.key.startsWith('updates.'))) g.appendChild(checkNowRow());
     body.appendChild(g);
   }
+}
+
+function checkNowRow() {
+  const row = el('div', 's-row');
+  const line = el('div', 's-check');
+  const btn = el('button', 'ghost small', 'Check now');
+  btn.type = 'button';
+  const out = el('span', 'up-note', '');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    out.className = 'up-note';
+    out.textContent = 'checking\u2026';
+    const info = await checkForUpdates(true);   // true = skip the cache
+    btn.disabled = false;
+    if (!info || info.error) {
+      out.className = 'up-note up-err';
+      out.textContent = 'Could not check: ' +
+        String((info && info.error) || 'unknown error');
+    } else if (!info.ok) {
+      out.className = 'up-note up-err';
+      out.textContent = 'Could not check for updates.';
+    } else if (info.update_available) {
+      out.textContent = 'jobscout ' + info.latest + ' is available';
+    } else {
+      out.textContent = 'Up to date (jobscout ' + info.current + ').';
+    }
+  });
+  line.appendChild(btn);
+  line.appendChild(out);
+  row.appendChild(line);
+  row.appendChild(el('p', 's-help',
+    'Asks GitHub now instead of waiting for the daily check.'));
+  return row;
 }
 
 function profileBlock() {
@@ -842,16 +879,17 @@ async function checkForUpdates(force) {
   try {
     info = await pywebview.api.update_check(!!force);
   } catch (e) {
-    return;                                   // a check must never break boot
+    return null;                              // a check must never break boot
   }
-  if (!info || info.disabled || !info.ok) return;
-  if (!info.update_available) return;
+  if (!info || info.disabled || !info.ok) return info || null;
+  if (!info.update_available) return info;
   const size = info.asset && info.asset.size
     ? ' (' + Math.round(info.asset.size / 1048576) + ' MB)' : '';
   const blurb = '<b>jobscout ' + info.latest + '</b> is available' +
     ' \u00b7 you have ' + info.current + size;
-  if (info.auto) { await autoInstall(info, blurb); return; }
+  if (info.auto) { await autoInstall(info, blurb); return info; }
   showUpdate(blurb);
+  return info;
 }
 
 /* Install without asking, because the setting says to.

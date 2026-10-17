@@ -247,22 +247,39 @@ def check(root: Path, *, force: bool = False, include_prerelease: bool = False) 
 
     The cache exists so launching the app does not phone home every time. The
     result is a plain dict so the CLI and the app render the same thing.
+
+    What is cached is only what the RELEASE is. `current` used to be cached too,
+    which is wrong in a way that bites exactly once and hard: the app installs an
+    update, restarts on the new version within the cache window, reads back the
+    OLD version's answer, concludes an update is available, installs the same
+    version again -- and does it again on every restart, for as long as the
+    cache lives. The running version is therefore always taken from the running
+    process, and `update_available` is recomputed from it.
     """
+    current = current_version()
     now = datetime.now(timezone.utc)
     if not force:
         cached = read_cached_check(root)
         if cached:
             try:
                 when = datetime.fromisoformat(cached.get("checked_at", ""))
-                if now - when < CHECK_INTERVAL:
-                    return {**cached, "from_cache": True}
             except ValueError:
-                pass
+                when = None
+            if when is not None and now - when < CHECK_INTERVAL:
+                latest = cached.get("latest")
+                return {
+                    **cached,
+                    "current": current,
+                    "update_available": bool(latest) and is_newer(latest, current),
+                    "from_cache": True,
+                }
 
-    current = current_version()
     try:
         rel = latest_release(include_prerelease=include_prerelease)
     except UpdateError as e:
+        # Deliberately NOT cached: a check that failed because the network was
+        # not up yet would otherwise be the answer for the next 24 hours, and
+        # the app would never try again that day.
         return {"ok": False, "error": str(e), "current": current,
                 "checked_at": now.isoformat(timespec="seconds")}
 

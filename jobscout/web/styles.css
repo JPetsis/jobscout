@@ -375,7 +375,10 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 }
 .up-text { flex: 1; font-size: 12.5px; }
 .up-text b { font-weight: 600; }
-.up-text .up-err { color: var(--warn); }
+.up-text .up-err,
+.up-note.up-err { color: var(--warn); }
+/* the result of the manual "Check now" in Settings, which is not in the bar */
+.up-note { font-size: 12.5px; color: var(--muted); }
 
 /* the quit step is the primary action, so it should look like one */
 button.ghost.primary {

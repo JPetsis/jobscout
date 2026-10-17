@@ -367,11 +367,16 @@ class JsApi:
     def update_check(self, force: bool = False) -> dict:
         """Is there a newer build? Cached for a day unless forced.
 
+        `force` means a person pressed the button, so it ignores BOTH the cache
+        and the `check: false` setting -- the same rule as `jobscout update`
+        from a terminal. Asking for a check is the instruction; the setting is
+        about what the app does on its own.
+
         `auto` tells the front-end whether to install a found update without
         asking, so the decision lives in the config rather than being hardcoded
         in the window.
         """
-        if not updatemod.checks_allowed(self.cfg):
+        if not force and not updatemod.checks_allowed(self.cfg):
             return {"ok": True, "disabled": True, "update_available": False,
                     "current": updatemod.current_version()}
         try:

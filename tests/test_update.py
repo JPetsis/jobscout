@@ -130,6 +130,66 @@ def test_a_stale_cache_is_refreshed(tmp_path, monkeypatch):
     assert len(calls) == 2
 
 
+def test_a_cached_answer_never_speaks_for_the_running_version(tmp_path, monkeypatch):
+    """The reinstall loop.
+
+    The app installs 0.3.0 and restarts on it inside the cache window, then
+    reads back the answer the OLD process cached: current 0.2.0, latest 0.3.0.
+    Believe `current` and every restart downloads 0.3.0 again and restarts
+    again, for as long as the cache lives -- which with the automatic installer
+    on is a machine that never settles.
+    """
+    monkeypatch.setattr(
+        up, "latest_release",
+        lambda **k: up.Release(tag="v0.3.0", version="0.3.0", assets={}))
+    monkeypatch.setattr(up, "current_version", lambda: "0.2.0")
+    first = up.check(tmp_path, force=True)
+    assert first["update_available"] is True
+    assert first["from_cache"] is False
+
+    # the update happens; the next launch IS the new version
+    monkeypatch.setattr(up, "current_version", lambda: "0.3.0")
+    again = up.check(tmp_path)                      # inside the cache window
+
+    assert again["from_cache"] is True
+    assert again["current"] == "0.3.0", "the cache must not answer for this process"
+    assert again["update_available"] is False, "believing this is the loop"
+
+
+def test_a_cached_answer_still_offers_a_genuinely_newer_release(tmp_path, monkeypatch):
+    """The other direction: recomputing must not lose a real update."""
+    monkeypatch.setattr(
+        up, "latest_release",
+        lambda **k: up.Release(tag="v0.3.0", version="0.3.0", assets={}))
+    monkeypatch.setattr(up, "current_version", lambda: "0.2.0")
+    up.check(tmp_path, force=True)
+
+    again = up.check(tmp_path)
+
+    assert again["from_cache"] is True
+    assert again["update_available"] is True
+    assert again["latest"] == "0.3.0"
+
+
+def test_a_failed_check_is_not_cached(tmp_path, monkeypatch):
+    """A laptop that launched before its wifi came up would otherwise get no
+    check for the rest of the day -- the one moment the answer is most useful
+    is the one moment it is wrong."""
+    calls = []
+
+    def boom(**k):
+        calls.append(1)
+        raise up.UpdateError("GitHub answered HTTP 503")
+
+    monkeypatch.setattr(up, "latest_release", boom)
+
+    first = up.check(tmp_path)
+    assert first["ok"] is False
+    up.check(tmp_path)
+    assert len(calls) == 2, "a failed check must be retried, not remembered"
+    assert not (tmp_path / "update-check.json").exists()
+
+
 def test_an_unwritable_cache_does_not_break_the_check(tmp_path, monkeypatch):
     monkeypatch.setattr(up, "latest_release", lambda **k: None)
     ro = tmp_path / "ro"
