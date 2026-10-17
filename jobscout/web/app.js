@@ -653,21 +653,44 @@ function settingRow(r) {
   if (r.options) {
     // A list whose possible values the backend knows (job boards). Checkboxes
     // rather than a textarea: nobody should have to spell 'smartrecruiters'.
+    //
+    // Grouped by the market each board serves, so "which of these are for
+    // Germany" is answerable without knowing 47 board names. The order here is
+    // display only -- the write below uses the `order` snapshot taken above, so
+    // grouping can never rewrite the user's scan sequence.
     checkboxes = [];
-    const box = el('div', 's-choices');
+    const byGroup = new Map();
     for (const opt of r.options) {
-      const line = el('label', 's-choice');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = !!opt.checked;
-      cb.dataset.value = opt.value;
-      line.appendChild(cb);
-      line.appendChild(el('span', 's-choice-label', opt.label));
-      if (opt.label !== opt.value) line.appendChild(el('span', 's-choice-key', opt.value));
-      box.appendChild(line);
-      checkboxes.push(cb);
+      const g = opt.group || 'Other';
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(opt);
     }
-    wrap.appendChild(box);
+    for (const [group, opts] of byGroup) {
+      const sec = el('div', 's-boardgroup');
+      const head = el('div', 's-boardgroup-head');
+      head.appendChild(el('span', 's-boardgroup-name', group));
+      const on = opts.filter((o) => o.checked).length;
+      head.appendChild(el('span', 's-boardgroup-count', on + '/' + opts.length));
+      if (on === 0) head.classList.add('warn');
+      sec.appendChild(head);
+
+      const box = el('div', 's-choices');
+      for (const opt of opts) {
+        const line = el('label', 's-choice');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!opt.checked;
+        cb.dataset.value = opt.value;
+        cb.dataset.group = group;
+        line.appendChild(cb);
+        line.appendChild(el('span', 's-choice-label', opt.label));
+        if (opt.label !== opt.value) line.appendChild(el('span', 's-choice-key', opt.value));
+        box.appendChild(line);
+        checkboxes.push(cb);
+      }
+      sec.appendChild(box);
+      wrap.appendChild(sec);
+    }
     const tally = el('div', 's-tally');
     wrap.appendChild(tally);
 
@@ -676,6 +699,14 @@ function settingRow(r) {
       tally.textContent = n + ' of ' + checkboxes.length + ' selected' +
         (n === 0 ? ' — nothing will be scanned' : '');
       tally.classList.toggle('warn', n === 0);
+      // and the per-group counts, so turning a whole market off is visible
+      for (const head of wrap.querySelectorAll('.s-boardgroup-head')) {
+        const box = head.nextElementSibling;
+        const boxes = [...box.querySelectorAll('input[type=checkbox]')];
+        const on = boxes.filter((c) => c.checked).length;
+        head.querySelector('.s-boardgroup-count').textContent = on + '/' + boxes.length;
+        head.classList.toggle('warn', on === 0);
+      }
     };
     updateTally();
     for (const cb of checkboxes) cb.addEventListener('change', updateTally);

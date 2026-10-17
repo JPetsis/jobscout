@@ -143,6 +143,35 @@ def alt_key(p: Posting) -> str | None:
     return _sha1(f"{norm(p.company)}|{norm(p.title)}|{norm(p.location)}")
 
 
+def _same_words(a: str, b: str) -> bool:
+    """Do two texts hold the same words, ignoring line breaks and spacing?"""
+    return " ".join(a.split()) == " ".join(b.split())
+
+
+def _prefer_fresh(fresh: str, stored: str) -> bool:
+    """Should a re-scan replace the stored description with the fresh parse?
+
+    Longer wins, because the STORED text can be richer than the listing: the
+    scan's detail probe writes the full advert in, and overwriting that with a
+    teaser would lose text (see the score note in upsert() -- it cost a 16 -> 12
+    demotion once).
+
+    Line structure counts as information too, and a plain length test cannot see
+    it. The line-preserving extractor produces the SAME LENGTH or a slightly
+    SHORTER string than the whitespace-collapsing one for identical content,
+    since collapsed whitespace and dropped blank lines are not visible
+    characters. Under a bare length test those rows are never refreshed:
+    measured on arbeitnow, of 12 live items 0 were longer and 5 were shorter, so
+    a re-scan would have repaired none of its 3,044 collapsed rows. When the
+    words are identical the structured copy is strictly better.
+    """
+    if not fresh:
+        return False
+    if len(fresh) > len(stored):
+        return True
+    return "\n" in fresh and "\n" not in stored and _same_words(fresh, stored)
+
+
 def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: str,
            prefs: dict | None = None):
     """Insert or refresh a posting.
@@ -160,7 +189,7 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         # Refresh derived fields from the fresh parse: re-scanning one source is
         # also the repair path after a parser fix (`jobscout scan --only hn`).
         desc = row["description"] or ""
-        if p.description and len(p.description) > len(desc):
+        if _prefer_fresh(p.description, desc):
             desc = p.description
         # The STORED text can be richer than the fresh parse (the scan's
         # detail probe writes the full advert in). The score must describe

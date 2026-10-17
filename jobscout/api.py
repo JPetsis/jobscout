@@ -176,15 +176,23 @@ _BY_KEY = {s["key"]: s for s in SETTINGS}
 
 
 def source_options(enabled) -> list[dict]:
-    """Every source the build knows about, in registry order, with labels.
+    """One row per source for the settings screen's checkbox list.
 
-    Registry order groups related boards (German, EU, global-remote, ATS), so
-    the list is easier to scan than an alphabetical one.
+    Grouped by the market each board serves -- DACH, US, Europe, global/remote,
+    academic, and per-company boards -- so "which of these are for Germany" is
+    answerable at a glance instead of by knowing 47 board names. Sorted by that
+    group order, and registry order within a group (which keeps related boards
+    together). This affects DISPLAY only: the order written back to the config
+    comes from the snapshot the front-end takes when the pane opens, so grouping
+    can never rewrite the user's deliberate scan sequence.
     """
-    from .sources import REGISTRY, SOURCE_NAMES
+    from .sources import REGISTRY, SOURCE_NAMES, GROUP_ORDER, group_of
     on = set(enabled or [])
-    return [{"value": n, "label": getattr(REGISTRY[n], "LABEL", n),
-             "checked": n in on} for n in SOURCE_NAMES]
+    rank = {g: i for i, g in enumerate(GROUP_ORDER)}
+    rows = [{"value": n, "label": getattr(REGISTRY[n], "LABEL", n),
+             "checked": n in on, "group": group_of(n)} for n in SOURCE_NAMES]
+    rows.sort(key=lambda r: rank.get(r["group"], len(rank)))
+    return rows
 
 
 def read_settings(path) -> list[dict]:

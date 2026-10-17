@@ -331,6 +331,21 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .s-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 
 /* ---- option-backed settings (job board toggles) ---- */
+/* The boards are shown per market group (DACH, US, global/remote, ...), so the
+   list is navigable without knowing 47 board names. */
+.s-boardgroup { margin-bottom: 12px; }
+.s-boardgroup:last-child { margin-bottom: 0; }
+.s-boardgroup-head {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 4px; padding-bottom: 3px;
+  border-bottom: 1px solid var(--line);
+}
+.s-boardgroup-name {
+  font-size: 11.5px; font-weight: 650; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.s-boardgroup-count { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.s-boardgroup-count.warn { color: var(--warn); }
 .s-choices {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

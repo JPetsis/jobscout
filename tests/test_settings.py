@@ -185,7 +185,12 @@ def test_sources_enabled_is_an_editable_setting_with_options(cfgfile):
 def test_every_registry_source_is_offered(cfgfile):
     from jobscout.sources import SOURCE_NAMES
     row = next(r for r in api.read_settings(cfgfile) if r["key"] == "sources.enabled")
-    assert [o["value"] for o in row["options"]] == SOURCE_NAMES
+    offered = [o["value"] for o in row["options"]]
+    # every source, exactly once. The ORDER is by market group now, not registry
+    # order, so it is asserted in test_source_groups.test_options_arrive_sorted_
+    # by_group -- pinning it here as well would just make two places to update.
+    assert sorted(offered) == sorted(SOURCE_NAMES)
+    assert len(offered) == len(SOURCE_NAMES), "a source is offered twice"
 
 
 def test_options_carry_human_labels(cfgfile):

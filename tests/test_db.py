@@ -210,3 +210,56 @@ def test_upsert_stores_salary_and_verify_helpers(tmp_path):
     dbm.update_verify(conn, pid, "dead", "HTTP 404")
     assert dbm.get_posting(conn, pid)["verify_status"] == "dead"
     assert dbm.postings_to_verify(conn, max_age_days=3, limit=5) == []
+
+
+# --- refreshing a description on re-scan ------------------------------------
+#
+# The rule exists to protect a FETCHED full description from being overwritten
+# by a listing teaser. But line structure is information a length test cannot
+# see, and the line-preserving extractor emits the same length or slightly
+# fewer characters for identical content -- so under a bare length test the
+# 3,044 collapsed arbeitnow rows would never have been repaired by a re-scan.
+
+def test_a_longer_fresh_description_wins():
+    assert dbm._prefer_fresh("much longer text here", "short")
+
+
+def test_structured_text_wins_when_the_words_are_identical():
+    collapsed = "We build things. You will help us build them."
+    structured = "We build things.\nYou will help us build them."
+    assert dbm._prefer_fresh(structured, collapsed)
+
+
+def test_a_structured_copy_that_is_not_longer_still_wins():
+    """The re-scan case: same words, no extra characters, more structure. A
+    length test cannot see it, which is why the rule is not one."""
+    collapsed = "Intro Some. The body text that goes on."
+    structured = "Intro Some.\nThe body text that goes on."
+    assert len(structured) <= len(collapsed), "not longer, so a length test skips it"
+    assert dbm._same_words(structured, collapsed)
+    assert dbm._prefer_fresh(structured, collapsed)
+
+
+def test_a_shorter_different_text_does_not_win():
+    """The protection this rule has always provided: a fetched full advert must
+    not be replaced by a listing teaser that happens to parse differently."""
+    stored_full = "A very long fetched advert. " * 40
+    fresh_teaser = "Short teaser from the listing."
+    assert not dbm._prefer_fresh(fresh_teaser, stored_full)
+
+
+def test_an_empty_fresh_parse_never_wins():
+    assert not dbm._prefer_fresh("", "anything at all")
+    assert not dbm._prefer_fresh(None, "anything at all")
+
+
+def test_identical_text_is_not_rewritten():
+    same = "The same words.\nAcross two lines."
+    assert not dbm._prefer_fresh(same, same), "nothing to gain, so leave it"
+
+
+def test_collapsed_versus_structured_counts_as_the_same_words():
+    a = "One. Two. Three."
+    b = "One.\nTwo.\nThree."
+    assert dbm._same_words(a, b)
+    assert not dbm._same_words(a, "One. Two. Four.")
