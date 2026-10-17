@@ -569,9 +569,13 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             "goto wait",
             "",
             ":gaveup",
-            note("helper: jobscout did not exit, nothing was changed"),
-            "echo jobscout did not exit - nothing was changed.>&2",
-            "exit /b 1",
+            note("helper: jobscout did not exit, so it is being killed"),
+            "echo jobscout did not exit - killing it and installing anyway.>&2",
+            # The helper only EXISTS because the app asked to close, so a
+            # process that will not go must not block its own update. Leaving
+            # the old build in place was the old answer, and the user then saw
+            # a window that never closed and an update that never happened.
+            f"taskkill /F /PID {pid} >nul 2>&1",
             "",
             ":swap",
             note("helper: jobscout exited, swapping"),
@@ -614,9 +618,14 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
         f"while kill -0 {pid} 2>/dev/null; do",
         "  n=$((n+1))",
         f'  if [ "$n" -gt {WAIT_SECONDS} ]; then',
-        '    note "helper: jobscout did not exit, nothing was changed"',
-        '    echo "jobscout did not exit; nothing was changed." >&2',
-        "    exit 1",
+        # The helper only EXISTS because the app asked to close, so a process
+        # that will not go must not block its own update. Leaving the old build
+        # in place was the old answer, and it left the user with a window that
+        # never closed and an update that never happened.
+        '    note "helper: jobscout did not exit, so it is being killed"',
+        '    echo "jobscout did not exit; killing it and installing anyway." >&2',
+        f"    kill -9 {pid} 2>/dev/null",
+        "    break",
         "  fi",
         "  sleep 1",
         "done",

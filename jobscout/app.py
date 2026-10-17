@@ -55,11 +55,23 @@ class RestoreOffer:
         return {"ok": True, "counts": res["counts"], "archive": str(res["archive"])}
 
     def quit(self) -> dict:
-        for w in list(self.windows):
-            try:
-                w.destroy()
-            except Exception:                                  # noqa: BLE001
-                pass
+        """Close the window once the restore is done.
+
+        Scheduled rather than immediate, and for the same reason as JsApi.quit:
+        destroying the window from inside a js_api call leaves pywebview's own
+        non-daemon call thread unable to hand back its result, and the process
+        then never exits.
+        """
+        import threading
+
+        def _close() -> None:
+            for w in list(self.windows):
+                try:
+                    w.destroy()
+                except Exception:                              # noqa: BLE001
+                    pass
+
+        threading.Timer(0.3, _close).start()
         return {"ok": True}
 
 
@@ -474,12 +486,36 @@ class JsApi:
         return {"ok": True, "quitting": True}
 
     def quit(self) -> dict:
-        """Close the window so the updater helper can do its swap."""
-        for w in list(self._windows):
-            try:
-                w.destroy()
-            except Exception:                                  # noqa: BLE001
-                pass
+        """Close the window so the updater helper can do its swap.
+
+        Both halves of "called from a js_api handler" matter here:
+
+        * pywebview runs each bridge call on its own NON-daemon thread, and
+          that thread is still waiting to hand the return value back. Destroying
+          the window from inside the call therefore leaves the process alive for
+          ever, and the helper waits its full 120 seconds, gives up, and the
+          update silently does nothing. Reproduced in isolation: start() returns
+          and the interpreter STILL cannot exit, because the call thread is
+          stuck replying to a webview that no longer exists.
+        * so the destroy is scheduled for after this returns, and a hard exit
+          backstops it in case anything else holds the process open (a scan
+          running, say). A helper is waiting for this pid: it has to go.
+        """
+        import os
+        import threading
+
+        def _close() -> None:
+            for w in list(self._windows):
+                try:
+                    w.destroy()
+                except Exception:                              # noqa: BLE001
+                    pass
+            # Non-daemon on purpose. If the teardown did not end the process,
+            # this is what stops the helper waiting for a window that will
+            # never close.
+            threading.Timer(3.0, lambda: os._exit(0)).start()
+
+        threading.Timer(0.3, _close).start()
         return {"ok": True}
 
     def open_url(self, url: str) -> dict:

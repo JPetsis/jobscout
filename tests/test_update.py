@@ -633,23 +633,49 @@ def test_the_helper_bounds_how_long_it_waits(tmp_path):
     assert body.index("did not exit") < body.index(move)
 
 
-def test_the_helper_gives_up_without_touching_the_build(tmp_path, monkeypatch):
-    """A pid that IS alive, and a bound of one attempt.
+def test_the_wait_bound_is_respected_before_anything_is_touched(tmp_path):
+    body = up._helper_script(tmp_path / "a", tmp_path / "b", relaunch=False,
+                             pid=DEAD_PID)
+    assert str(up.WAIT_SECONDS) in body
+    assert "did not exit" in body
+    # and the wait must come BEFORE touching the installed build
+    move = "move " if sys.platform == "win32" else "mv "
+    assert body.index("did not exit") < body.index(move)
+
+
+def test_an_app_that_will_not_exit_is_killed_and_still_updated(tmp_path, monkeypatch):
+    """The helper exists because the app ASKED to close, so a process that will
+    not go must not block its own update.
+
+    This is the bug that shipped: `quit()` destroyed the window from inside a
+    js_api call, pywebview's non-daemon call thread never finished handing back
+    its result, the app stayed alive, and the helper gave up after 120 seconds.
+    The user saw a window that never closed and an update that never happened.
+
+    The pid is a real subprocess we are happy to kill -- NOT this test process,
+    which the old version of this test used, and which this behaviour would now
+    kill.
 
     The bound is set by patching the constant and REGENERATING the script, not
     by rewriting its text: string surgery silently stopped matching when the
     .bat was rewritten, and the test then waited the full 120 rounds and timed
     out -- which looks like a hang rather than a broken test.
     """
-    old = _build(tmp_path / "app", "STILL RUNNING")
-    new = _build(tmp_path / "staged" / "app", "NEW")
-    monkeypatch.setattr(up, "WAIT_SECONDS", 1)
-    body = up._helper_script(old, new, relaunch=False, pid=os.getpid())
-    assert "1" in body
-    r = _run_helper(body, tmp_path / _helper_name())
-    assert "did not exit" in r.stderr
-    assert (old / "marker.txt").read_text() == "STILL RUNNING", "must be untouched"
-    assert new.exists(), "the staged build must not be consumed"
+    survivor = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    try:
+        old = _build(tmp_path / "app", "STILL RUNNING")
+        new = _build(tmp_path / "staged" / "app", "NEW")
+        monkeypatch.setattr(up, "WAIT_SECONDS", 1)
+        body = up._helper_script(old, new, relaunch=False, pid=survivor.pid)
+
+        r = _run_helper(body, tmp_path / _helper_name())
+
+        assert "did not exit" in r.stderr
+        assert survivor.wait(timeout=15) != 0, "the stuck app must be gone"
+        assert (old / "marker.txt").read_text() == "NEW", "and the update still lands"
+        assert not new.exists()
+    finally:
+        survivor.kill()
 
 
 # --- the relaunch target ---------------------------------------------------
