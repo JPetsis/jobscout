@@ -28,6 +28,7 @@ import os
 import platform
 import shutil
 import ssl
+import stat
 import subprocess
 import sys
 import tarfile
@@ -471,6 +472,79 @@ def install_root() -> Path | None:
     return exe.parent
 
 
+def _extract_zip(z: zipfile.ZipFile, into: Path) -> None:
+    """Unpack a zip the way the archive describes it: modes and symlinks.
+
+    Python's own extractall() throws BOTH away, and for an `.app` bundle that is
+    fatal twice over. Caught by extracting a real release by hand, after the
+    first auto-install produced a bundle macOS refused to open:
+
+    * the executable lost its exec bit (0644), so the bundle cannot start at
+      all -- macOS reports "Launch failed" and nothing else;
+    * every symlink was flattened into a small text file, so
+      Contents/Frameworks/certifi became the 20 bytes "../Resources/certifi"
+      and the frozen app could not find its own libraries.
+
+    The zip stores both (0o100755 and 0o120755). Reading them is the whole fix.
+    """
+    for info in z.infolist():
+        target = into / info.filename
+        mode = info.external_attr >> 16
+        if info.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if stat.S_ISLNK(mode):
+            if target.is_symlink() or target.exists():
+                target.unlink()
+            target.symlink_to(z.read(info).decode())
+            continue
+        with z.open(info) as src, open(target, "wb") as out:
+            shutil.copyfileobj(src, out)
+        if not stat.S_IMODE(mode):
+            # No mode stored (archives built by other tools). Every platform's
+            # entry point still has to come out runnable.
+            if target.parent.name in ("MacOS", "jobscout", "bin") or target.name == "jobscout":
+                mode = 0o755
+        if stat.S_IMODE(mode):
+            os.chmod(target, stat.S_IMODE(mode))
+
+
+def check_payload(payload: Path) -> None:
+    """Refuse a payload that cannot possibly start. Fail HERE, not after the swap.
+
+    This is the check that would have caught a bad extraction before it replaced
+    a working install: the swap is irreversible from the user's side, so the
+    only safe moment to notice is before it happens.
+
+    Keyed on the payload's SHAPE, not on the running platform: the tests check
+    macOS, Windows and Linux payloads from whichever machine happens to run
+    them, and keying on sys.platform made a macOS archive look broken there.
+    """
+    if payload.suffix == ".app":
+        macos = payload / "Contents" / "MacOS"
+        entries = [p for p in macos.iterdir() if p.is_file()] if macos.is_dir() else []
+        if not entries:
+            raise UpdateError("that build has no executable in Contents/MacOS")
+        if not any(os.access(p, os.X_OK) for p in entries):
+            raise UpdateError("that build's executable is not executable "
+                              "(the archive was unpacked without its permissions)")
+        return
+
+    candidates = [p for p in (payload / "jobscout.exe", payload / "jobscout")
+                  if p.exists()]
+    if payload.is_dir() and not candidates:
+        raise UpdateError("that build has no jobscout executable in it")
+    # Two things make the exec bit the wrong question: Windows has no exec bit
+    # to lose, and a .exe is not something a POSIX platform runs anyway (which
+    # is also why a Windows archive can be checked from a Mac or a Linux box).
+    posix_entry = [p for p in candidates if p.suffix != ".exe"]
+    if sys.platform != "win32" and posix_entry and not any(
+            os.access(p, os.X_OK) for p in posix_entry):
+        raise UpdateError("that build's jobscout file is not executable "
+                          "(the archive was unpacked without its permissions)")
+
+
 def extract(archive: Path, into: Path) -> Path:
     """Unpack an archive into `into` and return the payload directory.
 
@@ -484,25 +558,32 @@ def extract(archive: Path, into: Path) -> Path:
     try:
         if name.endswith(".zip"):
             with zipfile.ZipFile(archive) as z:
-                z.extractall(into)
+                _extract_zip(z, into)
         elif name.endswith((".tar.gz", ".tgz")):
             with tarfile.open(archive, "r:gz") as t:
                 # 'data' refuses absolute paths and traversal, which matters
-                # for an archive that came off the network.
+                # for an archive that came off the network. It keeps modes and
+                # symlinks, unlike zipfile.
                 t.extractall(into, filter="data")
         else:
             raise UpdateError(f"unsupported archive type: {archive.name}")
     except (zipfile.BadZipFile, tarfile.TarError) as e:
         raise UpdateError(f"could not unpack {archive.name}: {e}") from e
 
+    payload: Path | None = None
     for candidate in (into / "jobscout.app", into / "jobscout"):
         if candidate.exists():
-            return candidate
-    children = [p for p in into.iterdir()]
-    if len(children) == 1 and children[0].is_dir():
-        return children[0]
-    raise UpdateError("that archive does not look like a jobscout build "
-                      "(no jobscout.app or jobscout/ inside)")
+            payload = candidate
+            break
+    if payload is None:
+        children = [p for p in into.iterdir()]
+        if len(children) == 1 and children[0].is_dir():
+            payload = children[0]
+    if payload is None:
+        raise UpdateError("that archive does not look like a jobscout build "
+                          "(no jobscout.app or jobscout/ inside)")
+    check_payload(payload)
+    return payload
 
 
 def _relaunch_command(root: Path) -> str:

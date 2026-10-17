@@ -296,20 +296,95 @@ def test_a_failed_download_leaves_no_partial_file(tmp_path):
 def test_extract_finds_a_macos_bundle(tmp_path):
     arc = tmp_path / "jobscout-macos-arm64.zip"
     with zipfile.ZipFile(arc, "w") as z:
-        z.writestr("jobscout.app/Contents/MacOS/jobscout", "binary")
+        info = zipfile.ZipInfo("jobscout.app/Contents/MacOS/jobscout")
+        info.external_attr = 0o100755 << 16
+        z.writestr(info, "binary")
     payload = up.extract(arc, tmp_path / "out")
     assert payload.name == "jobscout.app"
+    assert os.access(payload / "Contents/MacOS/jobscout", os.X_OK)
 
 
 def test_extract_finds_a_onedir_build(tmp_path):
     arc = tmp_path / "jobscout-linux-x86_64.tar.gz"
     inner = tmp_path / "jobscout" / "_internal"
     inner.mkdir(parents=True)
-    (tmp_path / "jobscout" / "jobscout").write_text("binary")
+    exe = tmp_path / "jobscout" / "jobscout"
+    exe.write_text("binary")
+    exe.chmod(0o755)                    # a real onedir build ships it runnable
     with tarfile.open(arc, "w:gz") as t:
         t.add(tmp_path / "jobscout", arcname="jobscout")
     payload = up.extract(arc, tmp_path / "out")
     assert payload.name == "jobscout"
+
+
+# --- what the archive says about modes and symlinks ------------------------
+
+def test_a_zip_keeps_its_exec_bits_and_symlinks(tmp_path):
+    """Python's extractall() drops both, and the first auto-install proved it.
+
+    The bundle it unpacked could not be opened at all: the executable came out
+    0644 ("Launch failed" from macOS and nothing else), and Contents/Frameworks/
+    certifi was the 20-byte text file "../Resources/certifi" instead of a
+    symlink, so the frozen app could not find its own libraries either. The zip
+    stores 0o100755 and 0o120755. This is the test that fails without the fix.
+    """
+    arc = tmp_path / "jobscout-macos-arm64.zip"
+    with zipfile.ZipFile(arc, "w") as z:
+        exe = zipfile.ZipInfo("jobscout.app/Contents/MacOS/jobscout")
+        exe.external_attr = 0o100755 << 16
+        z.writestr(exe, "binary")
+
+        link = zipfile.ZipInfo("jobscout.app/Contents/Frameworks/certifi")
+        link.external_attr = 0o120755 << 16
+        z.writestr(link, "../Resources/certifi")
+
+        real = zipfile.ZipInfo("jobscout.app/Contents/Resources/certifi/cacert.pem")
+        real.external_attr = 0o100644 << 16
+        z.writestr(real, "-----BEGIN CERTIFICATE-----\n")
+
+    payload = up.extract(arc, tmp_path / "out")
+
+    assert os.access(payload / "Contents/MacOS/jobscout", os.X_OK), "exec bit lost"
+    link = payload / "Contents/Frameworks/certifi"
+    assert link.is_symlink(), "the symlink was flattened into a text file"
+    assert os.readlink(link) == "../Resources/certifi"
+    # and it still resolves, which is the point of having it
+    assert (link / "cacert.pem").read_text().startswith("-----BEGIN")
+
+
+def test_a_build_whose_entry_point_cannot_run_is_refused(tmp_path):
+    """The swap is one-way from the user's side, so notice it BEFORE, not after."""
+    payload = tmp_path / "jobscout.app" / "Contents" / "MacOS"
+    payload.mkdir(parents=True)
+    (payload / "jobscout").write_text("binary")
+    (payload / "jobscout").chmod(0o644)
+    with pytest.raises(up.UpdateError, match="not executable"):
+        up.check_payload(tmp_path / "jobscout.app")
+
+
+def test_a_build_with_no_entry_point_is_refused(tmp_path):
+    payload = tmp_path / "jobscout"
+    payload.mkdir()
+    (payload / "_internal").mkdir()
+    with pytest.raises(up.UpdateError, match="no jobscout executable"):
+        up.check_payload(payload)
+
+
+def test_a_real_looking_payload_is_accepted(tmp_path):
+    """The check has to pass the genuine article, or nothing installs at all."""
+    app = tmp_path / "jobscout.app" / "Contents" / "MacOS"
+    app.mkdir(parents=True)
+    exe = app / "jobscout"
+    exe.write_text("binary")
+    exe.chmod(0o755)
+    up.check_payload(tmp_path / "jobscout.app")            # does not raise
+
+    flat = tmp_path / "jobscout"
+    flat.mkdir()
+    onedir = flat / "jobscout"
+    onedir.write_text("binary")
+    onedir.chmod(0o755)
+    up.check_payload(flat)                                 # does not raise
 
 
 def test_extract_refuses_a_non_jobscout_archive(tmp_path):
@@ -461,7 +536,9 @@ def test_update_refuses_a_missing_local_archive(tmp_path):
 def test_update_from_a_local_archive_stages_it(tmp_path):
     arc = tmp_path / "jobscout-macos-arm64.zip"
     with zipfile.ZipFile(arc, "w") as z:
-        z.writestr("jobscout.app/Contents/MacOS/jobscout", "binary")
+        info = zipfile.ZipInfo("jobscout.app/Contents/MacOS/jobscout")
+        info.external_attr = 0o100755 << 16      # a real build ships it runnable
+        z.writestr(info, "binary")
     res = up.update(tmp_path, from_archive=arc, apply=False)
     assert res["ok"] is True
     assert res["updated"] is False
