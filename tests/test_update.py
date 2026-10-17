@@ -27,6 +27,19 @@ from jobscout import update as up
 DEAD_PID = 999999        # not running, so the helper's wait passes at once
 
 
+@pytest.fixture(autouse=True)
+def _stage_inside_the_test(tmp_path, monkeypatch):
+    """Point the staging dir at the test, not at the machine's temp dir.
+
+    `update()` stages a payload with tempfile.mkdtemp, so every test that
+    installed anything left a bundle behind in /var/folders. Measured after a
+    day of working on this: 124 of them, 825MB, none of them belonging to
+    anything still running.
+    """
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+
 def _helper_name() -> str:
     """The helper script this platform actually generates."""
     return "apply.bat" if sys.platform == "win32" else "apply.sh"
@@ -453,6 +466,40 @@ def test_the_helper_swaps_the_build(tmp_path):
     assert (old / "marker.txt").read_text() == "NEW"
     assert not new.exists()
     assert not Path(str(old) + ".previous").exists()
+    # and the staging directory goes with it, or every release leaves a
+    # payload-sized directory in the temp dir of a machine that updates often
+    assert not (tmp_path / "staged").exists(), "staging dir left behind"
+
+
+@requires_posix_modes
+def test_the_helper_says_whether_the_relaunch_worked(tmp_path, monkeypatch):
+    """"The window never came back" and "the relaunch was never tried" look
+    identical from the outside, and that is how a broken build stayed
+    unexplained while its log said everything went fine."""
+    monkeypatch.setattr(up, "_relaunch_command", lambda root: "/bin/echo relaunch-ok")
+    old = _build(tmp_path / "app", "OLD")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+    logf = tmp_path / "update.log"
+    body = up._helper_script(old, new, relaunch=True, pid=DEAD_PID, logfile=logf)
+    r = _run_helper(body, tmp_path / _helper_name())
+    assert r.returncode == 0, r.stderr
+
+    text = logf.read_text()
+    assert "swapped in the new build" in text
+    assert "relaunching jobscout" in text
+    assert "helper: relaunched" in text
+
+
+@requires_posix_modes
+def test_a_relaunch_that_fails_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(up, "_relaunch_command", lambda root: "/usr/bin/false")
+    old = _build(tmp_path / "app", "OLD")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+    logf = tmp_path / "update.log"
+    body = up._helper_script(old, new, relaunch=True, pid=DEAD_PID, logfile=logf)
+    _run_helper(body, tmp_path / _helper_name())
+
+    assert "the relaunch FAILED" in logf.read_text()
 
 
 def test_a_swap_does_not_leave_a_stale_previous_copy(tmp_path):

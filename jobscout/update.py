@@ -670,7 +670,12 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             "if errorlevel 1 goto failed",
             f'rmdir /s /q "{old_root}.previous"',
             note("helper: swapped in the new build"),
+            note("helper: relaunching jobscout"),
             f"{restart}" if restart else "rem no relaunch requested",
+            # Say it out loud, because "the window never came back" and "the
+            # relaunch was never attempted" look identical from the outside --
+            # which is exactly how a broken bundle stayed unexplained.
+            note("helper: relaunch command finished"),
             "exit /b 0",
             "",
             ":failed",
@@ -715,8 +720,19 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
         f'if mv "{old_root}" "{old_root}.previous" 2>/dev/null && '
         f'mv "{new_root}" "{old_root}" 2>/dev/null; then',
         f'  rm -rf "{old_root}.previous"',
+        # The staging directory is emptied by the move above, so remove it too:
+        # an update that leaves parts of itself in the temp dir is litter, and
+        # on a machine that updates often it is 200MB of litter per release.
+        f'  rmdir "$(dirname "{new_root}")" 2>/dev/null || true',
         '  note "helper: swapped in the new build"',
-        f"  {restart}" if restart else "  :",
+        '  note "helper: relaunching jobscout"',
+        *([f"  if {restart} 2>/dev/null; then",
+           '    note "helper: relaunched"',
+           "  else",
+           '    note "helper: the relaunch FAILED - jobscout has to be started by hand"',
+           "  fi"] if restart and not restart.rstrip().endswith("&")
+          else ([f"  {restart}", '  note "helper: relaunch requested"'] if restart
+                else ['  note "helper: no relaunch requested"'])),
         "else",
         f'  mv "{old_root}.previous" "{old_root}" 2>/dev/null',
         '  note "helper: the swap failed, the previous build was restored"',
