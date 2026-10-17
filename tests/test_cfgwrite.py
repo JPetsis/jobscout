@@ -556,3 +556,46 @@ def test_ensure_section_through_edit_is_atomic(tmp_path):
     assert "ui:" in f.read_text(encoding="utf-8")
     # and again: no second section, no change reported
     assert cfgwrite.edit(f, "section", "ui", ["theme: dark"]) is False
+
+
+# --- writing while something else has the file open -------------------------
+#
+# Windows refuses to replace a file another handle has open (no
+# FILE_SHARE_DELETE by default), so a concurrent reader -- or a virus scanner
+# that has just opened the new file -- makes the swap fail with WinError 5.
+# That is a real failure on the Windows CI runner, not a hypothetical one.
+
+def test_a_windows_sharing_violation_is_retried(tmp_path, monkeypatch):
+    import os
+    calls = []
+    real = os.replace
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError(13, "Access is denied")
+        return real(src, dst)
+
+    monkeypatch.setattr(cfgwrite.os, "replace", flaky)
+    p = tmp_path / "config.yaml"
+    p.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+
+    assert cfgwrite.edit(p, "scalar", "preferences.min_score", 9) is True
+
+    assert len(calls) == 3, "it must keep trying"
+    assert "min_score: 9" in p.read_text(encoding="utf-8")
+
+
+def test_a_permanent_permission_error_still_raises_and_cleans_up(tmp_path, monkeypatch):
+    def denied(src, dst):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(cfgwrite.os, "replace", denied)
+    p = tmp_path / "config.yaml"
+    p.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+
+    with pytest.raises(PermissionError):
+        cfgwrite.edit(p, "scalar", "preferences.min_score", 9)
+
+    assert "min_score: 6" in p.read_text(encoding="utf-8"), "the old file is intact"
+    assert not list(tmp_path.glob(".jobscout-*.tmp")), "and no temp file is left"

@@ -730,15 +730,19 @@ def test_explicit_values_win_over_the_default():
 
 def test_the_frozen_layout_is_among_the_ca_candidates(tmp_path, monkeypatch):
     """Where the file really lives in a macOS bundle: Contents/Frameworks is
-    sys._MEIPASS, and its certifi entry is a symlink to ../Resources."""
+    sys._MEIPASS, and its certifi entry is a symlink to ../Resources.
+
+    Compared as path COMPONENTS, not as a "/" suffix -- on Windows the same
+    Path renders with backslashes and the assertion would be a lie.
+    """
     bundle = tmp_path / "jobscout.app" / "Contents"
     monkeypatch.setattr(up.sys, "_MEIPASS", str(bundle / "Frameworks"), raising=False)
     monkeypatch.setattr(up.sys, "executable", str(bundle / "MacOS" / "jobscout"))
 
-    cands = [str(c) for c in up._ca_candidates()]
+    cands = [c.parts[-3:] for c in up._ca_candidates()]
 
-    assert any(c.endswith("Frameworks/certifi/cacert.pem") for c in cands)
-    assert any(c.endswith("Resources/certifi/cacert.pem") for c in cands)
+    assert ("Frameworks", "certifi", "cacert.pem") in cands
+    assert ("Resources", "certifi", "cacert.pem") in cands
 
 
 def test_the_windows_and_linux_frozen_layout_is_covered(tmp_path, monkeypatch):

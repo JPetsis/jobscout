@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 INDENT = 2
@@ -438,6 +439,25 @@ def _read(path: Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+def _replace_with_retry(tmp: str, path: Path, tries: int = 6) -> None:
+    """os.replace, retrying a Windows sharing violation.
+
+    Windows refuses to replace a file that another handle has open (no
+    FILE_SHARE_DELETE by default), so a concurrent reader -- or a virus scanner
+    that has just opened the new file -- makes the swap fail with WinError 5.
+    The condition is transient by nature and does not exist on POSIX, which is
+    why it only ever showed up on the Windows CI runner.
+    """
+    for attempt in range(tries):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_atomic(path: Path, text: str) -> None:
     """Replace a file in one step, so no reader ever sees a partial write."""
     path = Path(path)
@@ -447,7 +467,7 @@ def write_atomic(path: Path, text: str) -> None:
             fh.write(text)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)          # atomic on the same filesystem
+        _replace_with_retry(tmp, path)   # atomic on the same filesystem
     except BaseException:
         try:
             os.unlink(tmp)
