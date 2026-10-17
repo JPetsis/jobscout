@@ -604,3 +604,26 @@ def test_the_window_is_told_whether_to_install_by_itself(upd_api, monkeypatch):
 
     upd_api.cfg.raw["updates"] = {"auto": False}
     assert upd_api.update_check(force=True)["auto"] is False
+
+
+def test_app_info_says_which_build_this_is(upd_api):
+    """So the window can show the version without a terminal -- and say when it
+    is a source checkout, which cannot install an update at all."""
+    info = upd_api.app_info()
+    assert info["version"] == appmod.updatemod.current_version()
+    assert info["frozen"] is False, "a test run is not a packaged build"
+    assert info["log"].endswith("update.log")
+
+
+def test_app_info_never_raises(upd_api, monkeypatch):
+    """It is called while the settings pane is opening, so it must not be able
+    to break the pane."""
+    def boom():
+        raise OSError("no idea where I am installed")
+
+    monkeypatch.setattr(appmod.updatemod, "install_root", boom)
+
+    info = upd_api.app_info()
+
+    assert info["version"]
+    assert info["frozen"] is False

@@ -364,6 +364,25 @@ class JsApi:
     def cancel_scan(self) -> dict:
         return SCAN.cancel() if SCAN is not None else {"cancelled": False}
 
+    def app_info(self) -> dict:
+        """Which build this is, for the window to show.
+
+        Deliberately offline and never raising: it answers "which version am I
+        running" and "where does the update log live" without touching the
+        network. `frozen` matters because a source checkout cannot install an
+        update at all, and saying so is better than a button that silently
+        cannot work.
+        """
+        try:
+            return {
+                "version": updatemod.current_version(),
+                "frozen": updatemod.install_root() is not None,
+                "log": str(self.cfg.root / "update.log"),
+            }
+        except Exception:                                      # noqa: BLE001
+            return {"version": updatemod.current_version(),
+                    "frozen": False, "log": ""}
+
     def update_check(self, force: bool = False) -> dict:
         """Is there a newer build? Cached for a day unless forced.
 

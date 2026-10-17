@@ -584,8 +584,11 @@ async function openSettings() {
   body.appendChild(el('p', 'loading', 'Loading…'));
 
   let rows;
+  let info = null;
   try {
-    rows = await pywebview.api.settings();
+    [rows, info] = await Promise.all([
+      pywebview.api.settings(), pywebview.api.app_info(),
+    ]);
   } catch (e) {
     body.textContent = '';
     body.appendChild(el('p', 's-err', 'Could not read config.yaml: ' + String(e)));
@@ -607,13 +610,21 @@ async function openSettings() {
     // The two switches govern what the app does ON ITS OWN. This is the other
     // half: asking right now, which is a different question and works even
     // when they are both off.
-    if (items.some((r) => r.key.startsWith('updates.'))) g.appendChild(checkNowRow());
+    if (items.some((r) => r.key.startsWith('updates.'))) {
+      g.appendChild(checkNowRow(info));
+    }
     body.appendChild(g);
   }
 }
 
-function checkNowRow() {
+function checkNowRow(info) {
   const row = el('div', 's-row');
+  if (info && info.version) {
+    // Which build you are on, without a terminal and without a network call.
+    row.appendChild(el('p', 's-help',
+      'You are running jobscout ' + info.version +
+      (info.frozen ? '' : ' (a source checkout, which cannot install updates)')));
+  }
   const line = el('div', 's-check');
   const btn = el('button', 'ghost small', 'Check now');
   btn.type = 'button';
@@ -622,19 +633,19 @@ function checkNowRow() {
     btn.disabled = true;
     out.className = 'up-note';
     out.textContent = 'checking\u2026';
-    const info = await checkForUpdates(true);   // true = skip the cache
+    const res = await checkForUpdates(true);   // true = skip the cache
     btn.disabled = false;
-    if (!info || info.error) {
+    if (!res || res.error) {
       out.className = 'up-note up-err';
       out.textContent = 'Could not check: ' +
-        String((info && info.error) || 'unknown error');
-    } else if (!info.ok) {
+        String((res && res.error) || 'unknown error');
+    } else if (!res.ok) {
       out.className = 'up-note up-err';
       out.textContent = 'Could not check for updates.';
-    } else if (info.update_available) {
-      out.textContent = 'jobscout ' + info.latest + ' is available';
+    } else if (res.update_available) {
+      out.textContent = 'jobscout ' + res.latest + ' is available';
     } else {
-      out.textContent = 'Up to date (jobscout ' + info.current + ').';
+      out.textContent = 'Up to date (jobscout ' + res.current + ').';
     }
   });
   line.appendChild(btn);
@@ -642,6 +653,10 @@ function checkNowRow() {
   row.appendChild(line);
   row.appendChild(el('p', 's-help',
     'Asks GitHub now instead of waiting for the daily check.'));
+  if (info && info.log) {
+    row.appendChild(el('p', 's-help',
+      'Every check and what came of it is written to ' + info.log + '.'));
+  }
   return row;
 }
 
