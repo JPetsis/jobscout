@@ -576,3 +576,79 @@ def test_the_helper_relaunches_the_resolved_target(tmp_path):
     root = tmp_path / "jobscout"
     body = up._helper_script(root, tmp_path / "staged", relaunch=True, pid=DEAD_PID)
     assert "jobscout" in body
+
+
+def test_the_helper_restarts_even_after_a_failed_swap(tmp_path):
+    """A failed swap restores the old build, and then nobody starts it.
+
+    That was survivable when a person had just pressed a button and was
+    watching. Automatic updates run unattended, so a window that vanishes and
+    never returns looks like the app broke -- when in fact the working version
+    is sitting right there. Restart it, on whichever version we ended up with.
+    """
+    old = tmp_path / "app"
+    restart = up._relaunch_command(old)
+    body = up._helper_script(old, tmp_path / "staged", relaunch=True, pid=DEAD_PID)
+
+    assert body.count(restart) == 2, (
+        "expected the restart on the success path AND the failure path:\n" + body)
+
+    # and the restore must still come first on the failure path
+    if sys.platform == "win32":
+        failed = body[body.index(":failed"):]
+        assert failed.index("move ") < failed.index(restart)
+    else:
+        failed = body[body.index("else\n"):]
+        assert failed.index("mv ") < failed.index(restart)
+
+
+def test_no_relaunch_requested_means_neither_path_starts_anything(tmp_path):
+    old = tmp_path / "app"
+    body = up._helper_script(old, tmp_path / "staged", relaunch=False, pid=DEAD_PID)
+    assert up._relaunch_command(old) not in body
+
+
+# --- the `updates:` settings -------------------------------------------------
+#
+# The bug these exist for: the app read `preferences.updates.check` while the
+# config template documents `updates.check` at the TOP level, so turning checks
+# off -- exactly as documented -- did nothing at all and the app kept asking
+# GitHub on every launch.
+
+class _Cfg:
+    def __init__(self, raw):
+        self.raw = raw
+
+
+def test_update_settings_default_to_on_when_the_block_is_absent():
+    """A config written before the setting existed must keep the default."""
+    for raw in ({}, {"preferences": {}}, {"updates": None}, {"updates": []}):
+        cfg = _Cfg(raw)
+        assert up.checks_allowed(cfg) is True
+        assert up.auto_install(cfg) is True
+
+
+def test_turning_checks_off_reads_the_top_level_key():
+    cfg = _Cfg({"updates": {"check": False}})
+    assert up.checks_allowed(cfg) is False
+    # and it only turns off what it names
+    assert up.auto_install(cfg) is True
+
+
+def test_turning_automatic_installs_off_reads_its_own_key():
+    cfg = _Cfg({"updates": {"auto": False}})
+    assert up.auto_install(cfg) is False
+    assert up.checks_allowed(cfg) is True
+
+
+def test_a_preferences_block_cannot_turn_checks_off():
+    """Where the setting used to (not) be read from. If this ever comes back,
+    the documented key stops working again and nothing else would notice."""
+    cfg = _Cfg({"preferences": {"updates": {"check": False}}})
+    assert up.checks_allowed(cfg) is True
+
+
+def test_explicit_values_win_over_the_default():
+    cfg = _Cfg({"updates": {"check": True, "auto": False}})
+    assert up.checks_allowed(cfg) is True
+    assert up.auto_install(cfg) is False

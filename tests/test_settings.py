@@ -154,11 +154,21 @@ def test_write_setting_survives_a_full_validate_then_write_cycle(cfgfile):
 
 
 def test_round_tripping_through_read_and_write_is_stable(cfgfile):
-    """Read the screen's values, write them straight back: no drift, no loss."""
+    """Read the screen's values, write them straight back: no drift, no loss.
+
+    Values that are NOT in the file are skipped. Writing one of those back is
+    what materialises a default into a config that predates the setting, which
+    is a deliberate first-save effect (see
+    test_a_config_without_the_section_still_stores_the_setting) rather than the
+    drift this test is watching for.
+    """
     before = cfgfile.read_text(encoding="utf-8")
     for row in api.read_settings(cfgfile):
-        if row["value"] is not None:
-            api.write_setting(cfgfile, row["key"], row["value"])
+        if row["value"] is None:
+            continue
+        if cfgwrite.get_value(before, row["key"]) is None:
+            continue                       # not in the file: not a round trip
+        api.write_setting(cfgfile, row["key"], row["value"])
     assert cfgfile.read_text(encoding="utf-8") == before
 
 
@@ -325,3 +335,77 @@ def test_the_template_ships_the_ui_section():
     import yaml
     assert yaml.safe_load(DEFAULT_CONFIG)["ui"]["theme"] == "system"
     assert any("theme:" in line for line in UI_SECTION_BODY)
+
+
+# --- the update settings ----------------------------------------------------
+
+def test_the_update_settings_are_offered_as_switches(cfgfile):
+    by = {r["key"]: r for r in api.read_settings(cfgfile)}
+    for key in ("updates.check", "updates.auto"):
+        assert key in by, f"{key} is not editable from the window"
+        assert by[key]["kind"] == "bool"
+        assert by[key]["label"]
+
+
+def test_an_absent_update_setting_shows_what_is_actually_in_effect(cfgfile):
+    """This config predates the `updates:` section, and both keys default to on.
+    Rendering None as `checked = false` would tell the user checks are off while
+    the app happily keeps asking GitHub."""
+    by = {r["key"]: r for r in api.read_settings(cfgfile)}
+    assert by["updates.check"]["value"] is True
+    assert by["updates.auto"]["value"] is True
+
+
+def test_a_config_without_the_section_still_stores_the_setting(tmp_path):
+    """cfgwrite refuses to invent structure -- correctly -- so a write has to add
+    the documented section first, or the setting is unsavable on any install that
+    predates it, which is every existing install."""
+    f = tmp_path / "config.yaml"
+    original = "# keep me\npreferences:\n  min_score: 6\n"
+    f.write_text(original, encoding="utf-8")
+
+    res = api.write_setting(f, "updates.auto", False)
+    assert res["value"] is False and res["changed"] is True
+
+    text = f.read_text(encoding="utf-8")
+    assert "# keep me" in text, "comments must survive"
+    assert yaml.safe_load(text)["updates"]["auto"] is False
+    # the section arrives documented, exactly as the template has it -- the
+    # comment lines must be there, and the key we just wrote must hold our value
+    from jobscout.config import UPDATES_SECTION_BODY
+    for line in UPDATES_SECTION_BODY:
+        if line.startswith("#"):
+            assert line in text, f"the added section is missing {line!r}"
+        else:
+            assert line.split(":")[0] in text, f"the added section is missing {line!r}"
+    assert "auto: false" in text
+
+    read_back = {r["key"]: r["value"] for r in api.read_settings(f)}
+    assert read_back["updates.auto"] is False
+
+
+def test_writing_an_update_setting_twice_does_not_grow_the_file(tmp_path):
+    f = tmp_path / "config.yaml"
+    f.write_text("preferences:\n  min_score: 6\n", encoding="utf-8")
+    api.write_setting(f, "updates.check", False)
+    n = len(f.read_text(encoding="utf-8").splitlines())
+    api.write_setting(f, "updates.auto", True)
+    api.write_setting(f, "updates.check", True)
+    assert len(f.read_text(encoding="utf-8").splitlines()) == n
+
+
+def test_a_non_boolean_is_refused(cfgfile):
+    with pytest.raises(ValueError):
+        api.write_setting(cfgfile, "updates.auto", "yes")
+    assert "updates:" not in cfgfile.read_text(encoding="utf-8")
+
+
+def test_the_template_and_the_create_on_demand_body_agree():
+    """The two paths that can put this section in a file -- `jobscout init` and a
+    settings write on an older config -- must produce the same text, or a fresh
+    install and an upgraded one drift apart."""
+    from jobscout.config import DEFAULT_CONFIG, SECTION_BODIES, UPDATES_SECTION_BODY
+    block = yaml.safe_load(DEFAULT_CONFIG)["updates"]
+    assert block == {"check": True, "auto": True}
+    assert SECTION_BODIES["updates"] is UPDATES_SECTION_BODY
+    assert SECTION_BODIES["ui"] is not None

@@ -48,6 +48,35 @@ HOMEPAGE = f"https://github.com/{REPO}/releases"
 CHECK_INTERVAL = timedelta(hours=24)
 TIMEOUT = 20.0
 
+
+def _updates_setting(cfg, key: str):
+    """Read the top-level `updates:` block, or None when it is not there.
+
+    One reader for one key. The block is documented at the top level, and the
+    app used to look for it under `preferences:` instead, so a config that said
+    `updates: {check: false}` was silently ignored and the app kept phoning
+    home. Anything that decides whether a check may happen goes through here.
+    """
+    block = (getattr(cfg, "raw", None) or {}).get("updates")
+    if not isinstance(block, dict):
+        return None
+    return block.get(key)
+
+
+def checks_allowed(cfg) -> bool:
+    """Whether the app may ask GitHub on its own.
+
+    The explicit `jobscout update` command deliberately ignores this: asking for
+    a check IS the instruction. A config written before the setting existed has
+    no block and therefore keeps the documented default, which is on.
+    """
+    return _updates_setting(cfg, "check") is not False
+
+
+def auto_install(cfg) -> bool:
+    """Whether a found update may be installed without being asked."""
+    return _updates_setting(cfg, "auto") is not False
+
 # How long the swap helper waits for jobscout to exit before giving up and
 # leaving the installed build alone. Long enough for a slow shutdown, short
 # enough that a stuck helper is not a mystery.
@@ -440,6 +469,11 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             ":failed",
             f'move "{old_root}.previous" "{old_root}" >nul 2>&1',
             "echo jobscout update failed - the previous version was restored.>&2",
+            # Restart even though the swap failed. The previous build is back
+            # in place, and an update that leaves the user with no window at
+            # all is worse than one that quietly stays on the old version --
+            # twice as bad when nobody pressed a button to start it.
+            f"{restart}" if restart else "rem no relaunch requested",
             "exit /b 1",
             "",
         ])
@@ -465,6 +499,8 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
         "else",
         f'  mv "{old_root}.previous" "{old_root}" 2>/dev/null',
         '  echo "jobscout update failed; the previous version was restored." >&2',
+        # Restart on the OLD build rather than leaving the user with no window.
+        f"  {restart}" if restart else "  :",
         "fi",
         "",
     ])

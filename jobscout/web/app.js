@@ -835,6 +835,8 @@ function showUpdate(text) {
   bar.hidden = false;
 }
 
+let STAGED = null;         // set once an update is downloaded and verified
+
 async function checkForUpdates(force) {
   let info;
   try {
@@ -843,20 +845,57 @@ async function checkForUpdates(force) {
     return;                                   // a check must never break boot
   }
   if (!info || info.disabled || !info.ok) return;
-  if (info.update_available) {
-    const size = info.asset && info.asset.size
-      ? ' (' + Math.round(info.asset.size / 1048576) + ' MB)' : '';
-    showUpdate('<b>jobscout ' + info.latest + '</b> is available' +
-      ' \u00b7 you have ' + info.current + size);
-  }
+  if (!info.update_available) return;
+  const size = info.asset && info.asset.size
+    ? ' (' + Math.round(info.asset.size / 1048576) + ' MB)' : '';
+  const blurb = '<b>jobscout ' + info.latest + '</b> is available' +
+    ' \u00b7 you have ' + info.current + size;
+  if (info.auto) { await autoInstall(info, blurb); return; }
+  showUpdate(blurb);
 }
 
-let STAGED = null;         // set once an update is downloaded and verified
+/* Install without asking, because the setting says to.
+ *
+ * Deliberately at startup: that is the one moment nothing is half-done. The
+ * window has just opened and the user has not begun anything, so a restart
+ * cannot interrupt work. Nothing replaces the installed build until the
+ * download has verified, and the swap keeps the previous build until it has
+ * succeeded -- so every way this can fail ends with a working copy in place. */
+async function autoInstall(info, blurb) {
+  const btn = $('update-install');
+  const dismiss = $('update-dismiss');
+  btn.hidden = true;
+  dismiss.hidden = true;
+  showUpdate('Updating to <b>jobscout ' + info.latest + '</b> \u2014 ' +
+    'downloading and verifying\u2026');
 
-/* Two steps on purpose. Downloading is safe while the app runs; INSTALLING
- * means terminating jobscout, and that is the user's call to make explicitly,
- * not a side effect of pressing a button. `Not now` keeps the verified copy,
- * so coming back does not re-download it. */
+  let res;
+  try {
+    res = await pywebview.api.update_install();
+  } catch (e) {
+    res = { ok: false, error: String(e) };
+  }
+  if (!res || !res.ok || !res.staged) {
+    // Hand it back as a normal offer instead of leaving a dead bar: an
+    // automatic update that could not happen must still be startable by hand.
+    btn.hidden = false;
+    dismiss.hidden = false;
+    btn.disabled = false;
+    btn.textContent = 'Try again';
+    showUpdate('<span class="up-err">Automatic update failed: ' +
+      String((res && res.error) || 'unknown error') + '</span> \u00b7 ' + blurb);
+    return;
+  }
+  STAGED = res.staged_version || info.latest;
+  await quitToUpdate();
+}
+
+/* Two steps on purpose for the MANUAL path. Downloading is safe while the app
+ * runs; INSTALLING means terminating jobscout, and that is the user's call to
+ * make explicitly, not a side effect of pressing a button. `Not now` keeps the
+ * verified copy, so coming back does not re-download it. The automatic path
+ * skips both steps because the setting asked for that -- it runs only at
+ * startup, and says in the bar what it is doing. */
 async function onUpdateClick() {
   if (STAGED) { await quitToUpdate(); return; }
   await downloadUpdate();

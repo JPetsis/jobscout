@@ -70,10 +70,10 @@ non-technical user needs is in it:
   [Profiles](#profiles).
 - **Pick your colours.** A switcher in the header: follow the system, or pin
   light or dark. Stored in `config.yaml` as `ui.theme`.
-- **Install updates.** When a newer release exists the window says so and
-  offers to install it. Nothing is downloaded until you press the button, and
-  jobscout only quits to replace itself when you tell it to. See
-  [Updating](#updating).
+- **Install updates.** jobscout checks for a newer release once a day and, by
+  default, installs it by itself: the download is checksum-checked first, and
+  the app restarts on the new version. Both halves are settings if you would
+  rather be asked. See [Updating](#updating).
 - **Recover a backup.** If the window opens and finds no workspace, it looks
   for a backup first and offers to restore it instead of just failing. See
   [Restoring a backup](#restoring-a-backup).
@@ -362,30 +362,43 @@ Two safety rules, both of them a response to actually losing a workspace:
 
 ## Updating
 
-The window checks GitHub once a day for a newer release and shows a notice if
-there is one; nothing is downloaded until you press **Install and restart**.
-`jobscout update --check` does the same from a terminal, and
-`updates.check: false` in the config turns the request off entirely.
+The window checks GitHub once a day for a newer release. If there is one, and
+you have not turned it off, **it installs itself**: the archive is downloaded
+and verified, and jobscout restarts on the new version. The notice bar says what
+is happening while it does.
 
-Installing is **two explicit steps**, because the second one closes the app:
+That happens **at startup**, which is the one moment nothing is half-done. The
+window has just opened and you have not started anything yet, so a restart
+cannot interrupt work.
+
+Both halves are settings, in the config as `updates.check` and `updates.auto`,
+or as the two switches under **Updates** in the app. Turning off `auto` gets you
+the two explicit steps below; turning off `check` stops jobscout asking GitHub
+at all. `jobscout update --check` still works either way — asking for a check
+yourself is the instruction, so the command does not consult the setting.
+
+The two explicit steps, which is what you get with automatic installing off:
 
 1. **Install and restart** downloads and verifies. jobscout keeps running.
 2. The button becomes **Quit and update**. Pressing it terminates jobscout, the
    new build takes its place, and jobscout reopens by itself. **Not now** leaves
    the verified download on disk, so coming back later does not fetch it again.
 
-Nothing terminates the app as a side effect. A button labelled "install" does
-not get to close your window on its own.
+An automatic attempt that cannot complete hands itself back as these two steps,
+with the reason, rather than failing silently.
 
 The download is verified before anything is replaced:
 
 1. the archive is checked against the **sha256 GitHub publishes for that
    asset**, so a truncated or corrupted download is refused;
 2. it is unpacked and confirmed to actually contain a jobscout build;
-3. once you choose to quit, a small helper waits for jobscout to exit, moves
-   the old build aside, swaps the new one in, and relaunches. If the swap fails
-   it **restores the previous build** — an update can never leave you with
-   nothing that launches.
+3. a small helper waits for jobscout to exit, moves the old build aside, swaps
+   the new one in, and relaunches. If the swap fails it **restores the previous
+   build** and starts *that*, so an update can never leave you with nothing that
+   launches — which matters most when nobody was watching.
+
+Nothing else can terminate the app as a side effect, and neither step touches
+`~/.jobscout/`: your config, database and backups are not part of the swap.
 
 The helper waits for a *clean exit*, not for you: it swaps within a second of
 the process ending, with nothing to click. The wait is bounded (120s) so a

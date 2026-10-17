@@ -365,15 +365,22 @@ class JsApi:
         return SCAN.cancel() if SCAN is not None else {"cancelled": False}
 
     def update_check(self, force: bool = False) -> dict:
-        """Is there a newer build? Cached for a day unless forced."""
-        if self.cfg.prefs.get("updates", {}).get("check") is False:
+        """Is there a newer build? Cached for a day unless forced.
+
+        `auto` tells the front-end whether to install a found update without
+        asking, so the decision lives in the config rather than being hardcoded
+        in the window.
+        """
+        if not updatemod.checks_allowed(self.cfg):
             return {"ok": True, "disabled": True, "update_available": False,
                     "current": updatemod.current_version()}
         try:
-            return updatemod.check(self.cfg.root, force=bool(force))
+            info = updatemod.check(self.cfg.root, force=bool(force))
         except Exception as e:                                 # noqa: BLE001
             return {"ok": False, "error": f"{type(e).__name__}: {e}",
                     "update_available": False}
+        info["auto"] = updatemod.auto_install(self.cfg)
+        return info
 
     def update_install(self) -> dict:
         """Download and verify the update and STOP there.

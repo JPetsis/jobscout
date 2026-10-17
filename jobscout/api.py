@@ -170,6 +170,19 @@ SETTINGS = [
      "group": "How strict",
      "label": "Only count a skill when the title mentions it too",
      "help": "On for a narrow search, off to let the description convince you."},
+    {"key": "updates.check", "op": "scalar", "kind": "bool", "default": True,
+     "group": "Updates",
+     "label": "Check for updates",
+     "help": "Ask GitHub whether a newer version exists, at most once a day, "
+             "when the app opens. The only thing sent is the request itself."},
+    {"key": "updates.auto", "op": "scalar", "kind": "bool", "default": True,
+     "group": "Updates",
+     "label": "Install updates automatically",
+     "help": "A newer version is downloaded and checksum-checked in the "
+             "background, then jobscout restarts on it. Nothing replaces the "
+             "build you have until the download has verified, and the previous "
+             "one is kept until the swap succeeds. Turn this off to be asked "
+             "first."},
 ]
 
 _BY_KEY = {s["key"]: s for s in SETTINGS}
@@ -202,11 +215,36 @@ def read_settings(path) -> list[dict]:
     out = []
     for spec in SETTINGS:
         row = dict(spec)
-        row["value"] = cfgwrite.get_value(text, spec["key"])
+        value = cfgwrite.get_value(text, spec["key"])
+        if value is None and "default" in spec:
+            # Not in the file: a config written before this setting existed.
+            # Show what is actually in effect -- None would render as "off" and
+            # tell the user the opposite of the truth.
+            value = spec["default"]
+        row["value"] = value
         if spec.get("options_from") == "sources":
             row["options"] = source_options(row["value"])
         out.append(row)
     return out
+
+
+def _edit_adding_section(path, op: str, key: str, value) -> bool:
+    """Set one key, adding its documented top-level section if it is missing.
+
+    `cfgwrite` will not invent structure, and rightly so: appending a key to the
+    wrong parent silently corrupts a config. The section body is the same text
+    the template ships, so an upgraded config and a fresh one do not drift.
+    """
+    from . import cfgwrite
+    from .config import SECTION_BODIES
+    try:
+        return cfgwrite.edit(path, op, key, value)
+    except cfgwrite.ConfigEditError:
+        body = SECTION_BODIES.get(key.split(".", 1)[0])
+        if body is None:
+            raise
+        cfgwrite.edit(path, "section", key.split(".", 1)[0], body)
+        return cfgwrite.edit(path, op, key, value)
 
 
 def known_source_names() -> set[str]:
@@ -274,12 +312,11 @@ def validate_setting(key: str, value):
 
 def write_setting(path, key: str, value) -> dict:
     """Validate, then edit the config file in place, preserving its comments."""
-    from . import cfgwrite
     spec = _BY_KEY.get(key)
     if spec is None:
         raise ValueError(f"not an editable setting: {key!r}")
     clean = validate_setting(key, value)
-    changed = cfgwrite.edit(path, spec["op"], key, clean)   # serialised inside
+    changed = _edit_adding_section(path, spec["op"], key, clean)
     return {"key": key, "value": clean, "changed": changed}
 
 
@@ -306,18 +343,9 @@ def read_theme(path) -> str:
 
 def write_theme(path, mode: str) -> str:
     """Store the theme, adding the `ui:` section when the config predates it."""
-    from . import cfgwrite
-    from .config import UI_SECTION_BODY
     if mode not in THEMES:
         raise ValueError(f"theme must be one of {', '.join(THEMES)}, got {mode!r}")
-    path = pathlib.Path(path)
-    try:
-        cfgwrite.edit(path, "scalar", "ui.theme", mode)
-    except cfgwrite.ConfigEditError:
-        # A config written before `ui:` existed. set_scalar will not invent
-        # structure, so add the documented section explicitly, then set it.
-        cfgwrite.edit(path, "section", "ui", UI_SECTION_BODY)
-        cfgwrite.edit(path, "scalar", "ui.theme", mode)
+    _edit_adding_section(path, "scalar", "ui.theme", mode)
     return mode
 
 

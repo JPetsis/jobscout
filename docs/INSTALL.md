@@ -152,11 +152,23 @@ want digests, goals or the terminal triage loop.
 
 ## Updating
 
-If you installed a packaged build, jobscout updates itself. Open it and a
-notice appears when a newer release exists; press **Install and restart** to
-download and verify it, then **Quit and update** to let it close jobscout and
-take its place. jobscout reopens by itself — you are not closing it by hand.
-From a terminal:
+If you installed a packaged build, jobscout updates itself. It checks once a
+day, and when a newer release exists it downloads it, verifies the checksum, and
+restarts on the new version. The bar across the top says what it is doing. It
+does this at startup, before you have started anything, so it never interrupts
+work.
+
+If you would rather be asked, there are two switches under **Updates** in the
+app's settings:
+
+- **Check for updates** — turn it off and jobscout stops asking GitHub at all.
+- **Install updates automatically** — turn it off and a newer version is
+  offered instead: press **Install and restart** to download and verify it,
+  then **Quit and update** to let it close jobscout and take its place.
+  jobscout reopens by itself — you are not closing it by hand.
+
+The same two settings are `updates.check` and `updates.auto` in `config.yaml`.
+From a terminal, which works either way:
 
 ```bash
 jobscout update --check     # just tell me

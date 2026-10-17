@@ -398,13 +398,6 @@ sources:
     # location parameter.
     queries: []              # from your profile unless set
 
-# Update checks. jobscout asks GitHub whether a newer release exists, at most
-# once a day, and shows a notice in the window if there is one. Nothing is
-# downloaded or installed until you press the button. Set check: false to turn
-# the request off entirely.
-updates:
-  check: true
-
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>
@@ -434,10 +427,29 @@ UI_SECTION_BODY = [
     '                        # window header; "system" follows your OS setting.',
 ]
 
+UPDATES_SECTION_BODY = [
+    '# Ask GitHub whether a newer release exists, at most once a day, and show a',
+    '# notice in the window if there is one. Set check to false to stop the app',
+    '# asking on its own; running `jobscout update` yourself still works.',
+    'check: true',
+    '# Install a newer version without asking. The download is verified before',
+    '# anything is replaced, and the previous build is kept until the swap has',
+    '# succeeded, so a failed update leaves the working version in place. Set to',
+    '# false to be asked first.',
+    'auto: true',
+]
+
 # The template and the create-on-demand path (cfgwrite.ensure_section) both come
-# from UI_SECTION_BODY, so a fresh install and an existing config upgraded in
-# place cannot drift apart.
+# from these bodies, so a fresh install and an existing config upgraded in place
+# cannot drift apart. SECTION_BODIES is what lets a settings write add a section
+# a config written earlier never had.
 DEFAULT_CONFIG += "\nui:\n" + "".join(f"  {line}\n" for line in UI_SECTION_BODY)
+DEFAULT_CONFIG += "\nupdates:\n" + "".join(f"  {line}\n" for line in UPDATES_SECTION_BODY)
+
+SECTION_BODIES: dict[str, list[str]] = {
+    "ui": UI_SECTION_BODY,
+    "updates": UPDATES_SECTION_BODY,
+}
 
 SOURCE_DEFAULTS: dict[str, dict] = {
     "linkedin": {"max_requests": 24, "fresh_days": 14, "queries": []},
