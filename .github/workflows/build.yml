@@ -185,6 +185,7 @@ jobs:
       - name: list what will be published
         run: find artifacts -type f | sort
       - name: build the release notes
+        id: notes
         run: |
           {
             python3 packaging/changelog.py "${GITHUB_REF_NAME}"
@@ -192,10 +193,13 @@ jobs:
             echo
             cat packaging/release-footer.md
           } > RELEASE_NOTES.md
+          # action-gh-release would otherwise title it with the bare tag
+          echo "title=jobscout ${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "----- notes as they will be published -----"
           cat RELEASE_NOTES.md
       - uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.notes.outputs.title }}
           files: artifacts/*
           # Published straight away. The tag is the human decision; a second
           # click on a draft only adds a way to ship nothing by forgetting.
