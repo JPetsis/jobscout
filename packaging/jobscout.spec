@@ -149,7 +149,17 @@ def _package_data(name: str) -> list[tuple[str, str]]:
 
 
 datas += _package_data("geonamescache")    # offline gazetteer for geo.py tier 2
-datas += _package_data("certifi")          # CA bundle for the certifi TLS context
+
+# The CA bundle update.py builds its TLS context from. PyInstaller ships its own
+# OpenSSL, which has NO certificate store, so without this file a packaged app
+# cannot verify any https host at all -- the update check failed silently on
+# every launch, looking exactly like "you are up to date".
+_certifi_files = _package_data("certifi")
+if not any(Path(src).name == "cacert.pem" for src, _ in _certifi_files):
+    raise SystemExit(
+        "certifi's cacert.pem is not being bundled; update.py builds its TLS "
+        "context from it and the packaged app cannot reach GitHub without it")
+datas += _certifi_files
 
 # --- build ------------------------------------------------------------------
 a = Analysis(                                              # noqa: F821

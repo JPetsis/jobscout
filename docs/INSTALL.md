@@ -188,6 +188,11 @@ Two things worth knowing:
 Updates are verified against the checksum GitHub publishes for the download,
 and the previous build is restored automatically if the swap fails.
 
+**If it seems not to update**, `~/.jobscout/update.log` says what it did and
+when: every check, its result, the download, and what the swap helper did after
+jobscout closed. It answers "why didn't it update" without guessing, and it is
+the first thing to look at.
+
 ---
 
 ## Removing the app, and keeping your data

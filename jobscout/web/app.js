@@ -985,12 +985,21 @@ async function quitToUpdate() {
   btn.textContent = 'Restarting\u2026';
   $('update-text').innerHTML = 'Closing jobscout and installing <b>' +
     STAGED + '</b>\u2026';
+  let res;
   try {
-    await pywebview.api.update_quit();     // closes this window
+    res = await pywebview.api.update_quit();     // closes this window
   } catch (e) {
+    res = { ok: false, error: String(e) };
+  }
+  // It is still here, so the quit did NOT happen. Before this check the bar
+  // kept saying "closing jobscout and installing" forever, which is how an
+  // update that silently did nothing looked exactly like one in progress.
+  if (res && res.ok === false) {
     btn.disabled = false;
-    btn.textContent = 'Quit and update';
-    showUpdate('<span class="up-err">Could not quit: ' + String(e) + '</span>');
+    btn.textContent = 'Try again';
+    $('update-dismiss').hidden = false;
+    showUpdate('<span class="up-err">Could not install the update: ' +
+      String(res.error || 'unknown error') + '</span>');
   }
 }
 

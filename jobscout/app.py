@@ -382,6 +382,7 @@ class JsApi:
         try:
             info = updatemod.check(self.cfg.root, force=bool(force))
         except Exception as e:                                 # noqa: BLE001
+            updatemod.log(self.cfg.root, f"check raised: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {e}",
                     "update_available": False}
         info["auto"] = updatemod.auto_install(self.cfg)
@@ -410,7 +411,13 @@ class JsApi:
         try:
             res = updatemod.update(self.cfg.root, apply=False)
         except updatemod.UpdateError as e:
+            updatemod.log(self.cfg.root, f"install failed: {e}")
             return {"ok": False, "error": str(e)}
+        except Exception as e:                                 # noqa: BLE001
+            # Anything unexpected would otherwise reject the bridge promise and
+            # reach the window as an unexplained failure. Say what it was.
+            updatemod.log(self.cfg.root, f"install raised: {type(e).__name__}: {e}")
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if not res.get("updated"):
             return {"ok": True, "updated": False, "staged": None,
                     "reason": res.get("reason", "already up to date")}
@@ -428,11 +435,16 @@ class JsApi:
         """
         staged = getattr(self, "_staged", None)
         if not staged or not Path(staged).exists():
+            updatemod.log(self.cfg.root,
+                          "quit: nothing staged, so there is nothing to swap")
             return {"ok": False, "error": "nothing has been staged yet"}
         try:
-            updatemod.apply_staged(Path(staged), relaunch=True)
+            updatemod.apply_staged(Path(staged), relaunch=True,
+                                   logpath=self.cfg.root / "update.log")
         except updatemod.UpdateError as e:
+            updatemod.log(self.cfg.root, f"quit: could not start the swap: {e}")
             return {"ok": False, "error": str(e)}
+        updatemod.log(self.cfg.root, "quit: helper started, closing the window")
         self.quit()
         return {"ok": True, "quitting": True}
 

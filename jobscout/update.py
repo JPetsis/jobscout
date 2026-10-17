@@ -27,6 +27,7 @@ import json
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -178,13 +179,76 @@ class Release:
 
 # ------------------------------------------------------------------- net
 
+def _ca_candidates() -> list[Path]:
+    """Every place a usable CA bundle might be, in the order worth trying."""
+    candidates: list[Path] = []
+    try:
+        import certifi                                        # noqa: PLC0415
+        candidates.append(Path(certifi.where()))
+    except Exception:                                          # noqa: BLE001
+        pass
+    roots = [getattr(sys, "_MEIPASS", None), Path(sys.executable).resolve().parent,
+             Path(__file__).resolve().parent]
+    for root in roots:
+        if not root:
+            continue
+        root = Path(root)
+        candidates += [
+            root / "certifi" / "cacert.pem",
+            root / "Resources" / "certifi" / "cacert.pem",
+            root.parent / "Resources" / "certifi" / "cacert.pem",
+        ]
+    candidates.append(Path("/etc/ssl/cert.pem"))               # macOS system store
+    return candidates
+
+
+def _ca_bundle() -> str | None:
+    """A CA bundle this process can actually verify GitHub against.
+
+    PyInstaller ships its OWN OpenSSL, which has no certificate store, so in a
+    packaged build the default SSL context could not verify anything: every
+    https request failed with CERTIFICATE_VERIFY_FAILED and the update check
+    silently did nothing -- forever, on every launch, with no visible symptom.
+
+    certifi's bundle is already inside the app (it comes in with pywebview), so
+    use that. It is looked up as a FILE rather than by importing certifi, so it
+    works whether or not the module itself was collected into the archive.
+    """
+    for c in _ca_candidates():
+        try:
+            if c.is_file():
+                return str(c)
+        except OSError:
+            continue
+    return None
+
+
+def _context() -> "ssl.SSLContext | None":
+    """The SSL context to use, or None to let urllib pick its own."""
+    cafile = _ca_bundle()
+    if not cafile:
+        return None
+    try:
+        return ssl.create_default_context(cafile=cafile)
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _urlopen(req, timeout: float = TIMEOUT):
+    """urlopen with a context that works in a frozen build too."""
+    ctx = _context()
+    if ctx is None:
+        return urllib.request.urlopen(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+
+
 def _get_json(url: str):
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": f"jobscout/{current_version()}",
     })
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with _urlopen(req) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -235,6 +299,27 @@ def _cache_path(root: Path) -> Path:
     return root / "update-check.json"
 
 
+def log(root: Path, msg: str) -> None:
+    """Append one line to the update log, and never raise.
+
+    Automatic updates run with nobody watching, and until now every way one
+    could fail was invisible. The packaged app could not reach GitHub AT ALL
+    (its OpenSSL had no certificate store) and the symptom was exactly the same
+    as being up to date: no notice, no error, nothing to look at. This file is
+    the answer to "it did not update and I cannot see why", and it is the first
+    thing to read when it happens again.
+    """
+    try:
+        path = Path(root) / "update.log"
+        if path.exists() and path.stat().st_size > 64_000:
+            path.replace(Path(str(path) + ".1"))
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"{stamp}  {msg}\n")
+    except OSError:
+        pass                    # logging must never be the thing that breaks
+
+
 def read_cached_check(root: Path) -> dict | None:
     try:
         return json.loads(_cache_path(root).read_text(encoding="utf-8"))
@@ -267,12 +352,15 @@ def check(root: Path, *, force: bool = False, include_prerelease: bool = False) 
                 when = None
             if when is not None and now - when < CHECK_INTERVAL:
                 latest = cached.get("latest")
-                return {
+                out = {
                     **cached,
                     "current": current,
                     "update_available": bool(latest) and is_newer(latest, current),
                     "from_cache": True,
                 }
+                log(root, f"check: cached answer, latest {latest or 'none'}, "
+                          f"this build {current}, update {out['update_available']}")
+                return out
 
     try:
         rel = latest_release(include_prerelease=include_prerelease)
@@ -280,6 +368,7 @@ def check(root: Path, *, force: bool = False, include_prerelease: bool = False) 
         # Deliberately NOT cached: a check that failed because the network was
         # not up yet would otherwise be the answer for the next 24 hours, and
         # the app would never try again that day.
+        log(root, f"check failed: {e}")
         return {"ok": False, "error": str(e), "current": current,
                 "checked_at": now.isoformat(timespec="seconds")}
 
@@ -305,6 +394,8 @@ def check(root: Path, *, force: bool = False, include_prerelease: bool = False) 
         _cache_path(root).write_text(json.dumps(out), encoding="utf-8")
     except OSError:
         pass                    # an unwritable cache must not break the check
+    log(root, f"check: latest {out.get('latest') or 'none'}, this build "
+              f"{current}, update {out['update_available']}")
     return {**out, "from_cache": False}
 
 
@@ -335,7 +426,7 @@ def download(url: str, dest: Path, *, expected_sha256: str = "",
     req = urllib.request.Request(url, headers={
         "User-Agent": f"jobscout/{current_version()}", "Accept": "*/*"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r, tmp.open("wb") as fh:
+        with _urlopen(req) as r, tmp.open("wb") as fh:
             shutil.copyfileobj(r, fh, length=1 << 20)
     except Exception as e:                                     # noqa: BLE001
         tmp.unlink(missing_ok=True)
@@ -431,7 +522,7 @@ def _relaunch_command(root: Path) -> str:
 
 
 def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
-                   pid: int | None = None) -> str:
+                   pid: int | None = None, logfile: Path | None = None) -> str:
     """A script that waits for this process to exit, swaps, and relaunches.
 
     Written to a temp file and run detached, because it has to outlive the
@@ -440,10 +531,20 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
     recoverable by hand.
 
     `pid` is injectable so the swap can be tested without a live process to
-    wait for; it defaults to this one.
+    wait for; it defaults to this one. `logfile` is where it reports its own
+    outcome -- this script runs AFTER the app has exited, so it is the only
+    thing left that can say whether the swap worked.
     """
     restart = _relaunch_command(old_root) if relaunch else ""
     pid = os.getpid() if pid is None else int(pid)
+    log = f'"{logfile}"' if logfile else ""
+
+    def note(text: str) -> str:
+        if not log:
+            return "rem no log requested"
+        if sys.platform == "win32":
+            return f"if defined LOG echo %date% %time%  {text} >> {log}"
+        return f"note {text!r}"
 
     if sys.platform == "win32":
         # Label-based flow, NOT `if (...)` blocks. cmd.exe parses a
@@ -454,6 +555,7 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             "@echo off",
             "rem the running .exe is locked, so wait for it to exit first",
             "setlocal",
+            f'set "LOG={logfile or ""}"',
             "set /a tries=0 >nul",
             "",
             ":wait",
@@ -467,10 +569,12 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             "goto wait",
             "",
             ":gaveup",
+            note("helper: jobscout did not exit, nothing was changed"),
             "echo jobscout did not exit - nothing was changed.>&2",
             "exit /b 1",
             "",
             ":swap",
+            note("helper: jobscout exited, swapping"),
             # Clear any leftover first, exactly as the shell version does. A
             # stale .previous would make the NEXT update's `move` fail, and a
             # failed move onto an existing directory moves INSIDE it -- which
@@ -480,11 +584,13 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             f'move "{new_root}" "{old_root}" >nul 2>&1',
             "if errorlevel 1 goto failed",
             f'rmdir /s /q "{old_root}.previous"',
+            note("helper: swapped in the new build"),
             f"{restart}" if restart else "rem no relaunch requested",
             "exit /b 0",
             "",
             ":failed",
             f'move "{old_root}.previous" "{old_root}" >nul 2>&1',
+            note("helper: the swap failed, the previous build was restored"),
             "echo jobscout update failed - the previous version was restored.>&2",
             # Restart even though the swap failed. The previous build is back
             # in place, and an update that leaves the user with no window at
@@ -499,22 +605,31 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
         "#!/bin/sh",
         f"# Wait for jobscout (pid {pid}) to exit. Bounded: if it never does, give",
         f"# up WITHOUT touching the installed build rather than hanging forever.",
+        f"LOG={log}" if log else "LOG=",
+        # This runs after the app is gone, so it is the only thing left that can
+        # record what the swap did.
+        'note() { [ -n "$LOG" ] && echo "$(date \'+%Y-%m-%d %H:%M:%S\')  $*" '
+        '>> "$LOG" 2>/dev/null; return 0; }',
         "n=0",
         f"while kill -0 {pid} 2>/dev/null; do",
         "  n=$((n+1))",
         f'  if [ "$n" -gt {WAIT_SECONDS} ]; then',
+        '    note "helper: jobscout did not exit, nothing was changed"',
         '    echo "jobscout did not exit; nothing was changed." >&2',
         "    exit 1",
         "  fi",
         "  sleep 1",
         "done",
+        'note "helper: jobscout exited, swapping"',
         f'rm -rf "{old_root}.previous"',
         f'if mv "{old_root}" "{old_root}.previous" 2>/dev/null && '
         f'mv "{new_root}" "{old_root}" 2>/dev/null; then',
         f'  rm -rf "{old_root}.previous"',
+        '  note "helper: swapped in the new build"',
         f"  {restart}" if restart else "  :",
         "else",
         f'  mv "{old_root}.previous" "{old_root}" 2>/dev/null',
+        '  note "helper: the swap failed, the previous build was restored"',
         '  echo "jobscout update failed; the previous version was restored." >&2',
         # Restart on the OLD build rather than leaving the user with no window.
         f"  {restart}" if restart else "  :",
@@ -523,7 +638,8 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
     ])
 
 
-def apply_staged(staged: Path, *, relaunch: bool = True) -> Path:
+def apply_staged(staged: Path, *, relaunch: bool = True,
+                 logpath: Path | None = None) -> Path:
     """Swap a staged build in by spawning the helper and returning its path.
 
     The caller is expected to exit immediately afterwards. Nothing here touches
@@ -542,7 +658,8 @@ def apply_staged(staged: Path, *, relaunch: bool = True) -> Path:
 
     script = Path(tempfile.mkdtemp(prefix="jobscout-update-")) / (
         "apply.bat" if sys.platform == "win32" else "apply.sh")
-    script.write_text(_helper_script(root, staged, relaunch=relaunch),
+    script.write_text(_helper_script(root, staged, relaunch=relaunch,
+                                     logfile=logpath),
                       encoding="utf-8")
     script.chmod(0o755)
     if sys.platform == "win32":
@@ -592,16 +709,19 @@ def update(root: Path, *, from_archive: Path | None = None, apply: bool = False,
                 f"({info.get('asset_for_platform')}). Download manually: "
                 f"{info.get('url') or HOMEPAGE}")
         say(f"downloading {asset['name']} ({asset['size'] / 1048576:.0f} MB)")
+        log(root, f"install: downloading {asset['name']} ({asset['size']} bytes)")
         target = root / "updates" / asset["name"]
         archive = download(asset["url"], target,
                            expected_sha256=asset.get("sha256", ""),
                            expected_size=asset.get("size", 0))
         version = info.get("latest") or "unknown"
         say("checksum verified")
+        log(root, "install: checksum verified")
 
     staging = Path(tempfile.mkdtemp(prefix="jobscout-staged-"))
     payload = extract(archive, staging)
     say(f"staged {payload.name}")
+    log(root, f"install: staged {version} at {payload}")
 
     out = {"ok": True, "updated": False, "staged": str(payload),
            "archive": str(archive), "staged_version": version,

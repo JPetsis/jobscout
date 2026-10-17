@@ -551,14 +551,19 @@ def test_update_quit_spawns_the_helper_then_closes_the_window(tmp_path, monkeypa
     staged.mkdir()
     api._staged = str(staged)
     spawned = []
-    monkeypatch.setattr(up, "apply_staged",
-                        lambda p, relaunch=True: spawned.append((p, relaunch)))
+    monkeypatch.setattr(
+        up, "apply_staged",
+        lambda p, relaunch=True, logpath=None: spawned.append((p, relaunch, logpath)))
     closed = []
     monkeypatch.setattr(api, "quit", lambda: closed.append(1) or {"ok": True})
 
     res = api.update_quit()
     assert res["quitting"] is True
-    assert spawned == [(staged, True)], "the helper must be started first"
+    assert [(p, r) for p, r, _ in spawned] == [(staged, True)], \
+        "the helper must be started first"
+    # and it is told where to write its own outcome: this script runs after the
+    # app has exited, so nothing else can report whether the swap worked.
+    assert spawned[0][2] == api.cfg.root / "update.log"
     assert closed == [1], "and only then does the window close"
 
 
@@ -712,3 +717,137 @@ def test_explicit_values_win_over_the_default():
     cfg = _Cfg({"updates": {"check": True, "auto": False}})
     assert up.checks_allowed(cfg) is True
     assert up.auto_install(cfg) is False
+
+
+# --- the CA bundle ----------------------------------------------------------
+#
+# The bug these exist for: PyInstaller ships its OWN OpenSSL, which has no
+# certificate store, so the PACKAGED app could not verify any https host at all.
+# Every request failed with CERTIFICATE_VERIFY_FAILED and the update check
+# silently did nothing -- on every launch, forever, looking exactly like "you
+# are up to date". It was found by launching the real app and noticing it never
+# wrote its check cache.
+
+def test_the_frozen_layout_is_among_the_ca_candidates(tmp_path, monkeypatch):
+    """Where the file really lives in a macOS bundle: Contents/Frameworks is
+    sys._MEIPASS, and its certifi entry is a symlink to ../Resources."""
+    bundle = tmp_path / "jobscout.app" / "Contents"
+    monkeypatch.setattr(up.sys, "_MEIPASS", str(bundle / "Frameworks"), raising=False)
+    monkeypatch.setattr(up.sys, "executable", str(bundle / "MacOS" / "jobscout"))
+
+    cands = [str(c) for c in up._ca_candidates()]
+
+    assert any(c.endswith("Frameworks/certifi/cacert.pem") for c in cands)
+    assert any(c.endswith("Resources/certifi/cacert.pem") for c in cands)
+
+
+def test_the_windows_and_linux_frozen_layout_is_covered(tmp_path, monkeypatch):
+    """onedir puts everything in one directory beside the executable."""
+    monkeypatch.setattr(up.sys, "_MEIPASS", None, raising=False)
+    monkeypatch.setattr(up.sys, "executable",
+                        str(tmp_path / "jobscout" / "jobscout.exe"))
+
+    cands = [str(c) for c in up._ca_candidates()]
+
+    assert any(c.endswith(str(Path("jobscout", "certifi", "cacert.pem")))
+               for c in cands), cands
+
+
+def test_the_chosen_ca_bundle_is_a_real_file():
+    got = up._ca_bundle()
+    if got is not None:                     # None is allowed on a bare system
+        assert Path(got).is_file()
+
+
+def test_an_absent_ca_bundle_falls_back_to_urllibs_own_context(tmp_path, monkeypatch):
+    """Better urllib's default than a context built from a file that is not
+    there -- which is what a source checkout has always used."""
+    monkeypatch.setattr(up, "_ca_candidates", lambda: [tmp_path / "nope.pem"])
+    assert up._ca_bundle() is None
+    assert up._context() is None
+
+
+# --- the update log ---------------------------------------------------------
+#
+# Automatic updates run with nobody watching, and every one of the failures
+# above was invisible. This file is why the next one will not be.
+
+def test_the_log_remembers_what_the_check_decided(tmp_path, monkeypatch):
+    monkeypatch.setattr(up, "latest_release", lambda **k: None)
+    up.check(tmp_path, force=True)
+
+    text = (tmp_path / "update.log").read_text(encoding="utf-8")
+
+    assert "check: latest none" in text
+    assert "update False" in text
+
+
+def test_the_log_remembers_a_failed_check(tmp_path, monkeypatch):
+    def boom(**k):
+        raise up.UpdateError("could not reach GitHub: URLError: no network")
+
+    monkeypatch.setattr(up, "latest_release", boom)
+    up.check(tmp_path)
+
+    assert "check failed: could not reach GitHub" in \
+        (tmp_path / "update.log").read_text(encoding="utf-8")
+
+
+def test_logging_never_raises_even_when_it_cannot_write(tmp_path):
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    try:
+        up.log(ro, "this must not raise")
+    finally:
+        ro.chmod(0o700)
+
+
+def test_the_log_rotates_instead_of_growing_forever(tmp_path):
+    (tmp_path / "update.log").write_text("x" * 70_000, encoding="utf-8")
+    up.log(tmp_path, "the newest line")
+
+    assert (tmp_path / "update.log.1").exists()
+    assert "the newest line" in (tmp_path / "update.log").read_text(encoding="utf-8")
+
+
+def test_the_helper_writes_its_own_outcome_to_the_log(tmp_path):
+    """It runs after the app has exited, so it is the ONLY thing left that can
+    say whether the swap worked."""
+    log = tmp_path / "update.log"
+    old = _build(tmp_path / "app", "OLD")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+
+    r = _run_helper(up._helper_script(old, new, relaunch=False, pid=DEAD_PID,
+                                      logfile=log),
+                    tmp_path / _helper_name())
+
+    assert r.returncode == 0, r.stderr
+    text = log.read_text(encoding="utf-8")
+    assert "exited, swapping" in text
+    assert "swapped in the new build" in text
+
+
+def test_the_helper_logs_a_failed_swap_too(tmp_path):
+    log = tmp_path / "update.log"
+    old = _build(tmp_path / "app", "WORKING")
+
+    _run_helper(up._helper_script(old, tmp_path / "gone" / "app", relaunch=False,
+                                  pid=DEAD_PID, logfile=log),
+                tmp_path / _helper_name())
+
+    assert "the previous build was restored" in log.read_text(encoding="utf-8")
+
+
+def test_no_logfile_means_the_helper_writes_nothing(tmp_path):
+    """The `note` helper is a no-op without a target: the swap still happens,
+    and nothing is written anywhere."""
+    old = _build(tmp_path / "app", "OLD")
+    new = _build(tmp_path / "staged" / "app", "NEW")
+
+    r = _run_helper(up._helper_script(old, new, relaunch=False, pid=DEAD_PID),
+                    tmp_path / _helper_name())
+
+    assert r.returncode == 0, r.stderr
+    assert (old / "marker.txt").read_text() == "NEW"
+    assert not list(tmp_path.rglob("*.log"))
