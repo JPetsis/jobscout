@@ -508,18 +508,62 @@ def _jsapi(tmp_path):
 
 
 def test_update_install_stages_but_does_not_quit(tmp_path, monkeypatch):
+    """The stub is the shape `update(apply=False)` REALLY returns: updated is
+    False because nothing was swapped in, and `staged` is the payload.
+
+    The old stub claimed updated=True, which that call can never return. That
+    is how the install path stayed a silent no-op that told itself there was
+    nothing to install, while a verified download sat on disk.
+    """
     api = _jsapi(tmp_path)
+    staged = tmp_path / "staged.app"
     monkeypatch.setattr(up, "install_root", lambda: tmp_path / "app")
     monkeypatch.setattr(up, "update", lambda *a, **k: {
-        "ok": True, "updated": True, "staged": str(tmp_path / "staged.app"),
-        "staged_version": "0.2.0"})
+        "ok": True, "updated": False, "staged": str(staged),
+        "staged_version": "0.2.0", "archive": str(tmp_path / "a.zip")})
     quit_calls = []
     monkeypatch.setattr(api, "quit", lambda: quit_calls.append(1))
 
     res = api.update_install()
+
     assert res["ok"] is True
+    assert res["staged"] == str(staged), "the download must not be thrown away"
+    assert api._staged == str(staged), "quit needs it later"
     assert res["staged_version"] == "0.2.0"
     assert quit_calls == [], "downloading must never terminate the app"
+
+
+def test_nothing_staged_really_does_mean_up_to_date(tmp_path, monkeypatch):
+    api = _jsapi(tmp_path)
+    monkeypatch.setattr(up, "install_root", lambda: tmp_path / "app")
+    monkeypatch.setattr(up, "update", lambda *a, **k: {
+        "ok": True, "updated": False, "staged": None,
+        "reason": "already up to date"})
+
+    res = api.update_install()
+
+    assert res["updated"] is False and res["staged"] is None
+    assert res["reason"] == "already up to date"
+
+
+def test_update_without_apply_reports_the_staged_path_not_updated(tmp_path, monkeypatch):
+    """Pins the contract app.py depends on, against the real function, so the
+    two cannot drift apart again."""
+    payload = tmp_path / "staged.app"
+    payload.mkdir()
+    archive = tmp_path / "a.zip"
+    archive.write_bytes(b"")
+    monkeypatch.setattr(up, "check", lambda *a, **k: {
+        "ok": True, "update_available": True, "latest": "9.9.9", "url": "https://x",
+        "asset": {"name": "jobscout-macos-arm64.zip", "size": 1,
+                  "url": "https://x/y", "sha256": ""}})
+    monkeypatch.setattr(up, "download", lambda url, dest, **k: archive)
+    monkeypatch.setattr(up, "extract", lambda a, into: payload)
+
+    out = up.update(tmp_path, apply=False)
+
+    assert out["staged"] == str(payload)
+    assert out["updated"] is False, "nothing was swapped in, and nothing should be"
 
 
 def test_a_second_install_reuses_the_staged_build(tmp_path, monkeypatch):

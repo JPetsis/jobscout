@@ -418,12 +418,18 @@ class JsApi:
             # reach the window as an unexplained failure. Say what it was.
             updatemod.log(self.cfg.root, f"install raised: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
-        if not res.get("updated"):
+        # The signal that there is something to install is `staged`. NOT
+        # `updated`: that one means "swapped in", and this call deliberately
+        # does not swap -- with apply=False it is always False. Reading it as
+        # "nothing to do" threw away every download and made the install path
+        # a no-op that reported "already up to date" while an update waited.
+        staged = res.get("staged")
+        if not staged:
             return {"ok": True, "updated": False, "staged": None,
                     "reason": res.get("reason", "already up to date")}
-        self._staged = res["staged"]
+        self._staged = str(staged)
         self._staged_version = res.get("staged_version")
-        return {"ok": True, "updated": True, "staged": res["staged"],
+        return {"ok": True, "updated": True, "staged": str(staged),
                 "staged_version": res.get("staged_version")}
 
     def update_quit(self) -> dict:
