@@ -57,9 +57,10 @@ non-technical user needs is in it:
   the scan says so by name and prints what to do about it, rather than
   reporting zero jobs and leaving you to guess.
 - **Choose which boards to scan.** Settings has a checkbox per job board, with
-  real names rather than config keys. All 29 are offered; tick what you want.
-  Your existing order is preserved, and selecting nothing warns you instead of
-  letting a scan quietly do nothing.
+  real names rather than config keys, grouped by the market each serves (DACH,
+  US, Europe, global/remote, academic, and the per-company boards). Tick what
+  you want. Your existing order is preserved, and selecting nothing warns you
+  instead of letting a scan quietly do nothing.
 - **Edit your profile.** The job titles you want, your skills and how much you
   care about each, the countries and places you'll accept, and how strict the
   cutoffs are.
@@ -409,46 +410,58 @@ of who published the file, because there is no signature to check. See
 
 ## Sources
 
-Working today (all verified live, all free):
+Working today (all verified live, all free). The `market` column is the same
+grouping the Settings screen uses, so the two read the same way:
 
-| source | region | how |
+| source | market | how |
 |---|---|---|
-| `linkedin` | DACH | public guest search API, no login (rate-limited by design: `max_requests` per run) |
-| `stepstone` | DE | result pages + JSON-LD detail pages |
-| `xing` | DACH | server-rendered search + detail pages |
-| `stellenanzeigen` | DE | server-rendered search pages |
-| `karriere_at` | AT | result list from `window.VUE_INITIAL_STATE` |
-| `jobs_ch` | CH | public JSON search API |
-| `arbeitnow` | DE/remote | public API |
-| `berlinstartupjobs` | Berlin | RSS feed |
-| `hn` | global | Algolia + Firebase (latest "Who is hiring?" thread) |
-| `remotive`, `wwr`, `remoteok`, `workingnomads`, `nodesk` | remote | free APIs / RSS |
-| `himalayas` | global remote | public JSON API, cursor-paginated; newest pages only (hard rate limit), structured salary fields folded into the salary parser |
-| `larajobs` | remote / PHP | RSS feed, Laravel/PHP only; the feed carries no body, so the job page is read on first `show` |
-| `recruitee` | company boards | public `<company>.recruitee.com/api/offers/` JSON, one request per board, structured salary |
-| `eures` | EU (NUTS countries, default AT) | official EURES portal JSON search, public, no key; `locationCodes` are NUTS country codes, the canonical vacancy page doubles as the liveness URL |
-| `ams` | Austria | `jobs.ams.at` public JSON API; requests are signed with a client-side HMAC-SHA512 over a key shipped in the public app bundle (no account, no API key) |
-| `jobsat` | Austria | `jobs.at` public search, server-rendered HTML (no JSON API, no key); 15 cards per page, detail URL is base64 in `data-c-redirect`, an empty location means "Österreich" |
-| `greenhouse`, `ashby`, `lever`, `smartrecruiters`, `workable` | company boards | public ATS APIs — add your target companies under `companies:` in the config, or let `jobscout add-company <careers-url>` find them |
-| `themuse` | US | The Muse public API, **no key**. It has no free-text search (only category/location/level), so it fetches by category and lets the scorer decide relevance; `categories` and `location` are configurable and empty means "everything, newest first" |
-| `workday` | US / global | the API behind a large share of large-employer careers sites (NVIDIA, Salesforce…), **no key**. Add employers under `companies.workday.tokens`; a token is `tenant:wdN:site` or just the careers URL — `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite` is accepted verbatim |
-| `adzuna` | 9 countries incl. US/GB | official search API, **free key** from [developer.adzuna.com/signup](https://developer.adzuna.com/signup). `country` is a path segment and picks both the market and the salary currency (`us`, `gb`, `de`, `at`, `ch`, `nl`, `fr`, `au`, `ca`). Free tier is 25 requests/min and 250/day, so one request per scan is the default |
-| `usajobs` | US federal | official USAJOBS API, **free key** from [developer.usajobs.gov/apirequest](https://developer.usajobs.gov/apirequest/) (a form, the key is emailed). Needs `key` and a real `email`, which is sent as the User-Agent because that is how USAJOBS identifies callers |
-| `germantechjobs`, `swissdevjobs` | DE + CH | public RSS boards (830 + 250 postings live on 2026-10-15); the salary sits in the description text |
-| `jobup` | CH (French) | jobup.ch public search API — the same platform family as jobs.ch, `documents[]` JSON |
-| `jobscout24` | CH | server-rendered search; param `SearchWhat`, pager `p` (`page=` is silently ignored) |
-| `jobware` | DE | server-rendered search (`q`); result cards are buttons with `data-job-detail-url`, not links |
-| `talent` | DE + US | talent.com server-rendered search (`k`/`l`/`p`), German front |
-| `englishjobs` | DE (English-speaking) | category listings; job links are signed redirects that resolve to the publisher's own page |
-| `governmentjobs` | US public sector | NEOGOV server-rendered search (`keyword`), no key |
-| `jobicy` | remote | free JSON API, no key; jobs provided by [Jobicy](https://jobicy.com) — credited here as its notice asks |
-| `teamtailor` | EU / DACH employers | per-company JSON Feed at `<token>.teamtailor.com/jobs.json`; add employers under `companies.teamtailor.tokens` |
-| `join` | DACH SMB employers | per-company boards `join.com/companies/<slug>`; add employers under `companies.join.tokens` |
-| `wordpressjobs` / `pythonjobs` / `fossjobs` | niches | small RSS feeds: WordPress, Python.org, FOSS jobs |
-| `academics` | DE (+AT/CH employers) | academics.de (ZEIT group): universities, institutes, public sector — every discipline. Walks the newest pages (50 cards each); keyword search on the listing URL is ignored |
-| `wissenschaftskarriere` | DE/AT/CH | DUZ academic board; plain HTTP reaches the newest 20 offers, the rest of its listing loads by script |
-| `euraxess` | EU | the EU's official researcher-jobs portal, 10 per page newest-first (the site's own paging is zero-based); keywords are GET-ignored, so it walks the feed |
-| `myscience` | DE/CH/AT | myScience science jobs; keyword search via `q` (21 postings per query); the only ISO-8859-15 source, which is why the Fetcher honours declared charsets |
+| `stepstone` | DACH | Job search — server-rendered result list |
+| `xing` | DACH | Job search (public pages, server-rendered) |
+| `stellenanzeigen` | DACH | Job search (server-rendered Next.js pages) |
+| `karriere_at` | DACH | Result list lives in window.VUE_INITIAL_STATE |
+| `jobs_ch` | DACH | Public search API, JSON |
+| `arbeitnow` | DACH | Free public job board API (Germany-friendly, global remote) |
+| `berlinstartupjobs` | DACH | WordPress RSS feed of Berlin startup roles |
+| `ams` | DACH | The Austrian public employment service |
+| `jobsat` | DACH | Austria's largest job board, server-rendered search results |
+| `germantechjobs` | DACH | RSS feed of German IT roles (germantechjobs.de/rss) |
+| `swissdevjobs` | DACH | The Swiss sibling of GermanTechJobs (same RSS platform) |
+| `jobup` | DACH | Public search API, JSON |
+| `jobscout24` | DACH | Server-rendered search, no key |
+| `jobware` | DACH | German job board, server-rendered (Qwik) |
+| `talent` | DACH | Global job aggregator with a German front (de.talent.com) |
+| `englishjobs` | DACH | English-speaking jobs in Germany |
+| `themuse` | US | Public jobs API, no key required |
+| `usajobs` | US | US federal job announcements (requires a free Authorization-Key) |
+| `governmentjobs` | US | US public-sector job board, server-rendered |
+| `eures` | EU | The EU's official job vacancy portal (public JSON search API) |
+| `euraxess` | EU | The EU's official researcher-jobs portal (all disciplines) |
+| `linkedin` | global / remote | Public guest search — no login, no API key |
+| `hn` | global / remote | Hacker News 'Ask HN: Who is hiring?' — latest monthly thread via the public Algolia + Firebase APIs |
+| `remotive` | global / remote | Free public API of remote jobs |
+| `wwr` | global / remote | RSS feeds per category |
+| `remoteok` | global / remote | Public JSON feed |
+| `larajobs` | global / remote | RSS feed of Laravel/PHP roles |
+| `workingnomads` | global / remote | Public jobs API (remote roles) |
+| `nodesk` | global / remote | RSS feed of remote roles |
+| `himalayas` | global / remote | Public jobs API (global remote roles, cursor paginated) |
+| `adzuna` | global / remote | Multinational job-search API (requires a free app_id + app_key) |
+| `jobicy` | global / remote | Free public remote-jobs API (no key) |
+| `wordpressjobs` | global / remote | The official WP job board, RSS |
+| `pythonjobs` | global / remote | The PSF job board, RSS |
+| `fossjobs` | global / remote | Free/open-source software jobs, RSS |
+| `academics` | academic | Germany's academic jobs board (ZEIT group) |
+| `wissenschaftskarriere` | academic | Academic jobs portal (DE/AT/CH) |
+| `myscience` | academic | Science jobs in Germany, Switzerland and Austria |
+| `greenhouse` | your employers | Company boards — public job board API |
+| `ashby` | your employers | Company boards — public posting API |
+| `recruitee` | your employers | Public company boards API (`<host>/api/offers/`) |
+| `lever` | your employers | Company boards — public postings API |
+| `smartrecruiters` | your employers | Company boards — public postings API (+ detail for descriptions) |
+| `workable` | your employers | Company boards — public widget API |
+| `workday` | your employers | CXS — the per-company job API behind Fortune 500 careers sites |
+| `teamtailor` | your employers | Per-company boards with a public JSON Feed |
+| `join` | your employers | DACH SMB ATS with public per-company boards |
 
 The two keyed sources ship **disabled**. Enable them in Settings once you have a
 key. If you enable one without a key, the scan says so by name and prints the
