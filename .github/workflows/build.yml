@@ -187,7 +187,7 @@ jobs:
       - name: build the release notes
         run: |
           {
-            ./packaging/changelog.sh "${GITHUB_REF_NAME}"
+            python3 packaging/changelog.py "${GITHUB_REF_NAME}"
             echo "---"
             echo
             cat packaging/release-footer.md
