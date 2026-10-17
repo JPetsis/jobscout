@@ -1,0 +1,6 @@
+# Shell scripts must be LF everywhere. A Windows checkout defaults to CRLF, and
+# bash then reads `set -euo pipefail` as `set: pipefail\r: invalid option name`
+# and exits 1 -- the script fails before it runs a single useful line. Git for
+# Windows ships `core.autocrlf=true`, so without this the packaging scripts only
+# work on the machine that wrote them.
+*.sh text eol=lf

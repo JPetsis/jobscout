@@ -35,7 +35,11 @@ def repo(tmp_path):
 
 def run(repo: Path, *args: str) -> str:
     r = subprocess.run(["bash", str(SCRIPT), *args], cwd=repo,
-                       capture_output=True, text=True, check=True)
+                       capture_output=True, text=True)
+    # Not check=True: on a CRLF checkout bash dies on line 1 with a message
+    # about `pipefail\r`, and a bare CalledProcessError hides exactly the line
+    # that explains it.
+    assert r.returncode == 0, f"changelog.sh failed ({r.returncode}):\n{r.stderr}"
     return r.stdout
 
 
@@ -115,3 +119,25 @@ def test_the_previous_tag_is_found_from_the_tag_itself(repo):
 
     assert "since `v0.1.0`" in out
     assert "- second wave" in out
+
+
+def test_shell_scripts_are_lf_and_pinned_to_stay_that_way():
+    """This is how the Windows job failed.
+
+    Git for Windows defaults to `core.autocrlf=true`, so a checked-out `.sh` has
+    CRLF and bash reads `set -euo pipefail` as `pipefail\\r: invalid option
+    name`, exiting before it runs a single useful line. `.gitattributes` is the
+    fix; this catches both a missing rule and a script committed with CRLF
+    anyway.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    scripts = sorted(repo.glob("packaging/*.sh"))
+    assert scripts, "no shell scripts found; did they move?"
+
+    for s in scripts:
+        assert b"\r\n" not in s.read_bytes(), f"{s.name} is committed with CRLF"
+
+    attrs = (repo / ".gitattributes")
+    assert attrs.exists(), "a Windows checkout would rewrite these as CRLF"
+    text = attrs.read_text(encoding="utf-8")
+    assert "*.sh" in text and "eol=lf" in text
