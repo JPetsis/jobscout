@@ -172,25 +172,32 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          # The changelog is built from the commits and the tags. A shallow
+          # clone has neither, so `git describe` would fail and the notes would
+          # silently come out as a single unreleased blob.
+          fetch-depth: 0
       - uses: actions/download-artifact@v6
         with:
           path: artifacts
           merge-multiple: true
       - name: list what will be published
         run: find artifacts -type f | sort
+      - name: build the release notes
+        run: |
+          {
+            ./packaging/changelog.sh "${GITHUB_REF_NAME}"
+            echo "---"
+            echo
+            cat packaging/release-footer.md
+          } > RELEASE_NOTES.md
+          echo "----- notes as they will be published -----"
+          cat RELEASE_NOTES.md
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          draft: true          # a human publishes it, not the tag push
-          generate_release_notes: true
-          body: |
-            Unsigned builds. Each platform shows a first-run warning; the exact
-            sequence to get past it is in `docs/INSTALL.md`.
-
-            | platform | file |
-            |---|---|
-            | macOS (Apple Silicon) | `jobscout-macos-arm64.zip` |
-            | macOS (Intel) | `jobscout-macos-x86_64.zip` |
-            | Windows (x86_64) | `jobscout-windows-x86_64.zip` |
-            | Linux (x86_64) | `jobscout-linux-x86_64.tar.gz` |
-            | Linux (arm64) | `jobscout-linux-arm64.tar.gz` |
+          # Published straight away. The tag is the human decision; a second
+          # click on a draft only adds a way to ship nothing by forgetting.
+          draft: false
+          body_path: RELEASE_NOTES.md

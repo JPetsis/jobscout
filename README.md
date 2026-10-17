@@ -617,6 +617,14 @@ its archive. Pull requests run the test job only, so they stay fast. Artifacts
 expire with the normal GitHub retention window and are rebuilt from source —
 they are not releases.
 
+A `v*` **tag** goes one step further and publishes the release directly, with no
+draft to remember to click. Its notes are the commits since the previous tag,
+grouped into features, fixes and documentation by the prefix each commit already
+carries (`packaging/changelog.sh`), followed by the install table
+(`packaging/release-footer.md`). The version has to be right *before* the tag:
+it is read from `pyproject.toml`, and an app whose version does not move will
+never see its own update.
+
 ### Installing an artifact
 
 **macOS** (first launch is blocked: these builds are unsigned, see below):
