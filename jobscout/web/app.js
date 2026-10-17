@@ -655,6 +655,13 @@ async function openSettings() {
     body.appendChild(el('p', 's-err', 'Could not read config.yaml: ' + String(e)));
     return;
   }
+  // The employers this profile follows: fetched separately so a failure there
+  // cannot take the whole pane down with it.
+  try {
+    WATCH = await pywebview.api.watchlist();
+  } catch (e) {
+    WATCH = [];
+  }
   body.textContent = '';
   body.appendChild(profileBlock());
 
@@ -675,6 +682,8 @@ async function openSettings() {
       g.appendChild(checkNowRow(info));
     }
     body.appendChild(g);
+    // the companies you follow sit with the question they answer: where to look
+    if (name === 'Where to look') body.appendChild(followBlock());
   }
 }
 
@@ -719,6 +728,105 @@ function checkNowRow(info) {
       'Every check and what came of it is written to ' + info.log + '.'));
   }
   return row;
+}
+
+/* The per-company boards: the employers this profile follows. This is where the
+   "before everyone else" position actually comes from -- each board belongs to
+   one employer and is their own hiring system, so a vacancy is here when it is
+   published and usually nowhere else for a while. Adding one needs no account:
+   the employer's public board URL is enough, and it is validated against the
+   board's own API before anything is written to the config. */
+let WATCH = [];
+
+function followBlock() {
+  const sec = el('section', 's-group');
+  sec.id = 'follow-group';
+  sec.appendChild(el('h3', null, 'Companies you follow'));
+  sec.appendChild(el('p', 's-help',
+    'One employer each, and it is their own system, so a vacancy appears here ' +
+    'the moment they publish it. Most of these roles never reach a big board ' +
+    'at all. Paste a careers page to follow one more.'));
+
+  const add = el('div', 's-check');
+  const input = el('input', 'w-url');
+  input.type = 'text';
+  input.placeholder = 'https://company.com/careers';
+  input.setAttribute('aria-label', 'Careers page or job listing URL');
+  const btn = el('button', 'ghost small', 'Follow');
+  btn.type = 'button';
+  const note = el('span', 'up-note', '');
+  const say = (text, bad) => {
+    note.className = bad ? 'up-note up-err' : 'up-note';
+    note.textContent = text;
+  };
+  btn.addEventListener('click', async () => {
+    const url = (input.value || '').trim();
+    if (!url) { say('Paste a careers page URL first.', true); return; }
+    btn.disabled = true;
+    say('looking for a job board behind that page\u2026', false);
+    let res = null;
+    try {
+      res = await pywebview.api.watch_add(url);
+    } catch (e) {
+      res = { ok: false, error: String(e) };
+    }
+    btn.disabled = false;
+    if (!res || !res.ok) {
+      say(String((res && (res.hint || res.error)) || 'Could not read that page.'), true);
+      return;
+    }
+    input.value = '';
+    WATCH = await pywebview.api.watchlist();
+    say('Now following ' + res.token + ' on ' + res.board + '. ' +
+        'It joins the next scan.', false);
+    refreshFollow();
+  });
+  add.append(input, btn, note);
+  sec.appendChild(add);
+
+  for (const b of WATCH) {
+    const det = el('details', 'w-board');
+    det.appendChild(el('summary', null,
+      b.label + ' \u00b7 ' + b.count + (b.count === 1 ? ' company' : ' companies') +
+      (b.enabled ? '' : ' \u00b7 board switched off')));
+    const box = el('div', 'w-tokens');
+    if (!b.count) {
+      box.appendChild(el('span', 's-help', 'none yet'));
+    }
+    for (const t of b.tokens) {
+      const chip = el('span', 'w-token');
+      chip.appendChild(el('span', null, t));
+      const x = el('button', 'ghost small w-x', '\u00d7');
+      x.type = 'button';
+      x.title = 'Stop following ' + t;
+      x.setAttribute('aria-label', 'Stop following ' + t);
+      x.addEventListener('click', async () => {
+        const res = await pywebview.api.watch_remove(b.source, t);
+        if (res && res.ok) {
+          WATCH = await pywebview.api.watchlist();
+          refreshFollow();
+          const back = document.querySelector('#follow-group .up-note');
+          if (back) {
+            back.textContent = (res.status === 'missing')
+              ? t + ' was not in the list any more.'
+              : 'Stopped following ' + t + '.';
+          }
+        } else {
+          say('Could not remove ' + t + '.', true);
+        }
+      });
+      chip.appendChild(x);
+      box.appendChild(chip);
+    }
+    det.appendChild(box);
+    sec.appendChild(det);
+  }
+  return sec;
+}
+
+function refreshFollow() {
+  const old = document.getElementById('follow-group');
+  if (old) old.replaceWith(followBlock());
 }
 
 function profileBlock() {

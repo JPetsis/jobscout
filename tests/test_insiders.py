@@ -230,3 +230,127 @@ def test_the_window_defaults_to_a_week_when_the_config_has_no_key(tmp_path):
     conn = _conn(tmp_path)
     out = api.stats(conn, {"min_score": 6, "strong_threshold": 10})
     assert out["insider_days"] == 7
+
+
+# --- the employers you follow ----------------------------------------------
+
+class _FakeFetcher:
+    """Answers the one URL the detection needs, and records what was asked."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.asked = []
+
+    def get(self, url):
+        self.asked.append(url)
+        for frag, reply in self.answers.items():
+            if frag in url:
+                return reply
+        raise RuntimeError(f"no answer stubbed for {url}")
+
+
+def test_the_watchlist_reflects_the_config(ws):
+    from jobscout.config import load_config
+    cfg = load_config()
+    rows = api.watchlist(cfg)
+    assert rows, "the default config ships with some companies"
+    by_name = {r["source"]: r for r in rows}
+    assert by_name["greenhouse"]["tokens"][:1] == ["getyourguide"]
+    assert by_name["greenhouse"]["count"] == 4
+    assert by_name["greenhouse"]["enabled"] is True
+    assert by_name["greenhouse"]["note"], "each board says why it counts"
+    # biggest list first, so the ones you invested in are at the top
+    counts = [r["count"] for r in rows]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_removing_a_company_keeps_every_comment(ws):
+    """The config file is documentation; an edit must not eat it.
+
+    This is the same rule as every other config write in this project, and the
+    one a naive yaml round-trip breaks: 118 comment lines in a fresh file.
+    """
+    from jobscout.config import load_config
+    cfg = load_config()
+    before = cfg.path.read_text(encoding="utf-8")
+    n_comments = sum(1 for ln in before.splitlines() if ln.strip().startswith("#"))
+
+    out = api.watch_remove(cfg, "greenhouse", "celonis")
+    assert out["ok"] and out["status"] == "removed"
+
+    after = cfg.path.read_text(encoding="utf-8")
+    assert sum(1 for ln in after.splitlines() if ln.strip().startswith("#")) == n_comments
+    fresh = load_config()                       # still valid YAML
+    tokens = api.watchlist(fresh)[0:10]
+    gh = next(r for r in tokens if r["source"] == "greenhouse")
+    assert "celonis" not in gh["tokens"]
+    assert gh["count"] == 3
+    assert "getyourguide" in gh["tokens"], "the others survive"
+
+
+def test_removing_something_absent_changes_nothing(ws):
+    """Idempotent, and honest about which case it was.
+
+    `ok` either way -- the user asked for it to be gone and it is gone -- but the
+    status says whether it was ever there, so the screen can be specific instead
+    of claiming a removal that never happened.
+    """
+    from jobscout.config import load_config
+    cfg = load_config()
+    before = cfg.path.read_text(encoding="utf-8")
+    out = api.watch_remove(cfg, "greenhouse", "not-a-company")
+    assert out["status"] == "missing"
+    assert out["ok"] is True, "the end state is the one that was asked for"
+    assert cfg.path.read_text(encoding="utf-8") == before, "byte-identical"
+
+
+def test_following_a_company_validates_before_writing(ws):
+    """Nothing is added until the board's own API answers with jobs.
+
+    A token that validates to an empty board looks exactly like a company with
+    no vacancies, and the user would never find out which one it was.
+    """
+    from jobscout.config import load_config
+    cfg = load_config()
+    fetcher = _FakeFetcher({
+        "boards-api.greenhouse.io/v1/boards/newco/jobs": (200, '{"jobs": [1, 2, 3]}'),
+    })
+    out = api.watch_add(cfg, "https://boards.greenhouse.io/newco", fetcher=fetcher)
+    assert out["ok"] is True, out
+    assert out["board"] == "greenhouse" and out["token"] == "newco"
+    assert out["added"] in ("added", "exists")
+
+    fresh = load_config()
+    gh = next(r for r in api.watchlist(fresh) if r["source"] == "greenhouse")
+    assert "newco" in gh["tokens"]
+
+
+def test_a_board_that_answers_with_nothing_adds_nothing(ws):
+    from jobscout.config import load_config
+    cfg = load_config()
+    before = cfg.path.read_text(encoding="utf-8")
+    fetcher = _FakeFetcher({
+        "boards-api.greenhouse.io/v1/boards/emptyco/jobs": (404, "not found"),
+    })
+    out = api.watch_add(cfg, "https://boards.greenhouse.io/emptyco", fetcher=fetcher)
+    assert out["ok"] is False
+    assert cfg.path.read_text(encoding="utf-8") == before, "config untouched"
+
+
+def test_a_page_with_no_board_says_where_to_look(ws):
+    """The hint matters: a careers page's own URL often has no board in it, and
+    a dead end with no next step is the worst outcome for a non-technical user."""
+    from jobscout.config import load_config
+    cfg = load_config()
+    fetcher = _FakeFetcher({"example.com/careers": (200, "<html>no board here</html>")})
+    out = api.watch_add(cfg, "https://example.com/careers", fetcher=fetcher)
+    assert out["ok"] is False
+    assert "click into a role" in out["hint"]
+
+
+def test_the_settings_screen_calls_the_three_company_endpoints():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "jobscout" / "web" / "app.js").read_text(encoding="utf-8")
+    for call in ("pywebview.api.watchlist()", "pywebview.api.watch_add(",
+                 "pywebview.api.watch_remove("):
+        assert call in js, f"the pane no longer calls {call}"

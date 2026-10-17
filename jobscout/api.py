@@ -472,6 +472,106 @@ def write_theme(path, mode: str) -> str:
     return mode
 
 
+# ------------------------------------------------------- companies followed
+
+def _company_boards(cfg) -> dict:
+    """The `companies:` block, as {board family: [tokens]}. Never raises."""
+    raw = getattr(cfg, "raw", None) or {}
+    block = raw.get("companies") or {}
+    out = {}
+    for name, sub in block.items():
+        toks = (sub or {}).get("tokens") if isinstance(sub, dict) else None
+        out[str(name)] = [str(t) for t in (toks or [])]
+    return out
+
+
+def watchlist(cfg) -> list[dict]:
+    """The employers this profile follows, per board family.
+
+    These are the per-company boards: the reason they are the strongest part of
+    the search is that they are the employer's own system, so a vacancy shows up
+    there the moment it is published and shows up NOWHERE ELSE first. Measured
+    on a real store: of 27,357 postings only 73 roles appear on two different
+    sources, so what these boards bring is largely unavailable anywhere else.
+    """
+    from . import sources
+    boards = _company_boards(cfg)
+    enabled = set((getattr(cfg, "raw", None) or {}).get("sources", {}).get("enabled") or [])
+    rows = []
+    for name in sorted(boards, key=lambda n: -len(boards[n])):
+        label = getattr(sources.REGISTRY.get(name), "LABEL", name) if name in sources.REGISTRY else name
+        rows.append({
+            "source": name,
+            "label": label,
+            "known": name in sources.REGISTRY,
+            "enabled": name in enabled,
+            "tokens": boards[name],
+            "count": len(boards[name]),
+            "note": sources.direct_note(name),
+        })
+    return rows
+
+
+def watch_remove(cfg, source: str, token: str) -> dict:
+    """Stop following one employer. Comments in the config survive this."""
+    from . import companies as compmod
+    if not source or not token:
+        return {"ok": False, "error": "need a board and a company"}
+    status = compmod.remove_token(cfg.path, source, token)
+    return {"ok": status in ("removed", "missing"), "status": status,
+            "board": source, "token": token}
+
+
+def watch_add(cfg, url: str, fetcher=None) -> dict:
+    """Follow the employer behind a careers URL.
+
+    Detection is over the URL itself and, when that finds nothing, over the page
+    (scripts usually embed the board link). Nothing is added until the board's
+    own API answers with jobs, because a token that validates to an empty board
+    looks exactly like a company with no vacancies -- and the user would never
+    find out which one it was.
+    """
+    from . import companies as compmod
+    from .http import Fetcher
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "error": "paste a careers page or job listing URL"}
+    if not url.startswith("http"):
+        url = "https://" + url
+    fetcher = fetcher or Fetcher()
+
+    candidates = compmod.detect("", url)
+    page_note = ""
+    if not candidates:
+        try:
+            status, body = fetcher.get(url)
+        except Exception as e:                                # noqa: BLE001
+            return {"ok": False, "error": f"could not fetch that page: {e}"}
+        if status != 200:
+            return {"ok": False, "error": f"could not fetch that page (HTTP {status})"}
+        candidates = compmod.detect(body, url)
+        page_note = "found on the page, not the URL"
+    if not candidates:
+        return {"ok": False, "candidates": [],
+                "error": "no Greenhouse / Ashby / Lever / Workable / "
+                         "SmartRecruiters / Teamtailor board on that page",
+                "hint": "open the careers page, click into a role, and paste the "
+                        "URL of the job listing itself"}
+
+    tried = []
+    for src, tok in candidates:
+        ok, detail = compmod.validate(fetcher, src, tok)
+        tried.append({"board": src, "token": tok, "ok": bool(ok), "detail": detail})
+        if not ok:
+            continue
+        status = compmod.add_token(cfg.path, src, tok)         # writes the config
+        enabled = compmod.enable_source(cfg.path, src)
+        return {"ok": True, "board": src, "token": tok, "added": status,
+                "enabled": enabled, "note": page_note, "candidates": tried}
+    return {"ok": False, "candidates": tried,
+            "error": "that board did not answer with any jobs, so nothing was added"}
+
+
 # ---------------------------------------------------------------- detail
 
 def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:

@@ -7,6 +7,7 @@ token only ever gets added when it demonstrably returns jobs.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -160,13 +161,45 @@ def _inject(text: str, source: str, token: str) -> tuple[str, str]:
     return "".join(lines), "added"
 
 
+def _write(path: Path, text: str) -> None:
+    """Write the config atomically.
+
+    A crash mid-write must not leave a half-written config: this file holds the
+    137 comment lines that document it, and every edit here is line-wise for the
+    same reason -- losing the tail of the file would lose the documentation with
+    it. Same discipline as `cfgwrite`.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def add_token(path: Path, source: str, token: str) -> str:
     """Edit config.yaml on disk. Returns the _inject status."""
     text = path.read_text(encoding="utf-8")
     new, status = _inject(text, source, token)
     if status != "exists":
-        path.write_text(new, encoding="utf-8")
+        _write(path, new)
     return status
+
+
+def remove_token(path: Path, source: str, token: str) -> str:
+    """Stop following one employer. Returns "removed" or "missing".
+
+    Goes through `cfgwrite` rather than a local regex: this is the same edit the
+    settings screen makes, and the comments and the multi-line `tokens: [...]`
+    span have to survive it like any other config write.
+    """
+    from . import cfgwrite
+    text = path.read_text(encoding="utf-8")
+    values = cfgwrite.get_value(text, f"companies.{source}.tokens")
+    if not isinstance(values, list):
+        return "missing"
+    left = [v for v in values if str(v) != str(token)]
+    if len(left) == len(values):
+        return "missing"
+    _write(path, cfgwrite.set_list(text, f"companies.{source}.tokens", left))
+    return "removed"
 
 
 def _enable_in_list(text: str, source: str) -> tuple[str, str]:

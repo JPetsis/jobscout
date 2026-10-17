@@ -290,6 +290,25 @@ class JsApi:
             self.cfg = load_config()          # re-read; the file just changed
         return out
 
+    # ------------------------------------------------- companies you follow
+
+    def watchlist(self) -> list[dict]:
+        """The per-company boards this profile follows, and what they bring."""
+        return api.watchlist(self.cfg)
+
+    def watch_add(self, url: str) -> dict:
+        """Follow the employer behind a careers URL, if the board checks out."""
+        out = api.watch_add(self.cfg, str(url or ""))
+        if out.get("ok"):
+            self.cfg = load_config()          # the config was just edited
+        return out
+
+    def watch_remove(self, board: str, token: str) -> dict:
+        out = api.watch_remove(self.cfg, str(board or ""), str(token or ""))
+        if out.get("ok"):
+            self.cfg = load_config()
+        return out
+
     def theme(self) -> str:
         """The stored colour scheme: system | light | dark."""
         return api.read_theme(self.cfg.path)
