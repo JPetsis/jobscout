@@ -669,6 +669,11 @@ def _helper_script(old_root: Path, new_root: Path, *, relaunch: bool,
             f'move "{new_root}" "{old_root}" >nul 2>&1',
             "if errorlevel 1 goto failed",
             f'rmdir /s /q "{old_root}.previous"',
+            # Plain rmdir, not /s: the move above emptied the staging directory,
+            # and this removes it only if that is still true. An update that
+            # leaves parts of itself in the temp dir is litter, and on a machine
+            # that updates every release it is a directory per release.
+            f'rmdir "{new_root.parent}" >nul 2>&1',
             note("helper: swapped in the new build"),
             note("helper: relaunching jobscout"),
             f"{restart}" if restart else "rem no relaunch requested",
