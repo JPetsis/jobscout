@@ -747,6 +747,26 @@ function followBlock() {
     'the moment they publish it. Most of these roles never reach a big board ' +
     'at all. Paste a careers page to follow one more.'));
 
+  // The app checking its own claim, in numbers rather than adjectives. It is
+  // thin data and it says so: what makes it mean more is more scans, and this
+  // line is the only thing that will ever show whether the head start is real.
+  const lead = STATS.lead || {};
+  if (lead.pairs && lead.comparable) {
+    sec.appendChild(el('p', 's-help',
+      'Measured so far: ' + lead.pairs + ' role' + (lead.pairs === 1 ? '' : 's') +
+      ' turned up on two boards. In ' + lead.comparable + ' of those one board had ' +
+      'republished the other\u2019s advert: the employer\u2019s own board was first in ' +
+      lead.direct_first + ', the republishing board in ' + lead.aggregator_first +
+      (lead.median_days !== null && lead.median_days !== undefined
+        ? ' (median gap ' + lead.median_days + ' days)' : '') +
+      '. A small sample says little yet, and it only grows with regular scans.'));
+  } else {
+    sec.appendChild(el('p', 's-help',
+      'No role has turned up on two boards yet, so nothing here is measured: ' +
+      'the head start is simply that these boards are the employer\u2019s own, and ' +
+      'a board that republishes somebody else\u2019s advert is a step behind them.'));
+  }
+
   const add = el('div', 's-check');
   const input = el('input', 'w-url');
   input.type = 'text';

@@ -65,6 +65,10 @@ CREATE INDEX IF NOT EXISTS idx_postings_score ON postings(score);
 CREATE INDEX IF NOT EXISTS idx_postings_alt ON postings(alt_key);
 CREATE INDEX IF NOT EXISTS idx_postings_source ON postings(source);
 CREATE INDEX IF NOT EXISTS idx_postings_run ON postings(first_seen_run);
+-- Every "has another board carried this yet" lookup joins on dup_of, and the
+-- grid asks for a whole page of them at once: without this it is a scan per
+-- row. The fresh-source mark and the lead-time report both need it.
+CREATE INDEX IF NOT EXISTS idx_postings_dup ON postings(dup_of);
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   started_at TEXT NOT NULL,

@@ -103,11 +103,14 @@ def _conn(tmp_path):
 
 
 def _add(conn, *, source, url, posted_at="", title="Softwareentwickler",
-         company="ACME GmbH", location="Berlin"):
+         company="ACME GmbH", location="Berlin", seen="2026-10-01T09:00:00+00:00"):
+    """Insert one posting. `seen` is when THAT board first showed it to us, which
+    is the clock the lead-time report measures, so tests that care about the gap
+    pass real timestamps rather than the "t1" placeholder."""
     run = dbm.start_run(conn)
     p = Posting(source=source, title=title, company=company, location=location,
                 url=url, external_id=url, posted_at=posted_at)
-    pid, _, dup_of = dbm.upsert(conn, p, score_posting(PREFS, p), run, "t1")
+    pid, _, dup_of = dbm.upsert(conn, p, score_posting(PREFS, p), run, seen)
     return pid, dup_of
 
 
@@ -354,3 +357,49 @@ def test_the_settings_screen_calls_the_three_company_endpoints():
     for call in ("pywebview.api.watchlist()", "pywebview.api.watch_add(",
                  "pywebview.api.watch_remove("):
         assert call in js, f"the pane no longer calls {call}"
+
+
+# --- the head start, measured ----------------------------------------------
+
+def test_lead_times_counts_both_directions(tmp_path):
+    """The report has to be able to say "the aggregator was first", because
+    sometimes it is: 8 of the 21 usable pairs on the real store."""
+    conn = _conn(tmp_path)
+    _add(conn, source="greenhouse", url="https://g/1", seen="2026-10-01T09:00:00+00:00")
+    _add(conn, source="arbeitnow", url="https://a/1", seen="2026-10-04T09:00:00+00:00")
+    _add(conn, source="arbeitnow", url="https://a/2", title="Data Engineer",
+         seen="2026-10-01T09:00:00+00:00")
+    _add(conn, source="lever", url="https://l/2", title="Data Engineer",
+         seen="2026-10-09T09:00:00+00:00")
+
+    out = api.lead_times(conn)
+    assert out["pairs"] == 2
+    assert out["comparable"] == 2, "both pairs have one side republishing the other"
+    assert out["direct_first"] == 1, "greenhouse was the employer board here"
+    assert out["aggregator_first"] == 1, "and here the aggregator genuinely was first"
+    assert out["median_days"] == 5.5
+
+
+def test_lead_times_says_nothing_when_there_is_nothing(tmp_path):
+    """An empty report must not read as "zero lag" or as a win."""
+    conn = _conn(tmp_path)
+    _add(conn, source="greenhouse", url="https://g/1")
+    out = api.lead_times(conn)
+    assert out == {"pairs": 0, "comparable": 0, "direct_first": 0,
+                   "aggregator_first": 0, "median_days": None}
+
+
+def test_a_board_duplicating_itself_is_not_a_pair(tmp_path):
+    """The same-source reposts that made "also on arbeitnow" wrong would
+    otherwise pad the lead-time report with a lag of zero days."""
+    conn = _conn(tmp_path)
+    _add(conn, source="arbeitnow", url="https://a/1")
+    _add(conn, source="arbeitnow", url="https://a/1-reslug")
+    assert api.lead_times(conn)["pairs"] == 0
+
+
+def test_the_grid_gets_the_lead_report_without_asking_for_it(tmp_path):
+    """It is one line of the settings screen, so it rides along with stats()."""
+    conn = _conn(tmp_path)
+    out = api.stats(conn, {})
+    assert out["lead"]["pairs"] == 0
