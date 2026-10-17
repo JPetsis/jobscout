@@ -319,6 +319,15 @@ def test_extract_finds_a_onedir_build(tmp_path):
 
 # --- what the archive says about modes and symlinks ------------------------
 
+# Windows has no exec bit, and its own bundle carries no symlinks at all (the
+# real jobscout-windows-x86_64.zip has zero), so there is nothing here to check
+# there -- and Path.symlink_to needs a privilege the runner may not have.
+requires_posix_modes = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="no exec bits or symlinks in a Windows build")
+
+
+@requires_posix_modes
 def test_a_zip_keeps_its_exec_bits_and_symlinks(tmp_path):
     """Python's extractall() drops both, and the first auto-install proved it.
 
@@ -352,6 +361,7 @@ def test_a_zip_keeps_its_exec_bits_and_symlinks(tmp_path):
     assert (link / "cacert.pem").read_text().startswith("-----BEGIN")
 
 
+@requires_posix_modes
 def test_a_build_whose_entry_point_cannot_run_is_refused(tmp_path):
     """The swap is one-way from the user's side, so notice it BEFORE, not after."""
     payload = tmp_path / "jobscout.app" / "Contents" / "MacOS"
