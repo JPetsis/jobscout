@@ -132,7 +132,13 @@ body {
   flex: 1;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* auto-fill with a 1fr column parks every card at roughly the MIN width, so a
+     maximised window used to give more of the same narrow cards instead of
+     bigger ones. A larger min (clamped to the container so a narrow window never
+     overflows) makes the columns share the whole width and grow with it: no
+     max-width here, because a cap is exactly what left a bare strip on the right
+     of a maximised window. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
   gap: 12px;
   padding: 2px 18px 18px;
   align-content: start;
@@ -153,7 +159,16 @@ body {
 .card:active { transform: scale(.995); }
 .card.done { opacity: .55; }
 
-.top { display: flex; align-items: center; gap: 7px; }
+.top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* A card can hold six labels. Wrapping BETWEEN them is fine; wrapping
+     INSIDE one is not, so each label keeps its width and the row moves on. */
+  flex-wrap: wrap;
+}
+.top > .chip,
+.top > .score { flex: 0 0 auto; white-space: nowrap; }
 
 .score {
   font-weight: 700;
@@ -207,7 +222,9 @@ body {
   color: var(--muted);
   cursor: pointer;
   user-select: none;
-  white-space: nowrap;
+  /* wrapping beats being cut off at the window edge on a narrow window */
+  white-space: normal;
+  max-width: 100%;
 }
 .fresh input { accent-color: var(--accent, #1a7f37); margin: 0; }
 .fresh input:checked + #fresh-text { color: var(--fg); }
