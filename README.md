@@ -397,30 +397,31 @@ Two safety rules, both of them a response to actually losing a workspace:
 
 ## Updating
 
-The window checks GitHub once a day for a newer release. If there is one, and
-you have not turned it off, **it installs itself**: the archive is downloaded
-and verified, and jobscout restarts on the new version. The notice bar says what
-is happening while it does.
+The window checks GitHub once a day for a newer release. If there is one, it
+**asks**: a bar names the version and the download size, and nothing happens
+until you press **Install and restart**. Nothing is downloaded, replaced or
+restarted on its own.
 
-That happens **at startup**, which is the one moment nothing is half-done. The
-window has just opened and you have not started anything yet, so a restart
-cannot interrupt work.
+That is the default on purpose. A window that disappears and comes back as a
+different version is a decision an app should not make on your behalf, however
+well it goes, and the notice with a button costs one click. If you would rather
+it just install:
 
-Both halves are settings, in the config as `updates.check` and `updates.auto`,
-or as the two switches under **Updates** in the app. Turning off `auto` gets you
-the two explicit steps below; turning off `check` stops jobscout asking GitHub
-at all. `jobscout update --check` still works either way — asking for a check
-yourself is the instruction, so the command does not consult the setting.
-
-The two explicit steps, which is what you get with automatic installing off:
-
-1. **Install and restart** downloads and verifies. jobscout keeps running.
+1. **Install and restart** downloads and verifies it. jobscout keeps running.
 2. The button becomes **Quit and update**. Pressing it terminates jobscout, the
    new build takes its place, and jobscout reopens by itself. **Not now** leaves
    the verified download on disk, so coming back later does not fetch it again.
 
-An automatic attempt that cannot complete hands itself back as these two steps,
-with the reason, rather than failing silently.
+Both halves are settings, in the config as `updates.check` and `updates.auto`,
+or as the two switches under **Updates** in the app. `check` (on) decides
+whether jobscout asks GitHub at all; `auto` (off) decides whether a found
+version installs itself, and it installs **at startup** when it does, which is
+the one moment nothing is half-done. `jobscout update --check` works either way:
+asking for a check yourself is the instruction, so the command does not consult
+the setting.
+
+Whatever the setting, the download is verified before anything is replaced, and
+the previous build is kept until the swap has succeeded.
 
 The download is verified before anything is replaced:
 

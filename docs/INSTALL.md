@@ -158,14 +158,16 @@ restarts on the new version. The bar across the top says what it is doing. It
 does this at startup, before you have started anything, so it never interrupts
 work.
 
-If you would rather be asked, there are two switches under **Updates** in the
+By default you are asked, and there are two switches under **Updates** in the
 app's settings:
 
-- **Check for updates** — turn it off and jobscout stops asking GitHub at all.
-- **Install updates automatically** — turn it off and a newer version is
-  offered instead: press **Install and restart** to download and verify it,
-  then **Quit and update** to let it close jobscout and take its place.
-  jobscout reopens by itself — you are not closing it by hand.
+- **Check for updates** — on. Turn it off and jobscout stops asking GitHub at
+  all.
+- **Install updates automatically** — **off**. Leave it off and a newer version
+  is offered instead: press **Install and restart** to download and verify it,
+  then **Quit and update** to let it close jobscout and take its place. jobscout
+  reopens by itself — you are not closing it by hand. Turn it on if you would
+  rather it installed and restarted without asking.
 
 The same two settings are `updates.check` and `updates.auto` in `config.yaml`.
 From a terminal, which works either way:
