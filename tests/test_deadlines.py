@@ -7,7 +7,7 @@ the teasers found 290 "deadline mentions" of which most were start dates
 somebody plans an application around it, so the tests below are mostly about what
 the extractor refuses.
 """
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -166,3 +166,27 @@ def test_every_surface_reads_the_same_fields():
         assert field in js, f"the window no longer reads {field}"
     assert "deadlinesmod.describe(" in cli, "the CLI must word it the same way"
     assert "deadlines.extract(" in (root / "jobscout" / "scanner.py").read_text(encoding="utf-8")
+
+def test_the_count_and_the_sentence_share_one_calendar():
+    """The bug this guards, found at 00:06 on a real machine.
+
+    `closes_in_days` was counted from UTC's date while the sentence used the
+    local one, so between midnight and 2am in Berlin a card could read
+    "closes in 3 days" next to a count of 4 -- and call a deadline the user had
+    already lost "closes today". Both go through days_until now; this fails if
+    either side drifts back, and it is hour-independent by construction.
+    """
+    when = (date.today() + timedelta(days=3)).isoformat()
+    assert deadlines.days_until(when) == 3
+    assert deadlines.describe(when) == "closes in 3 days"
+
+    # the day is injectable, so the two callers really do share one definition
+    drift = date.today() + timedelta(days=1)
+    assert deadlines.days_until(when, today=drift) == 2
+    assert deadlines.describe(when, today=drift) == "closes in 2 days"
+
+    # and a date without a year still means "the next time it comes round",
+    # measured on the same calendar
+    next_month = date.today() + timedelta(days=40)
+    said, _ = deadlines.extract("Bewerbungsfrist: " + next_month.strftime("%d.%m."))
+    assert said == next_month.isoformat()

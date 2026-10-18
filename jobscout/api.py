@@ -155,14 +155,9 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
     # summary cannot disagree about what "closes in 3 days" means.
     when = _cell(row, "deadline_at").strip()
     out["deadline_text"] = deadlines.describe(when) if when else ""
-    out["closes_in_days"] = None
-    if when:
-        try:
-            days = (date.fromisoformat(when[:10])
-                    - datetime.now(timezone.utc).date()).days
-            out["closes_in_days"] = days
-        except ValueError:
-            out["closes_in_days"] = None
+    # Same definition the wording uses, so a card cannot say "closes in 3 days"
+    # next to a count that disagrees (see deadlines.days_until).
+    out["closes_in_days"] = deadlines.days_until(when) if when else None
     return out
 
 

@@ -18,7 +18,7 @@ asking to be believed.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 # "15.11.2026", "15.11.26", "15.11." -- the German way, dots and all
 _D_DOT = r"(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{2,4})?"
@@ -115,7 +115,7 @@ def _with_year(day: int, month: int, year: int | None) -> date | None:
     if not day or not month:
         return None
     if year is None:
-        today = datetime.now(timezone.utc).date()
+        today = date.today()
         year = today.year
         got = _mk(year, month, day)
         if got and got < today - timedelta(days=30):
@@ -132,7 +132,7 @@ def extract(text: str, *, today: date | None = None) -> tuple[str, str] | None:
     """
     if not text:
         return None
-    today = today or datetime.now(timezone.utc).date()
+    today = today or date.today()
     flat = re.sub(r"\s+", " ", text)
     word = re.compile(_WORDS, re.I)
     date_re = re.compile(_DATE, re.I)
@@ -155,6 +155,23 @@ def extract(text: str, *, today: date | None = None) -> tuple[str, str] | None:
     return None
 
 
+def days_until(deadline_at: str, *, today: date | None = None) -> int | None:
+    """Whole days from today to a deadline date, or None if it has no date.
+
+    LOCAL dates on purpose. A closing date is a calendar date on the applicant's
+    wall, not a UTC instant: between midnight and 2am in Berlin, UTC is still
+    yesterday, and the card would say "closes in 4 days" about something three
+    days away -- and "closes today" about a deadline the user has already lost.
+    Everything that counts or words a deadline goes through here, so the number
+    and the sentence can never disagree about which day it is.
+    """
+    try:
+        when = date.fromisoformat(str(deadline_at)[:10])
+    except (TypeError, ValueError):
+        return None
+    return (when - (today or date.today())).days
+
+
 def describe(deadline_at: str, *, today: date | None = None) -> str:
     """How to say it on a card: "closes today", "closes in 3 days", "closes 15 Nov"."""
     if not deadline_at:
@@ -163,8 +180,9 @@ def describe(deadline_at: str, *, today: date | None = None) -> str:
         when = date.fromisoformat(str(deadline_at)[:10])
     except ValueError:
         return ""
-    today = today or datetime.now(timezone.utc).date()
-    days = (when - today).days
+    days = days_until(deadline_at, today=today)
+    if days is None:
+        return ""
     if days < 0:
         return "closed " + ("yesterday" if days == -1 else f"{-days} days ago")
     if days == 0:
