@@ -758,7 +758,14 @@ def main() -> int:
         height=860,
         min_size=(820, 560),
     )]
-    webview.start()
+    # The window icon is only honoured by GTK. macOS takes its icon from the
+    # bundle and Windows from the executable, both of which the build sets, so
+    # passing it anywhere else would be a line that does nothing.
+    icon = WEB / "icon.png"
+    if sys.platform.startswith("linux") and icon.exists():
+        webview.start(icon=str(icon))
+    else:
+        webview.start()
     return 0
 
 

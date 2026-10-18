@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="jobscout">
+  <title>jobscout</title>
+  <!-- The mark is the product: a scope sighted on a field of postings, one of
+       them lit. Badge in the app's own blue, the lit one in its gold. Drawn
+       deliberately simple: at 16px all that is left is the badge, the ring and
+       the dot, so nothing else carries meaning. -->
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f7bf5"/>
+      <stop offset="1" stop-color="#1b3fa8"/>
+    </linearGradient>
+    <radialGradient id="lit" cx="0.5" cy="0.4" r="0.8">
+      <stop offset="0" stop-color="#ffdf85"/>
+      <stop offset="1" stop-color="#e3b341"/>
+    </radialGradient>
+  </defs>
+
+  <!-- the badge: bright enough to keep its silhouette on a dark wallpaper -->
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#field)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="14.25" fill="none"
+        stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"/>
+
+  <!-- the sight: a thin ring and the one posting that matches. Nothing else:
+       at 16px these two shapes are the whole mark, so nothing else belongs. -->
+  <circle cx="32" cy="32" r="14.8" fill="#ffffff" fill-opacity="0.08"/>
+  <circle cx="32" cy="32" r="14.8" fill="none" stroke="#ffffff"
+          stroke-opacity="0.95" stroke-width="2.4"/>
+
+  <!-- the one that matches: big enough to hold its shape at 16px -->
+  <circle cx="32" cy="32" r="6.6" fill="url(#lit)"/>
+</svg>

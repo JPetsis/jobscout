@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-wordmark-dark.svg">
+  <img src="docs/logo-wordmark.svg" alt="jobscout" width="322">
+</picture>
+
 # jobscout
 
 Local-first job search for DACH + remote roles. One command fetches postings from

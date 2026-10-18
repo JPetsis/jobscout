@@ -58,6 +58,15 @@ BUNDLE_ID = "com.jpetsis.jobscout"
 # packaging/jobscout.spec -> <repo>/packaging -> <repo>
 ROOT = Path(SPECPATH).resolve().parent                     # noqa: F821
 PACKAGE = ROOT / "jobscout"
+ICONS = Path(SPECPATH).resolve() / "icons"                 # noqa: F821
+
+# The app's icon is the logo mark alone; packaging/make_icons.py builds these.
+WANT_ICON = {"darwin": "jobscout.icns", "win32": "jobscout.ico"}.get(sys.platform)
+if WANT_ICON and not (ICONS / WANT_ICON).is_file():
+    raise SystemExit(
+        f"packaging/icons/{WANT_ICON} is missing; run "
+        "`uv run --with pillow python packaging/make_icons.py` "
+        "(it needs a Chrome: any build of it will do)")
 
 if not (ROOT / "pyproject.toml").is_file():
     raise SystemExit(
@@ -182,6 +191,7 @@ exe = EXE(                                                 # noqa: F821
     [],
     exclude_binaries=True,          # onedir: binaries go into COLLECT, not the exe
     name=APP_NAME,
+    icon=str(ICONS / WANT_ICON) if WANT_ICON else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,                    # stripping breaks the macOS ad-hoc signature
@@ -205,7 +215,7 @@ if sys.platform == "darwin":
     app = BUNDLE(                                          # noqa: F821
         coll,
         name=f"{APP_NAME}.app",
-        icon=None,                  # PyInstaller's default icon for now
+        icon=str(ICONS / "jobscout.icns"),
         bundle_identifier=BUNDLE_ID,
         info_plist={
             "CFBundleName": APP_NAME,

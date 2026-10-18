@@ -67,9 +67,12 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 9px; }
 .brand h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
-.dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--gold);
+.mark {
+  display: block;
+  width: 18px; height: 18px;
+  /* the logo is a fixed-colour mark, so it does not repaint with the theme;
+     nudge the corner radius to sit with the panel's own rounding */
+  border-radius: 4px;
 }
 .stats { font-size: 12.5px; color: var(--muted); }
 .stats b { color: var(--ink); font-weight: 600; }
