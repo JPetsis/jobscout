@@ -48,6 +48,7 @@ document.documentElement.dataset.theme =
       <button data-v="light" title="Light" aria-label="Light">☀</button>
       <button data-v="dark" title="Dark" aria-label="Dark">☾</button>
     </div>
+    <button id="pay-btn" class="ghost" title="What the postings in your board advertise, per year">Pay</button>
     <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
     <button id="settings-btn" class="ghost" title="Edit your profile: titles, skills, locations, strictness">Settings</button>
   </div>
@@ -96,6 +97,29 @@ any other board.">
   </label>
   <span class="count" id="count"></span>
 </section>
+
+<div id="pay" class="overlay" role="dialog" aria-modal="true"
+     aria-labelledby="pay-title" hidden>
+  <div class="overlay-card pay-card">
+    <div class="pane-head">
+      <h2 id="pay-title">What the jobs pay</h2>
+      <div class="pane-tools">
+        <button id="pay-close" class="ghost small" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="pane-body">
+      <p class="s-help">Advertised pay, from the postings in your own board, per year.
+        Nothing here is an estimate: if an advert has no figure, it is not counted.</p>
+      <div class="s-check">
+        <input type="search" id="pay-words" class="w-url" placeholder="Job title words, e.g. developer"
+               aria-label="Only postings whose title contains">
+        <input type="search" id="pay-city" class="w-url" placeholder="City (optional)"
+               aria-label="Only postings in this place">
+      </div>
+      <div id="pay-body"></div>
+    </div>
+  </div>
+</div>
 
 <main id="grid" class="grid" aria-live="polite"></main>
 

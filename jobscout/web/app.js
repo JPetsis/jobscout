@@ -12,6 +12,7 @@ const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false, text
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
 let TEXT_TIMER = null;        // debounce for typing
+let SETTINGS_ROWS = [];       // the last settings read, for the pay view's defaults
 let CURRENT = null;           // posting shown in the detail pane
 let POLL = null;              // scan poll timer
 
@@ -431,6 +432,137 @@ async function setStatus(r, status, cardEl) {
 
 /* ---------- panes ---------- */
 
+/* The pay report: what the postings in this board advertise, per year.
+
+   Every caveat the backend computes is shown, because a pay median is the
+   easiest number here to mislead with: how many postings carry one at all, and
+   which board they came from, are part of the answer. */
+let PAY_TIMER = null;
+
+function openPay() {
+  $('pay').hidden = false;
+  $('detail').hidden = true;
+  $('settings').hidden = true;
+  $('scrim').hidden = false;
+  const rows = (SETTINGS_ROWS || []).find((r) => r.key === 'preferences.title_terms');
+  if (!$('pay-words').value && rows && Array.isArray(rows.value)) {
+    $('pay-words').value = rows.value.slice(0, 3).join(' ');
+  }
+  loadPay();
+}
+
+function wirePay() {
+  // an ARRAY, not ('a', 'b'): a parenthesised pair is a comma expression, and
+  // iterating it walks the string character by character, so $('#p') is null
+  // and the whole pane silently fails to open
+  for (const id of ['pay-words', 'pay-city']) {
+    $(id).addEventListener('input', () => {
+      clearTimeout(PAY_TIMER);
+      PAY_TIMER = setTimeout(loadPay, 300);
+    });
+  }
+  $('pay-btn').addEventListener('click', openPay);
+  $('pay-close').addEventListener('click', closePanes);
+}
+
+async function loadPay() {
+  const body = $('pay-body');
+  body.textContent = '';
+  body.appendChild(el('p', 'loading', 'Counting…'));
+  let rep = null;
+  try {
+    rep = await pywebview.api.salary_report($('pay-words').value, $('pay-city').value);
+  } catch (e) {
+    body.textContent = '';
+    body.appendChild(el('p', 's-err', 'Could not read the salaries: ' + String(e)));
+    return;
+  }
+  body.textContent = '';
+  renderPay(rep || {});
+}
+
+function money(cur, v) {
+  const n = Number(v);
+  if (!isFinite(n)) return '';
+  return (cur ? cur + ' ' : '') + new Intl.NumberFormat().format(Math.round(n));
+}
+
+function renderPay(rep) {
+  const body = $('pay-body');
+  const cur = rep.currency || '';
+  const asked = rep.asked || {};
+
+  // What the report actually filtered on. With an empty box the backend uses
+  // the profile's own job titles, and saying so (and filling the box) is the
+  // difference between a default and a mystery.
+  if (asked.words && asked.words.length && !$('pay-words').value) {
+    $('pay-words').value = asked.words.join(' ');
+  }
+  body.appendChild(el('p', 's-help',
+    'titles matching “' + ((asked.words || []).join(' ') || 'everything') + '”' +
+    (asked.city ? ' in ' + asked.city : '')));
+
+  if (!rep.with_salary) {
+    body.appendChild(el('p', 's-help',
+      'None of the ' + (rep.postings || 0) + ' postings in that set carry a figure. ' +
+      'Only about a sixth of what is stored does, and mostly on the boards that ' +
+      'require it, so try broader words.'));
+    return;
+  }
+
+  const top = rep.max_annual || {};
+  const few = rep.with_salary < 5;
+  const big = el('p', 'pay-median');
+  big.appendChild(el('b', null, money(cur, top.median)));
+  big.append(' median advertised maximum, per year');
+  body.appendChild(big);
+
+  if (!few) {
+    // a bar, because a range is easier to trust than three numbers
+    const span = Math.max(1, top.max - top.min);
+    const pct = (v) => Math.round(100 * (v - top.min) / span);
+    const track = el('div', 'pay-track');
+    const band = el('div', 'pay-band');
+    band.style.left = pct(top.p25) + '%';
+    band.style.width = Math.max(2, pct(top.p75) - pct(top.p25)) + '%';
+    const mark = el('div', 'pay-mark');
+    mark.style.left = pct(top.median) + '%';
+    track.append(band, mark);
+    body.appendChild(track);
+    body.appendChild(el('p', 's-help',
+      'half of them sit between ' + money(cur, top.p25) + ' and ' + money(cur, top.p75) +
+      '  ·  lowest ' + money(cur, top.min) + ', highest ' + money(cur, top.max)));
+    if (rep.min_annual) {
+      body.appendChild(el('p', 's-help',
+        'the bottom of the advertised bands, median: ' + money(cur, rep.min_annual.median)));
+    }
+  } else {
+    body.appendChild(el('p', 's-help',
+      'Only ' + rep.with_salary + ' posting' + (rep.with_salary === 1 ? '' : 's') +
+      ' in that set ' + (rep.with_salary === 1 ? 'carries' : 'carry') +
+      ' a figure, which is too few to describe a range. Try broader words.'));
+  }
+
+  body.appendChild(el('p', 's-help',
+    rep.with_salary + ' of ' + rep.postings + ' postings in that set carry a number.'));
+  const others = Object.keys(rep.currencies || {}).filter((c) => c !== cur);
+  if (others.length) {
+    body.appendChild(el('p', 's-help',
+      'left out of these numbers, because mixing currencies is not a number: ' +
+      others.map((c) => (c === '?' ? 'unlabelled' : c) + ' ' + rep.currencies[c])
+        .join(', ')));
+  }
+  const srcs = rep.by_source || [];
+  if (srcs.length) {
+    const biggest = srcs[0];
+    const share = Math.round(100 * biggest.count / rep.with_salary);
+    body.appendChild(el('p', 's-help',
+      'where they come from: ' + srcs.map((s) => s.source + ' ' + s.count).join(', ') +
+      (share > 50 ? '  ·  ' + biggest.source + ' alone is ' + share +
+        '% of them, so read this as what that board advertises' : '')));
+  }
+}
+
 function wirePanes() {
   $('scrim').addEventListener('click', closePanes);
   $('detail-close').addEventListener('click', closePanes);
@@ -446,6 +578,7 @@ function wirePanes() {
     if (CURRENT) openDetail(CURRENT, true);
   });
   $('settings-btn').addEventListener('click', openSettings);
+  wirePay();
   $('scan-btn').addEventListener('click', startScan);
   $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
   // dismissing keeps a verified download on disk; the next check re-offers it
@@ -460,12 +593,14 @@ function wirePanes() {
 function closePanes() {
   $('detail').hidden = true;
   $('settings').hidden = true;
+  $('pay').hidden = true;
   $('scrim').hidden = true;
 }
 
 /* ---------- detail ---------- */
 
 async function openDetail(r, refresh) {
+  $('pay').hidden = true;
   CURRENT = r;
   $('detail').hidden = false;
   $('settings').hidden = true;
@@ -755,6 +890,7 @@ function wireProfiles(launch) {
 async function openSettings() {
   $('settings').hidden = false;
   $('detail').hidden = true;
+  $('pay').hidden = true;
   $('scrim').hidden = false;
   const body = $('settings-body');
   body.textContent = '';
@@ -778,6 +914,7 @@ async function openSettings() {
   } catch (e) {
     WATCH = [];
   }
+  SETTINGS_ROWS = rows;
   body.textContent = '';
   body.appendChild(profileBlock());
 

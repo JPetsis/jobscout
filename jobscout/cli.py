@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
+from . import api                      # the contract the CLI and the GUI share
 from . import db as dbm
 from . import detail as detailmod
 from . import digest as digestmod
@@ -454,6 +455,70 @@ def cmd_list(args) -> int:
     note = f" matching “{args.text}” in the advert text" if wants_text else ""
     print(ui.dim(f"\n{len(rows)} shown{note} · min score {min_score:g} · "
                  f"strong ≥ {strong_th:g} · `jobscout list --filtered` shows the rejects"))
+    return 0
+
+
+def cmd_salary(args) -> int:
+    """What the postings advertise, with the caveats attached to the number."""
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+
+    words = [w for w in (args.text or "").split() if w.strip()]
+    if not words and not args.city and not getattr(args, "all_roles", False):
+        # the profile's own titles by default: the question is about the jobs
+        # this person would take, not about the whole market
+        words = [str(t) for t in (cfg.prefs.get("title_terms") or [])][:3]
+    rep = api.salary_report(conn, words=words, city=args.city or "", days=args.days or 0)
+
+    asked = " ".join(words) if words else "every posting"
+    where = f" matching “{asked}”" + (f" in {args.city}" if args.city else "")
+    print(ui.bold("advertised pay") + ui.dim(f"  {where}"
+                 + (f", last {args.days} days" if args.days else "")))
+    if not rep["with_salary"]:
+        print(ui.dim(f"  none of the {rep['postings']} postings in that set carry a figure."))
+        print(ui.dim("  only ~16% of the store does, and mostly on the boards that require it: "
+                     "try `--all-roles` for the whole corpus."))
+        return 0
+
+    cur = rep["currency"]
+    def money(v):
+        return f"{cur} {v:,}"
+
+    if rep["with_salary"] < 5:
+        # A median of one number is not a distribution, and printing quartiles
+        # for it would dress up a single advert as market data.
+        n = rep["with_salary"]
+        vals = ui.dim(f"  ({n} posting{'s' if n != 1 else ''} in that set "
+                      f"{'carries' if n == 1 else 'carry'} a figure; "
+                      f"too few to describe a range)")
+        print(ui.dim(f"  {money(rep['max_annual']['median'])} median advertised maximum, per year")
+              + " " + vals)
+        print(ui.dim("  widen it: `jobscout salary --all-roles`, or pass --text with a broader word"))
+        return 0
+
+    top = rep["max_annual"]
+    print(f"  {ui.bold(money(top['median']))}" + ui.dim("  median advertised maximum, per year"))
+    print(ui.dim(f"    half of them sit between {money(top['p25'])} and {money(top['p75'])}"
+                 f"  (lowest {money(top['min'])}, highest {money(top['max'])})"))
+    if rep["min_annual"]:
+        low = rep["min_annual"]
+        print(ui.dim(f"    the bottom of the advertised bands, median: {money(low['median'])}"))
+    print()
+    share = rep["with_salary"]
+    print(ui.dim(f"  {share} of {rep['postings']} postings in that set carry a number."))
+    others = [c for c in rep["currencies"] if c != cur]
+    if others:
+        print(ui.dim("  other currencies left out of these numbers: "
+                     + ", ".join(f"{'unlabelled' if c == '?' else c} {rep['currencies'][c]}"
+                                 for c in others)))
+    if rep["by_source"]:
+        # the skew IS the caveat: a median from one board is a different claim
+        mix = ", ".join(f"{s['source']} {s['count']}" for s in rep["by_source"])
+        print(ui.dim(f"  where they come from: {mix}"))
+        biggest = rep["by_source"][0]
+        if biggest["count"] * 2 > share:
+            print(ui.dim(f"  ({biggest['source']} alone is {100*biggest['count']//share}% of them,"
+                         f" so read this as what THAT board advertises)"))
     return 0
 
 
@@ -1174,6 +1239,17 @@ def main(argv=None) -> int:
     p.add_argument("--all-goals", action="store_true", dest="all_goals",
                    help="ignore the active goal and show the full pool")
     p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("salary", help="what the postings advertise, per year")
+    p.add_argument("--text", metavar="WORDS",
+                   help="only postings whose TITLE contains all of these "
+                        "(default: your own job titles from the config)")
+    p.add_argument("--city", metavar="PLACE", help="only postings whose location contains this")
+    p.add_argument("--days", type=int, default=0,
+                   help="only postings with a date inside this window (0 = any)")
+    p.add_argument("--all-roles", action="store_true", dest="all_roles",
+                   help="ignore your job titles and report the whole corpus")
+    p.set_defaults(fn=cmd_salary)
 
     p = sub.add_parser("goals", help="list defined goals with live match counts")
     p.set_defaults(fn=cmd_goals)

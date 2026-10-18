@@ -399,6 +399,17 @@ class JsApi:
             SCAN = ScanJob(self.cfg)
         return SCAN.start({s for s in only.split(",") if s} if only else set())
 
+    def salary_report(self, words: str = "", city: str = "", days: int = 0) -> dict:
+        """What the postings in this board advertise, with the caveats attached."""
+        terms = [w for w in str(words or "").split() if w.strip()]
+        if not terms and not city:
+            # default to the profile's own titles: the useful question is about
+            # the jobs this person would take, not about the whole corpus
+            terms = [str(t) for t in (self.cfg.prefs.get("title_terms") or [])][:3]
+        with dbm.LOCK:
+            return api.salary_report(self.conn, words=terms, city=str(city or ""),
+                                     days=int(days or 0))
+
     def search_text(self, text: str = "") -> dict:
         """Look inside the advert text, which is most of what is stored here.
 

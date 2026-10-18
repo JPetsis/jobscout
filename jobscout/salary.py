@@ -245,6 +245,21 @@ def fill(p) -> dict | None:
     return got
 
 
+def annual_min(row) -> float | None:
+    """The bottom of the advertised band, per year, when there is one.
+
+    `salary_annual_max` is stored; the minimum is not, so it is derived here
+    with the same multipliers. Unknown period means no number rather than a
+    guess: a monthly figure read as annual is a 12x error in a pay report.
+    """
+    low = row["salary_min"] if hasattr(row, "keys") else None
+    period = (row["salary_period"] or "") if hasattr(row, "keys") else ""
+    if low is None or not period:
+        return None
+    mult = _ANNUAL.get(period)
+    return float(low) * mult if mult else None
+
+
 def fmt(min_v, max_v, currency: str = "", period: str = "") -> str:
     """Compact chip like '€60k–80k/yr', '$45–70/hr', 'CHF 100k/yr'."""
     if not min_v and not max_v:

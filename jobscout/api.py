@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import pathlib
 import statistics
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import db as dbm
 from . import salary as salmod
@@ -218,6 +218,90 @@ def search_text(conn, text: str, limit: int = 400) -> dict:
     hits = dbm.search_text(conn, text, limit=limit)
     return {"query": text, "hits": hits, "count": len(hits),
             "limited": len(hits) >= limit, "limit": limit}
+
+
+def _percentiles(values: list[float]) -> dict | None:
+    """Quartiles of a list of numbers, in the units they came in."""
+    if not values:
+        return None
+    values = sorted(values)
+    if len(values) == 1:
+        one = round(values[0])
+        return {"p25": one, "median": one, "p75": one, "min": one, "max": one}
+    quart = statistics.quantiles(values, n=4, method="inclusive")
+    return {"p25": round(quart[0]), "median": round(quart[1]), "p75": round(quart[2]),
+            "min": round(values[0]), "max": round(values[-1])}
+
+
+def salary_report(conn, *, words=(), city: str = "", days: int = 0,
+                  limit: int = 20000) -> dict:
+    """What the postings in this store advertise, per year.
+
+    Reported rather than sold, and with its own caveats attached, because a pay
+    figure is the easiest thing here to mislead with: only 16% of postings carry
+    a number at all, and the boards that publish one are not a random sample.
+    The count, the coverage and the sources are part of the answer, not fine
+    print -- a median over nine postings from one board is a different claim
+    from a median over two thousand.
+
+    Currencies are NOT mixed: EUR and CHF in one distribution would be a
+    meaningless number, so the biggest group is reported and the rest counted.
+
+    `days` (when given) keeps only postings with a date inside that window, and
+    only those whose date is known -- a store two weeks old cannot say anything
+    about a year, and saying so is better than quietly including everything.
+    """
+    from . import salary as salmod
+    where, args = ["dup_of IS NULL", "filtered = 0"], []
+    for w in words:
+        w = str(w).strip().lower()
+        if w:
+            where.append("lower(title) LIKE ?")
+            args.append(f"%{w}%")
+    if city:
+        where.append("lower(location) LIKE ?")
+        args.append(f"%{str(city).strip().lower()}%")
+    if days:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).date().isoformat()
+        where.append("posted_at != '' AND posted_at >= ?")
+        args.append(cutoff)
+
+    rows = conn.execute(
+        f"SELECT source, salary_annual_max, salary_min, salary_period, salary_currency,"
+        f" posted_at, location FROM postings WHERE {' AND '.join(where)} "
+        f"LIMIT ?", (*args, int(limit))).fetchall()
+
+    by_currency: dict[str, list[float]] = {}
+    mins_by_currency: dict[str, list[float]] = {}
+    by_source: dict[str, list[float]] = {}
+    for r in rows:
+        top = r["salary_annual_max"]
+        if top is None:
+            continue
+        cur = (r["salary_currency"] or "").upper() or "?"
+        by_currency.setdefault(cur, []).append(float(top))
+        low = salmod.annual_min(r)
+        if low is not None:
+            mins_by_currency.setdefault(cur, []).append(low)
+        by_source.setdefault(r["source"], []).append(float(top))
+
+    main = max(by_currency, key=lambda c: len(by_currency[c])) if by_currency else ""
+    tops = by_currency.get(main, [])
+    sources = sorted(({"source": s, "count": len(v),
+                       "median": _percentiles(v)["median"]} for s, v in by_source.items()),
+                     key=lambda r: -r["count"])[:6]
+    return {
+        "asked": {"words": [str(w) for w in words if str(w).strip()],
+                  "city": city, "days": int(days or 0)},
+        "postings": len(rows),
+        "with_salary": sum(len(v) for v in by_currency.values()),
+        "currency": main,
+        "currencies": {c: len(v) for c, v in sorted(by_currency.items(),
+                                                    key=lambda kv: -len(kv[1]))},
+        "max_annual": _percentiles(tops),
+        "min_annual": _percentiles(mins_by_currency.get(main, [])) if main else None,
+        "by_source": sources,
+    }
 
 
 def lead_times(conn) -> dict:
