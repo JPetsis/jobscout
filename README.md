@@ -354,7 +354,8 @@ text.
 **Search the advert text.** Tick *in the advert text* next to the search box (or
 `jobscout list --text "team lead"`) and the words are looked for inside every
 advert, not just the titles. It is an FTS5 index, built on first use (a second or
-two, and tens of megabytes on a store of that size). Words match from their
+two, and tens of megabytes once the store holds tens of thousands of adverts).
+Words match from their
 start, so `teach` finds *Teaching*, and diacritics fold, so `fur` finds *für*.
 Each card shows the words that put it there, so a result can be checked rather
 than trusted.
