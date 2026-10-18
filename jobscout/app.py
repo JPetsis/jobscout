@@ -399,6 +399,17 @@ class JsApi:
             SCAN = ScanJob(self.cfg)
         return SCAN.start({s for s in only.split(",") if s} if only else set())
 
+    def search_text(self, text: str = "") -> dict:
+        """Look inside the advert text, which is most of what is stored here.
+
+        The count of results is the configured one, so a search can never see
+        less of the corpus than the grid does. The first call in a store builds
+        the index (a second or two); every call after it is milliseconds.
+        """
+        limit = int(self.cfg.prefs.get("max_results", 2000) or 2000)
+        with dbm.LOCK:
+            return api.search_text(self.conn, str(text or ""), limit=limit)
+
     def boot_scan(self) -> dict:
         """Look for new openings when the window opens, if the last look is old.
 

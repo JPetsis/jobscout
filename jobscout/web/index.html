@@ -68,6 +68,13 @@ document.documentElement.dataset.theme =
 
 <section class="filters">
   <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">
+  <label class="fresh" id="qtext-label"
+         title="Search inside the advert text as well: every word must appear,
+partial words count from their start, so &quot;ausgrab&quot; finds
+&quot;Ausgrabung&quot;. This runs in the database, so it looks at every posting
+stored, not just the ones on screen.">
+    <input type="checkbox" id="qtext"> <span>in the advert text</span>
+  </label>
   <div class="seg" id="band" role="group" aria-label="Score band">
     <button data-v="all" class="on">All</button>
     <button data-v="strong">Strong</button>

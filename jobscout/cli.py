@@ -391,8 +391,23 @@ def cmd_list(args) -> int:
     min_score = args.min_score if args.min_score is not None else float(cfg.prefs.get("min_score", 6))
     strong_th = float(cfg.prefs.get("strong_threshold", 12))
     goals_sel = [] if getattr(args, "all_goals", False) else _selected_goals(cfg, getattr(args, "goal", None))
+    # Full text over the advert prose. Searched in the database, because that is
+    # where the text is: the store keeps tens of megabytes of it and nothing
+    # else here could look inside it.
+    text_hits: dict[int, str] = {}
+    wants_text = bool(getattr(args, "text", ""))
+    if wants_text:
+        found = dbm.search_text(conn, args.text, limit=100000,
+                                include_hidden=bool(args.filtered))
+        text_hits = {h["id"]: h["around"] for h in found}
+        if not text_hits:
+            print(ui.dim(f"nothing in the advert text matches “{args.text}”"))
+            return 0
+    wide = goals_sel or wants_text      # never let the row limit cut a match away
     rows = dbm.list_postings(conn, min_score=min_score, status=args.status,
-                             source=args.source, limit=100000 if goals_sel else args.limit)
+                             source=args.source, limit=100000 if wide else args.limit)
+    if wants_text:
+        rows = [r for r in rows if r["id"] in text_hits][:args.limit]
     if goals_sel:
         # goals only narrow the base profile; they never resurrect a filtered row
         rows = [r for r in rows
@@ -427,13 +442,18 @@ def cmd_list(args) -> int:
         badge = ui.score_text(f"{r['score']:5g}", r["score"], min_score, strong_th)
         tail = ui.dim(f"  {meta[:62]}") if meta else ""
         print(f"  {rid}  {badge}{status}{pill}  {r['title'][:58]}{tail}")
+        if text_hits:
+            # where it matched, so the result is checkable rather than taken on
+            # faith: a search that only says "trust me" is worse than no search
+            print(ui.dim(f"        … {text_hits.get(r['id'], '')[:96]}"))
     if goals_sel:
         names = "+".join(g.name for g in goals_sel)
         print(ui.dim(f"\n{len(rows)} shown for goal '{names}' · "
                      f"`--all-goals` shows the full pool"))
         return 0
-    print(ui.dim(f"\n{len(rows)} shown · min score {min_score:g} · strong ≥ {strong_th:g} · "
-                 f"`jobscout list --filtered` shows the rejects"))
+    note = f" matching “{args.text}” in the advert text" if wants_text else ""
+    print(ui.dim(f"\n{len(rows)} shown{note} · min score {min_score:g} · "
+                 f"strong ≥ {strong_th:g} · `jobscout list --filtered` shows the rejects"))
     return 0
 
 
@@ -1145,6 +1165,10 @@ def main(argv=None) -> int:
                    help="show postings that were filtered out, with reasons")
     p.add_argument("--limit", type=int, default=40)
     p.add_argument("--json", action="store_true")
+    p.add_argument("--text", metavar="WORDS",
+                   help="only postings whose advert text matches (all words, "
+                        "partial words count). Builds the search index on first "
+                        "use, which takes a moment.")
     p.add_argument("--goal", action="append", metavar="NAME",
                    help="view this goal instead of the active one; repeatable, ALL given goals must match")
     p.add_argument("--all-goals", action="store_true", dest="all_goals",

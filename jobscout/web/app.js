@@ -8,7 +8,10 @@
 
 let ALL = [];                 // every match, unfiltered
 let STATS = {};               // header numbers
-const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false };
+const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false, text: false };
+let TEXT = null;              // Map of id -> matched context, when searching text
+let TEXT_NOTE = '';           // what to say about the text search in the footer
+let TEXT_TIMER = null;        // debounce for typing
 let CURRENT = null;           // posting shown in the detail pane
 let POLL = null;              // scan poll timer
 
@@ -211,7 +214,16 @@ function fmtAge(days) {
 }
 
 function wireFilters() {
-  $('q').addEventListener('input', (e) => { F.q = e.target.value.trim().toLowerCase(); render(); });
+  $('q').addEventListener('input', (e) => {
+    F.q = e.target.value.trim().toLowerCase();
+    maybeTextSearch();          // debounced; only does work when switched on
+    render();
+  });
+  $('qtext').addEventListener('change', (e) => {
+    F.text = e.target.checked;
+    maybeTextSearch();
+    render();
+  });
   $('source').addEventListener('change', (e) => { F.source = e.target.value; render(); });
   $('status').addEventListener('change', (e) => { F.status = e.target.value; render(); });
   $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
@@ -226,10 +238,41 @@ function wireFilters() {
   }
 }
 
+/* Search inside the advert text.
+
+   The text lives in the database, not in the page: 20k postings and tens of
+   megabytes of prose, which is the part of this store nothing else could look
+   inside. Debounced, because it is a round trip, and cancelled by switching the
+   box off so the grid goes back to being entirely local. */
+function maybeTextSearch() {
+  clearTimeout(TEXT_TIMER);
+  if (!F.text) { TEXT = null; TEXT_NOTE = ''; render(); return; }
+  const q = $('q').value.trim();
+  if (q.length < 2) { TEXT = new Map(); TEXT_NOTE = 'type at least two letters'; render(); return; }
+  TEXT_TIMER = setTimeout(async () => {
+    let res = null;
+    try {
+      res = await pywebview.api.search_text(q);
+    } catch (e) {
+      TEXT = new Map();
+      TEXT_NOTE = 'the text search failed: ' + String(e);
+      render();
+      return;
+    }
+    const hits = (res && res.hits) || [];
+    TEXT = new Map(hits.map((h) => [h.id, h.around || '']));
+    TEXT_NOTE = res && res.limited
+      ? 'the first ' + hits.length + ' postings that match'
+      : hits.length + (hits.length === 1 ? ' posting' : ' postings') + ' match';
+    render();
+  }, 250);
+}
+
 function visible() {
   const strongTh = Number(STATS.strong_threshold ?? 10);
   const minSc = Number(STATS.min_score ?? 6);
   return ALL.filter((r) => {
+    if (TEXT && !TEXT.has(r.id)) return false;
     if (F.status !== 'all' && r.status !== F.status) return false;
     if (F.source !== 'all' && r.source !== F.source) return false;
     if (F.band === 'strong' && r.score < strongTh) return false;
@@ -250,6 +293,9 @@ function render() {
   grid.textContent = '';
   $('count').textContent = rows.length + ' shown';
   $('empty').hidden = rows.length > 0;
+  $('empty-msg').textContent = (F.text && TEXT && TEXT.size === 0)
+    ? 'Nothing in the advert text matches that.'
+    : 'No matches.';
 
   // The freshness view is about being early, so it sorts by how recent it is
   // rather than by score: the best match is worth less by the time it is a week
@@ -277,6 +323,7 @@ function render() {
     ? ALL.length + ' of ' + total + ' matches loaded \u00b7 raise \u201cHow many results ' +
       'to load\u201d in Settings to see the rest \u00b7 '
     : ALL.length + ' loaded \u00b7 ') +
+    (F.text && TEXT_NOTE ? TEXT_NOTE + ' in the advert text \u00b7 ' : '') +
     'click a card for details \u00b7 S / A / X to triage';
 }
 
@@ -336,6 +383,13 @@ function card(r, strongTh) {
     why.append(' +' + p);
   });
   if (reasons.length) c.appendChild(why);
+
+  // When a text search put this card here, show the words that did it: the
+  // reason to believe a result is the result, not the ranking.
+  if (TEXT && TEXT.has(r.id)) {
+    const around = String(TEXT.get(r.id) || '').replace(/\s+/g, ' ').trim();
+    if (around) c.appendChild(el('div', 'snippet', around));
+  }
 
   c.appendChild(actions(r, c));
   c.addEventListener('click', () => openDetail(r));

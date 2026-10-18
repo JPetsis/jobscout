@@ -181,6 +181,19 @@ body {
 .chip.direct { color: var(--blue); border-color: transparent; background: var(--chip); }
 .chip.direct.fresh { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.14); font-weight: 600; }
 .chip.also { color: var(--muted); border-style: dashed; }
+/* The words a full-text search matched, on the card that matched them. */
+.snippet {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  padding-left: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .fresh {
   display: inline-flex;
   align-items: center;

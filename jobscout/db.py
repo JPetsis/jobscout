@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import threading
 from dataclasses import replace
@@ -69,6 +70,35 @@ CREATE INDEX IF NOT EXISTS idx_postings_run ON postings(first_seen_run);
 -- grid asks for a whole page of them at once: without this it is a scan per
 -- row. The fresh-source mark and the lead-time report both need it.
 CREATE INDEX IF NOT EXISTS idx_postings_dup ON postings(dup_of);
+
+-- Full text over the advert prose, which is most of what this store holds and
+-- the only part of it nothing could search. External content: the text lives in
+-- postings, the index here, and the triggers keep the two in step.
+CREATE VIRTUAL TABLE IF NOT EXISTS postings_fts USING fts5(
+  description,
+  content='postings',
+  content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS postings_fts_ai AFTER INSERT ON postings BEGIN
+  INSERT INTO postings_fts(rowid, description) VALUES (new.id, new.description);
+END;
+CREATE TRIGGER IF NOT EXISTS postings_fts_ad AFTER DELETE ON postings BEGIN
+  INSERT INTO postings_fts(postings_fts, rowid, description)
+    VALUES ('delete', old.id, old.description);
+END;
+CREATE TRIGGER IF NOT EXISTS postings_fts_au AFTER UPDATE ON postings BEGIN
+  INSERT INTO postings_fts(postings_fts, rowid, description)
+    VALUES ('delete', old.id, old.description);
+  INSERT INTO postings_fts(rowid, description) VALUES (new.id, new.description);
+END;
+
+-- Small key/value corner. It exists because an FTS5 table with external content
+-- cannot tell you whether its index was ever built: a count over it reads the
+-- CONTENT table, so an empty index looks full. One row here records what has
+-- been built, which is cheaper and clearer than sniffing shadow tables.
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
+
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   started_at TEXT NOT NULL,
@@ -243,6 +273,78 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
     )
     conn.commit()
     return cur.lastrowid, True, dup_of
+
+
+FTS_STAMP = "fts_built"
+
+
+def ensure_fts(conn: sqlite3.Connection) -> bool:
+    """Build the full-text index if this store has never had one. True if built.
+
+    One-time and reported, because it is not free: the store holds tens of
+    megabytes of advert text, and a silent multi-second pause on the first
+    connect after an upgrade is the kind of thing that looks like a hang.
+    """
+    with LOCK:
+        done = conn.execute("SELECT value FROM meta WHERE key=?", (FTS_STAMP,)).fetchone()
+        if done is not None:
+            return False
+        conn.execute("INSERT INTO postings_fts(postings_fts) VALUES('rebuild')")
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                     (FTS_STAMP, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        conn.commit()
+    return True
+
+
+def _fts_query(text: str) -> str:
+    """What a person typed, as an FTS5 query that cannot be a syntax error.
+
+    MATCH has its own language -- quotes, parentheses, NEAR, AND/OR/NOT -- and
+    passing user text straight through turns a stray bracket into an exception
+    from deep inside sqlite. Each word becomes a quoted prefix term, so partial
+    words match and nothing else is interpreted.
+    """
+    words = re.findall(r"[\w\u00c0-\u024f]+", text or "", flags=re.UNICODE)
+    return " AND ".join(f'"{w}"*' for w in words if len(w) > 1)
+
+
+def search_text(conn: sqlite3.Connection, text: str, limit: int = 200,
+                include_hidden: bool = False) -> list[dict]:
+    """Postings whose advert text matches, with the matched words shown.
+
+    Builds the index if this store has never had one. That is deliberate and it
+    belongs here rather than in `connect()`: it costs a second or two on a real
+    store, and nobody should pay it unless they actually search. The reason it
+    cannot be skipped is that an FTS5 table with external content cannot tell
+    you its index is empty -- a query over it honestly reads the CONTENT table
+    and finds every posting, so the first search would look like it worked and
+    silently return nothing.
+
+    Hidden rows (filtered out, or duplicates of another board's copy) are left
+    out by default, because the count has to describe what the window can SHOW:
+    "82 postings match" next to two visible cards is the kind of number that
+    makes a search look broken. `include_hidden` is for the CLI's `--filtered`,
+    which exists to inspect exactly those rows.
+
+    Returns [] rather than raising for a query with nothing searchable in it: an
+    empty box and a box full of punctuation are the same request, and neither is
+    an error.
+    """
+    query = _fts_query(text)
+    if not query:
+        return []
+    ensure_fts(conn)
+    with LOCK:
+        visible = "" if include_hidden else " AND p.filtered = 0 AND p.dup_of IS NULL"
+        rows = conn.execute(
+            "SELECT p.id, "
+            "       snippet(postings_fts, 0, '', '', ' … ', 12) AS around, "
+            "       bm25(postings_fts) AS rank "
+            "FROM postings_fts JOIN postings p ON p.id = postings_fts.rowid "
+            "WHERE postings_fts MATCH ?" + visible + " "
+            "ORDER BY rank LIMIT ?", (query, int(limit))).fetchall()
+    return [{"id": r["id"], "around": (r["around"] or "").strip(), "rank": r["rank"]}
+            for r in rows]
 
 
 def start_run(conn: sqlite3.Connection) -> int:

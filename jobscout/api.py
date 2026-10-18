@@ -208,6 +208,18 @@ def source_counts(conn) -> list[dict]:
     return [{"source": s, "count": n} for s, n in counts.items()]
 
 
+def search_text(conn, text: str, limit: int = 400) -> dict:
+    """Full text over the advert prose, shaped for the window and the CLI.
+
+    `limited` says the search stopped at the cap rather than at the end of the
+    results, so the UI can say "the first N" instead of implying it found N.
+    """
+    limit = max(1, int(limit))
+    hits = dbm.search_text(conn, text, limit=limit)
+    return {"query": text, "hits": hits, "count": len(hits),
+            "limited": len(hits) >= limit, "limit": limit}
+
+
 def lead_times(conn) -> dict:
     """What the cross-source pairs say, measured rather than promised.
 
