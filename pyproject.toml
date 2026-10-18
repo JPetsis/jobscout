@@ -1,6 +1,6 @@
 [project]
 name = "jobscout"
-version = "0.3.1"
+version = "0.3.2"
 description = "Local-first job search for DACH + remote roles. No API keys, no accounts, no metered calls."
 requires-python = ">=3.11"
 dependencies = [
