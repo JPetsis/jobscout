@@ -253,8 +253,16 @@ class JsApi:
         self._staged_version: str | None = None
         self._asked = False                      # see launch()
 
-    def matches(self, limit: int = 400) -> list[dict]:
-        """Matches under the stored profile, best first. Filtering is client-side."""
+    def matches(self, limit: int | None = None) -> list[dict]:
+        """Matches under the stored profile, best first. Filtering is client-side.
+
+        The count comes from `preferences.max_results` rather than a constant in
+        the window, because a constant is a silent ceiling: the grid showed 400
+        of 1,294 matches and 59 of the 71 freshest postings -- the ones this app
+        exists to surface -- were simply not in the payload.
+        """
+        if limit is None:
+            limit = int(self.cfg.prefs.get("max_results", 2000))
         with dbm.LOCK:
             return api.list_matches(
                 self.conn,

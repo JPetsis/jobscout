@@ -170,6 +170,13 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
         # one query for every republished twin on the page, not one per card
         twins = republished_map(conn, [(r["id"], r["source"]) for r in keep])
         out = [posting_dict(r, twins.get(r["id"])) for r in keep]
+        # The advert text is two thirds of this payload (measured: 0.89MB of
+        # 1.33MB for 400 rows) and the card never renders it -- the detail pane
+        # fetches it when a card is opened. Sending it here is what forced the
+        # 400-row cap, and the cap was hiding the freshest postings, because
+        # the rows are sorted by score and a fresh advert usually scores low.
+        for d in out:
+            d.pop("description", None)
     out.sort(key=lambda r: r["score"], reverse=True)
     if limit:
         out = out[:limit]
@@ -328,6 +335,13 @@ SETTINGS = [
      "group": "How strict",
      "label": "Ignore postings older than this",
      "help": "In days."},
+    {"key": "preferences.max_results", "op": "scalar", "kind": "number",
+     "default": 2000,
+     "group": "How strict",
+     "label": "How many results to load",
+     "help": "Best-scored first. The window filters everything it has loaded, "
+             "so a low number can hide a match from a filter, and the footer "
+             "says when that is happening. 0 loads everything."},
     {"key": "preferences.insider_days", "op": "scalar", "kind": "number",
      "default": 7,
      "group": "How strict",
@@ -449,7 +463,12 @@ def validate_setting(key: str, value):
             raise ValueError(f"{key} must be between 0 and 100")
         if key.endswith(("max_age_days", "query_budget")) and not (0 <= int(value) <= 3650):
             raise ValueError(f"{key} must be between 0 and 3650")
-        return int(value) if key.endswith(("max_age_days", "query_budget")) else float(value)
+        # 0 is allowed and means "no ceiling": the app then loads every match,
+        # which is slow on a big board but never hides one.
+        if key.endswith("max_results") and not (0 <= int(value) <= 200000):
+            raise ValueError(f"{key} must be between 0 and 200000 (0 loads everything)")
+        return int(value) if key.endswith(("max_age_days", "query_budget", "max_results")) \
+            else float(value)
 
     if kind == "bool":
         if not isinstance(value, bool):

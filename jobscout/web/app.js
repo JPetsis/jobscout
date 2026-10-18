@@ -68,7 +68,7 @@ window.addEventListener('pywebviewready', boot);
 async function boot() {
   try {
     const [matches, stats, sources, theme, launch] = await Promise.all([
-      pywebview.api.matches(400),
+      pywebview.api.matches(),
       pywebview.api.stats(),
       pywebview.api.sources(),
       pywebview.api.theme(),
@@ -98,7 +98,7 @@ function fail(e) {
 
 async function reload() {
   const [matches, stats] = await Promise.all([
-    pywebview.api.matches(400), pywebview.api.stats(),
+    pywebview.api.matches(), pywebview.api.stats(),
   ]);
   ALL = matches || [];
   STATS = stats || {};
@@ -214,8 +214,15 @@ function render() {
     ? 'Fresh from the source (' + nFresh + ')'
     : 'Fresh from the source';
 
-  $('footer-note').textContent = ALL.length + ' loaded · click a card for details · ' +
-    'S / A / X to triage';
+  // Never let a ceiling be silent: if the window was handed fewer rows than the
+  // board holds, a filter can be hiding something without saying so.
+  const total = Number(STATS.matches || 0);
+  const cut = total > ALL.length;
+  $('footer-note').textContent = (cut
+    ? ALL.length + ' of ' + total + ' matches loaded \u00b7 raise \u201cHow many results ' +
+      'to load\u201d in Settings to see the rest \u00b7 '
+    : ALL.length + ' loaded \u00b7 ') +
+    'click a card for details \u00b7 S / A / X to triage';
 }
 
 function card(r, strongTh) {

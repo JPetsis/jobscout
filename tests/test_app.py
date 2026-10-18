@@ -166,6 +166,56 @@ class _FakeConn:
 
 # --- first-run failures must be VISIBLE ------------------------------------
 
+def test_the_result_ceiling_comes_from_the_setting_not_from_the_page(ws, monkeypatch):
+    """The window used to ask for exactly 400 rows, from a constant in the page.
+
+    On a real store that was 400 of 1,294 matches, sorted by score -- and 59 of
+    the 71 freshest postings were simply not in the payload. The count now comes
+    from `preferences.max_results`, and 0 means no ceiling at all.
+    """
+    from jobscout import api
+    from jobscout.config import load_config
+    from jobscout.models import Posting
+    from jobscout.score import score_posting
+    from jobscout import db as dbm
+
+    cfg = load_config()
+    # the grid asks for rows at or above min_score, so a test row has to clear it
+    api.write_setting(cfg.path, "preferences.min_score", 0)
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    run = dbm.start_run(conn)
+    prefs = {"title_terms": ["entwickler"], "title_boost": 3}
+    for i in range(5):
+        p = Posting(source="greenhouse", title="Softwareentwickler",
+                    company=f"C{i}", location="Berlin",
+                    url=f"https://g/{i}", external_id=str(i))
+        dbm.upsert(conn, p, score_posting(prefs, p), run, "2026-10-01T09:00:00+00:00")
+    conn.close()
+
+    assert len(appmod.JsApi().matches()) == 5, "the default covers a small board"
+
+    api.write_setting(cfg.path, "preferences.max_results", 2)
+    assert len(appmod.JsApi().matches()) == 2, "the setting is what decides"
+
+    api.write_setting(cfg.path, "preferences.max_results", 0)
+    assert len(appmod.JsApi().matches()) == 5, "0 means no ceiling"
+
+
+def test_the_result_ceiling_is_refused_outside_its_range(ws):
+    from jobscout import api
+    from jobscout.config import load_config
+    with pytest.raises(ValueError, match="must be between 0 and 200000"):
+        api.write_setting(load_config().path, "preferences.max_results", -1)
+
+
+def test_the_window_does_not_ask_for_a_fixed_number(ws):
+    """A constant in the page would quietly become the ceiling again."""
+    js = (Path(__file__).resolve().parent.parent / "jobscout" / "web" / "app.js").read_text(encoding="utf-8")
+    assert "pywebview.api.matches()" in js
+    assert "pywebview.api.matches(400)" not in js
+    assert "matches loaded" in js, "the footer must be able to say the list was cut"
+
+
 def test_missing_config_shows_a_window_instead_of_exiting_silently(monkeypatch, tmp_path):
     """A windowed build has no console. SystemExit from load_config used to go
     nowhere, so a fresh machine looked like the app simply refused to open."""

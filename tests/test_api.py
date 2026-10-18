@@ -69,6 +69,27 @@ def test_list_matches_returns_best_first(tmp_path):
     assert len(titles) == 2
 
 
+def test_grid_rows_do_not_carry_the_advert_text(tmp_path):
+    """Measured: 0.89MB of the 1.33MB payload for 400 rows was description text
+    that the card never renders (the detail pane fetches it when a card is
+    opened). Shipping it is what forced a 400-row ceiling on a board holding
+    1,294 matches -- and, sorted by score, that ceiling hid 59 of the 71
+    freshest postings, which are the ones this app exists to surface."""
+    conn = _conn(tmp_path)
+    _add(conn, description="x" * 5000)
+    rows = api.list_matches(conn)
+    assert rows, "the row should still come back"
+    assert "description" not in rows[0]
+    assert rows[0]["title"], "everything else stays"
+
+
+def test_the_detail_pane_still_has_the_text(tmp_path):
+    conn = _conn(tmp_path)
+    pid = _add(conn, description="the full advert")
+    row = conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()
+    assert api.posting_dict(row)["description"] == "the full advert"
+
+
 def test_list_matches_excludes_filtered_rows(tmp_path):
     # "vertrieb" is in title_deny, so the rule engine drops it. The window count
     # must match the digest count, so it must not appear here. Note the deny list
