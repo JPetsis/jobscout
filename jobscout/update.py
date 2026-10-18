@@ -76,8 +76,16 @@ def checks_allowed(cfg) -> bool:
 
 
 def auto_install(cfg) -> bool:
-    """Whether a found update may be installed without being asked."""
-    return _updates_setting(cfg, "auto") is not False
+    """Whether a found update may be installed without being asked.
+
+    Default NO. It used to be yes, which let the app replace and restart itself
+    under somebody who had not agreed to it: a window that disappears and comes
+    back as a different version is a decision the app should not make on a
+    person's behalf, however well it goes. The notice with a button costs one
+    click, and the click is the point. `updates.auto: true` in the config (or the
+    settings switch) opts back in.
+    """
+    return _updates_setting(cfg, "auto") is True
 
 # How long the swap helper waits for jobscout to exit before giving up and
 # leaving the installed build alone. Long enough for a slow shutdown, short

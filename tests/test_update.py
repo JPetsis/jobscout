@@ -889,19 +889,31 @@ class _Cfg:
         self.raw = raw
 
 
-def test_update_settings_default_to_on_when_the_block_is_absent():
-    """A config written before the setting existed must keep the default."""
+def test_the_update_defaults_when_the_block_is_absent():
+    """A config written before these settings existed keeps the defaults.
+
+    Checks: on, because the notice is the point. Installs: OFF, because an app
+    that replaces and restarts itself under somebody who has not agreed to it is
+    making their decision for them.
+    """
     for raw in ({}, {"preferences": {}}, {"updates": None}, {"updates": []}):
         cfg = _Cfg(raw)
         assert up.checks_allowed(cfg) is True
-        assert up.auto_install(cfg) is True
+        assert up.auto_install(cfg) is False
 
 
 def test_turning_checks_off_reads_the_top_level_key():
     cfg = _Cfg({"updates": {"check": False}})
     assert up.checks_allowed(cfg) is False
     # and it only turns off what it names
-    assert up.auto_install(cfg) is True
+    assert up.auto_install(cfg) is False
+
+
+def test_installing_without_asking_is_an_opt_in():
+    """The one direction that has to be explicit: nobody should discover an
+    auto-install they never enabled."""
+    assert up.auto_install(_Cfg({"updates": {"auto": True}})) is True
+    assert up.auto_install(_Cfg({"updates": {"check": True}})) is False
 
 
 def test_turning_automatic_installs_off_reads_its_own_key():

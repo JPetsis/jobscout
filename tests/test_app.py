@@ -748,10 +748,11 @@ def test_the_button_checks_even_when_the_setting_is_off(upd_api, monkeypatch):
 def test_the_window_is_told_whether_to_install_by_itself(upd_api, monkeypatch):
     monkeypatch.setattr(appmod.updatemod, "check",
                         lambda *a, **k: {"ok": True, "update_available": False})
-    assert upd_api.update_check(force=True)["auto"] is True
-
-    upd_api.cfg.raw["updates"] = {"auto": False}
+    # the default: the window is told to ASK, not to install
     assert upd_api.update_check(force=True)["auto"] is False
+
+    upd_api.cfg.raw["updates"] = {"auto": True}
+    assert upd_api.update_check(force=True)["auto"] is True
 
 
 def test_app_info_says_which_build_this_is(upd_api):

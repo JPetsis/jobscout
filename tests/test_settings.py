@@ -348,12 +348,12 @@ def test_the_update_settings_are_offered_as_switches(cfgfile):
 
 
 def test_an_absent_update_setting_shows_what_is_actually_in_effect(cfgfile):
-    """This config predates the `updates:` section, and both keys default to on.
-    Rendering None as `checked = false` would tell the user checks are off while
-    the app happily keeps asking GitHub."""
+    """This config predates the `updates:` section, so both keys show their
+    defaults -- checks on, installs off. Rendering None as `checked = false`
+    would tell the user the app never checks while it keeps asking GitHub."""
     by = {r["key"]: r for r in api.read_settings(cfgfile)}
     assert by["updates.check"]["value"] is True
-    assert by["updates.auto"]["value"] is True
+    assert by["updates.auto"]["value"] is False
 
 
 def test_a_config_without_the_section_still_stores_the_setting(tmp_path):
@@ -364,12 +364,14 @@ def test_a_config_without_the_section_still_stores_the_setting(tmp_path):
     original = "# keep me\npreferences:\n  min_score: 6\n"
     f.write_text(original, encoding="utf-8")
 
-    res = api.write_setting(f, "updates.auto", False)
-    assert res["value"] is False and res["changed"] is True
+    # writing the value that is NOT the default, so "changed" is meaningful:
+    # writing the default into an absent key is a no-op by design
+    res = api.write_setting(f, "updates.auto", True)
+    assert res["value"] is True and res["changed"] is True
 
     text = f.read_text(encoding="utf-8")
     assert "# keep me" in text, "comments must survive"
-    assert yaml.safe_load(text)["updates"]["auto"] is False
+    assert yaml.safe_load(text)["updates"]["auto"] is True
     # the section arrives documented, exactly as the template has it -- the
     # comment lines must be there, and the key we just wrote must hold our value
     from jobscout.config import UPDATES_SECTION_BODY
@@ -378,10 +380,13 @@ def test_a_config_without_the_section_still_stores_the_setting(tmp_path):
             assert line in text, f"the added section is missing {line!r}"
         else:
             assert line.split(":")[0] in text, f"the added section is missing {line!r}"
-    assert "auto: false" in text
+    # the section is created from the template and then the key we asked for is
+    # set, so the value line carries OUR value, not the template's default
+    assert "auto: true" in text
 
     read_back = {r["key"]: r["value"] for r in api.read_settings(f)}
-    assert read_back["updates.auto"] is False
+    assert read_back["updates.auto"] is True
+    assert read_back["updates.check"] is True
 
 
 def test_writing_an_update_setting_twice_does_not_grow_the_file(tmp_path):
@@ -406,6 +411,6 @@ def test_the_template_and_the_create_on_demand_body_agree():
     install and an upgraded one drift apart."""
     from jobscout.config import DEFAULT_CONFIG, SECTION_BODIES, UPDATES_SECTION_BODY
     block = yaml.safe_load(DEFAULT_CONFIG)["updates"]
-    assert block == {"check": True, "auto": True}
+    assert block == {"check": True, "auto": False}
     assert SECTION_BODIES["updates"] is UPDATES_SECTION_BODY
     assert SECTION_BODIES["ui"] is not None

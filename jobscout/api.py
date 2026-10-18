@@ -501,14 +501,15 @@ SETTINGS = [
      "label": "Check for updates",
      "help": "Ask GitHub whether a newer version exists, at most once a day, "
              "when the app opens. The only thing sent is the request itself."},
-    {"key": "updates.auto", "op": "scalar", "kind": "bool", "default": True,
+    {"key": "updates.auto", "op": "scalar", "kind": "bool", "default": False,
      "group": "Updates",
      "label": "Install updates automatically",
-     "help": "A newer version is downloaded and checksum-checked in the "
-             "background, then jobscout restarts on it. Nothing replaces the "
-             "build you have until the download has verified, and the previous "
-             "one is kept until the swap succeeds. Turn this off to be asked "
-             "first."},
+     "help": "Off by default: when this is off you get a notice with an "
+             "Install button and decide yourself, which is the right way round. "
+             "On, a newer version is downloaded and checksum-checked in the "
+             "background and jobscout restarts on it. Either way nothing "
+             "replaces the build you have until the download has verified, and "
+             "the previous one is kept until the swap succeeds."},
 ]
 
 _BY_KEY = {s["key"]: s for s in SETTINGS}

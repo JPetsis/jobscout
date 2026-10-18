@@ -463,11 +463,12 @@ UPDATES_SECTION_BODY = [
     '# notice in the window if there is one. Set check to false to stop the app',
     '# asking on its own; running `jobscout update` yourself still works.',
     'check: true',
-    '# Install a newer version without asking. The download is verified before',
-    '# anything is replaced, and the previous build is kept until the swap has',
-    '# succeeded, so a failed update leaves the working version in place. Set to',
-    '# false to be asked first.',
-    'auto: true',
+    '# Install a newer version WITHOUT asking. Off by default: a window that',
+    '# replaces and restarts itself is a decision the app should not make on',
+    '# somebody\'s behalf. On, the download is verified before anything is',
+    '# replaced and the previous build is kept until the swap has succeeded, so',
+    '# a failed update leaves the working version in place.',
+    'auto: false',
 ]
 
 # The template and the create-on-demand path (cfgwrite.ensure_section) both come
