@@ -44,8 +44,7 @@ because there is only one rule engine.
 
 ```bash
 uv sync --extra app    # pywebview; on Linux the extra also pulls its [qt] backend
-uv run jobscout init   # the window needs ~/.jobscout/config.yaml to exist
-uv run jobscout-app
+uv run jobscout-app    # its first launch writes ~/.jobscout/config.yaml itself
 ```
 
 The window shows your stored matches as a card grid with a search box, a score
@@ -75,13 +74,14 @@ non-technical user needs is in it:
   [Profiles](#profiles).
 - **Pick your colours.** A switcher in the header: follow the system, or pin
   light or dark. Stored in `config.yaml` as `ui.theme`.
-- **Install updates.** jobscout checks for a newer release once a day and, by
-  default, installs it by itself: the download is checksum-checked first, and
-  the app restarts on the new version. Both halves are settings if you would
-  rather be asked. See [Updating](#updating).
+- **Install updates.** jobscout checks for a newer release once a day and asks:
+  a bar names the version and the download size, and nothing is replaced or
+  restarted until you press Install. Installing without asking is a setting if
+  you would rather have that. See [Updating](#updating).
 - **Recover a backup.** If the window opens and finds no workspace, it looks
-  for a backup first and offers to restore it instead of just failing. See
-  [Restoring a backup](#restoring-a-backup).
+  for a backup first and offers to restore it instead of just failing; with
+  nothing to offer it creates the workspace itself, so a fresh download has no
+  setup step at all. See [Restoring a backup](#restoring-a-backup).
 
 Settings writes to `config.yaml` through `jobscout/cfgwrite.py`, which edits the
 file line by line. That matters: a `yaml.safe_load` / `safe_dump` round-trip
@@ -141,7 +141,7 @@ off when piped.
 
 | command | what it does |
 |---|---|
-| `jobscout init` | create `~/.jobscout/` with a commented default config |
+| `jobscout init` | create `~/.jobscout/` with a commented default config (the app does this on its own first launch) |
 | `jobscout config` | print the config path (`--open` reveals it in Finder, `--edit` opens your editor) |
 | `jobscout scan` | fetch all enabled sources, score, dedupe, store |
 | `jobscout digest` | run digest: new postings only; `--all` writes `reports/<date>-matches.md` with everything matching your current profile |
@@ -382,7 +382,9 @@ If jobscout starts and finds no workspace, it looks for a backup first. That is
 the state you land in after losing or removing `~/.jobscout`, and a backup
 sitting in `~/jobscout-backups` used to go unclaimed while the app said only
 "no config found". Now it shows what it found — date, posting count, how many
-you had marked — and offers to restore it, or lets you start fresh.
+you had marked — and offers to restore it, or lets you start fresh. With no
+backup to offer there is nothing to recover, so the window makes the workspace
+and asks what to call it, which is why a downloaded copy needs no terminal.
 
 From a terminal:
 

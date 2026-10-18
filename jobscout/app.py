@@ -254,6 +254,7 @@ class JsApi:
         self._staged_version: str | None = None
         self._asked = False                      # see launch()
         self._picker_shown = False                # see boot_scan()
+        self._first_run = False                   # set when this run made the workspace
 
     def matches(self, limit: int | None = None) -> list[dict]:
         """Matches under the stored profile, best first. Filtering is client-side.
@@ -340,7 +341,11 @@ class JsApi:
         """
         from . import profiles as profmod
         rows = profmod.list_profiles()
-        ask = len(rows) > 1 and not self._asked
+        # A single profile is not a choice worth a screen, with one exception:
+        # the run that just created the workspace. Naming your own workspace is
+        # the first decision a person should get to make, and it is cheaper here
+        # than renaming it later.
+        ask = (len(rows) > 1 or self._first_run) and not self._asked
         self._asked = True
         # boot_scan must not fill a workspace the user has not chosen yet
         self._picker_shown = ask
@@ -746,9 +751,26 @@ def main() -> int:
                 width=620, height=460))
             webview.start()
             return 0
-        # no console in a windowed build -- the message must be visible
-        _show_fatal(webview, str(e))
-        return 1
+        # Nothing to restore either, so make the workspace instead of naming a
+        # command this bundle does not contain. "Run jobscout init" is fine in a
+        # terminal and useless in a downloaded app: the point of shipping
+        # binaries is that somebody who has never opened a terminal can use it.
+        # The core is identical either way, so the window creates what it needs
+        # and then asks what to call the workspace.
+        from .config import init_workspace
+        try:
+            init_workspace(root)
+        except OSError as exc:
+            # An unwritable home is a real problem, and it has to be named
+            # rather than fail in silence.
+            _show_fatal(webview, f"{e}\n\ncould not create it: {exc}")
+            return 1
+        try:
+            api_obj = JsApi()
+        except SystemExit as fatal:
+            _show_fatal(webview, str(fatal))
+            return 1
+        api_obj._first_run = True
 
     api_obj._windows = [webview.create_window(
         "jobscout",

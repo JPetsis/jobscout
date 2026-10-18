@@ -314,9 +314,10 @@ def test_the_header_says_what_the_last_scan_brought_in(ws):
     assert "pywebview.api.boot_scan()" in js
 
 
-def test_missing_config_shows_a_window_instead_of_exiting_silently(monkeypatch, tmp_path):
-    """A windowed build has no console. SystemExit from load_config used to go
-    nowhere, so a fresh machine looked like the app simply refused to open."""
+def test_a_missing_config_is_made_rather_than_announced(monkeypatch, tmp_path):
+    """A windowed build has no console, and no `jobscout init` either: telling
+    somebody to run a command their download does not contain is a dead end.
+    The window makes the workspace instead, and the app opens."""
     calls = {}
 
     class FakeWebview:
@@ -330,22 +331,33 @@ def test_missing_config_shows_a_window_instead_of_exiting_silently(monkeypatch, 
         def start(*a, **k):
             calls["started"] = True
 
+    home = tmp_path / "home"
+    monkeypatch.setenv("JOBSCOUT_HOME", str(home))
     monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod.backupmod, "default_destination",
+                        lambda: tmp_path / "no-backups-here")
 
-    def boom():
-        raise SystemExit("no config found at /home/x/.jobscout/config.yaml\n"
-                         "run: jobscout init")
+    real_jsapi = appmod.JsApi
+    seen = []
 
-    monkeypatch.setattr(appmod, "JsApi", boom)
+    def boom_once():
+        # The first attempt is what a fresh machine does; the second uses the
+        # REAL JsApi, so the test proves the workspace it created is enough.
+        seen.append(1)
+        if len(seen) == 1:
+            raise SystemExit("no config found at /home/x/.jobscout/config.yaml\n"
+                             "run: jobscout init")
+        return real_jsapi()
+
+    monkeypatch.setattr(appmod, "JsApi", boom_once)
     monkeypatch.setitem(sys.modules, "webview", FakeWebview)
 
     rc = appmod.main()
-    assert rc == 1
+    assert rc == 0, "a fresh machine must end up in the app, not in a message"
     assert calls.get("started") is True           # a window was actually shown
-    assert calls["url"] is None                   # the error page, not the UI
-    assert "no config found" in calls["html"]
-    assert "jobscout init" in calls["html"]       # tells the user what to do
-    assert "cannot start" in calls["html"]
+    assert calls["url"] and calls["url"].endswith("index.html")
+    assert calls["html"] == ""
+    assert (home / "config.yaml").is_file()
 
 
 def test_the_error_page_escapes_html(monkeypatch):
@@ -575,8 +587,82 @@ def test_main_offers_a_restore_when_the_workspace_is_empty(tmp_path, monkeypatch
     assert "js_api" in created["windows"][0], "the offer needs a bridge"
 
 
-def test_main_still_shows_the_error_when_there_is_no_backup(tmp_path, monkeypatch):
+def test_main_makes_the_workspace_a_first_run_needs(tmp_path, monkeypatch):
+    """A downloaded build has no `jobscout init` in it, so the window has to be
+    able to create the workspace itself -- and then ask what to call it."""
+    created: dict = {"windows": []}
+    instances = []
+
+    class FakeJsApi:
+        def __init__(self):
+            instances.append(self)
+            if len(instances) == 1:
+                raise SystemExit("no config found at X")
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            created["windows"].append(kw)
+            return object()
+
+        @staticmethod
+        def start(*a, **k):
+            created["started"] = True
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod, "JsApi", FakeJsApi)
+    monkeypatch.setattr(appmod.backupmod, "default_destination",
+                        lambda: tmp_path / "no-backups-here")
+    home = tmp_path / "empty"
+    monkeypatch.setenv("JOBSCOUT_HOME", str(home))
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    assert appmod.main() == 0, "a fresh machine must not be a dead end"
+    assert (home / "config.yaml").is_file(), "the workspace must be created"
+    assert created["windows"], "a window must be shown"
+    assert "url" in created["windows"][0], "it is the app's own UI, not a message"
+    assert len(instances) == 2, "once to find out, once after creating it"
+    assert instances[1]._first_run is True, "the picker should ask for a name"
+
+
+def test_main_says_so_when_it_still_cannot_start(tmp_path, monkeypatch):
+    """Creating the workspace is not a promise that the app can run, and the
+    window must name the SECOND failure, not the one it just fixed."""
     created = {}
+    calls = []
+
+    def fake_jsapi():
+        calls.append(1)
+        raise SystemExit(f"failure number {len(calls)}")
+
+    class FakeWebview:
+        @staticmethod
+        def create_window(title, **kw):
+            created.update(kw)
+            return object()
+
+        @staticmethod
+        def start(*a, **k):
+            pass
+
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    monkeypatch.setattr(appmod, "JsApi", fake_jsapi)
+    monkeypatch.setattr(appmod.backupmod, "default_destination",
+                        lambda: tmp_path / "no-backups-here")
+    home = tmp_path / "empty"
+    monkeypatch.setenv("JOBSCOUT_HOME", str(home))
+    monkeypatch.setitem(sys.modules, "webview", FakeWebview)
+
+    assert appmod.main() == 1
+    assert "failure number 2" in created.get("html", "")
+    assert (home / "config.yaml").is_file(), "it still tried to help first"
+
+
+def test_main_names_a_workspace_it_cannot_create(tmp_path, monkeypatch):
+    """An unwritable home is a real problem and has to be said out loud."""
+    created = {}
+    blocker = tmp_path / "blocked"
+    blocker.write_text("not a directory")
 
     class FakeWebview:
         @staticmethod
@@ -590,14 +676,14 @@ def test_main_still_shows_the_error_when_there_is_no_backup(tmp_path, monkeypatc
 
     monkeypatch.setattr(appmod.sys, "platform", "darwin")
     monkeypatch.setattr(appmod, "JsApi",
-                        lambda: (_ for _ in ()).throw(SystemExit("no config found at X")))
+                        lambda: (_ for _ in ()).throw(SystemExit("no config found")))
     monkeypatch.setattr(appmod.backupmod, "default_destination",
                         lambda: tmp_path / "no-backups-here")
-    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "empty"))
+    monkeypatch.setenv("JOBSCOUT_HOME", str(blocker))
     monkeypatch.setitem(sys.modules, "webview", FakeWebview)
 
     assert appmod.main() == 1
-    assert "no config found" in created.get("html", "")
+    assert "could not create it" in created.get("html", "")
 
 
 # --- profiles through the window's API --------------------------------------
@@ -635,6 +721,21 @@ def test_launch_does_not_ask_with_a_single_profile(tmp_path, monkeypatch):
     init_workspace(profiles.base_root())
     out = appmod.JsApi().launch()
     assert out["ask"] is False, "one profile is not a choice worth a screen"
+
+
+def test_the_run_that_created_the_workspace_asks_what_to_call_it(
+        tmp_path, monkeypatch):
+    """The one exception to the rule above: naming your own workspace is the
+    first decision a person should get to make, and it is free here."""
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout.config import init_workspace
+    from jobscout import profiles
+    init_workspace(profiles.base_root())
+
+    fresh = appmod.JsApi()
+    fresh._first_run = True                      # what main() sets after init
+    assert fresh.launch()["ask"] is True
+    assert fresh.launch()["ask"] is False, "still only once per run"
 
 
 def test_switching_rebinds_config_and_database(api):

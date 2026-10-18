@@ -116,21 +116,16 @@ sudo apt install python3-qtpy
 ## First run, on any platform
 
 jobscout keeps everything in `~/.jobscout/` (on Windows:
-`C:\Users\<you>\.jobscout\`). On first launch the app will tell you the config
-file it wanted and did not find. Create it, then open the app again:
+`C:\Users\<you>\.jobscout\`). You do not have to create that directory: on its
+first launch the app writes a commented default config into it and then asks
+who is using jobscout, because every profile is a workspace of its own. Name it
+or keep **Default** and you are in. A downloaded copy needs nothing else, and no
+terminal is involved.
+
+From a terminal, which is the same step taken earlier:
 
 ```bash
 jobscout init
-```
-
-If you installed the packaged app and have no `jobscout` command, run the
-initialiser from a source checkout:
-
-```bash
-git clone https://github.com/JPetsis/jobscout
-cd jobscout
-uv sync
-uv run jobscout init
 ```
 
 Then:
