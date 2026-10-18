@@ -84,6 +84,7 @@ async function boot() {
     wirePanes();
     render();
     checkForUpdates();          // async; never blocks the grid
+    maybeAutoScan();            // async; the backend decides whether it is due
   } catch (e) {
     fail(e);
   }
@@ -119,8 +120,62 @@ function renderStats() {
   box.append(' strong');
   if (s.run && s.run.id != null) {
     box.append('  ·  ');
-    box.appendChild(el('span', 'muted', 'run #' + s.run.id));
+    box.appendChild(el('span', 'muted', scanLine(s.run)));
   }
+}
+
+/* What the last look at the boards did, in words.
+
+   A run number answers nothing: when it happened and what it brought in is the
+   whole question for somebody coming back to the window after a day. */
+function scanLine(run) {
+  const when = timeAgo(run.finished_at || run.started_at);
+  let stats = {};
+  try { stats = JSON.parse(run.stats || '{}') || {}; } catch (e) { stats = {}; }
+  const brought = (stats.new != null) ? ' · brought in ' + stats.new + ' new' : '';
+  const partial = run.finished_at ? '' : ' (interrupted)';
+  return 'last scan ' + when + brought + partial;
+}
+
+function timeAgo(iso) {
+  if (!iso) return 'at an unknown time';
+  const t = Date.parse(iso);
+  if (!isFinite(t)) return 'at an unknown time';
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 90) return mins + ' min ago';
+  const hours = Math.round(mins / 60);
+  if (hours < 36) return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+  const days = Math.round(hours / 24);
+  return days + (days === 1 ? ' day ago' : ' days ago');
+}
+
+/* Look for new openings when the window opens, when the last look is old.
+
+   The decision belongs to the backend (preferences.scan_if_older_hours); this
+   only drives the same bar the button drives, so an automatic scan is not a
+   second kind of scan. It also never blocks the window: a scan that cannot
+   start leaves a grid that still works. */
+async function maybeAutoScan() {
+  let res = null;
+  try {
+    res = await pywebview.api.boot_scan();
+  } catch (e) {
+    return;
+  }
+  if (!res || !res.started) {
+    // say why not, on the button's tooltip, so "it did not scan" is answerable
+    if (res && res.reason) $('scan-btn').title = 'Scan now (' + res.reason + ')';
+    return;
+  }
+  $('scan-btn').disabled = true;
+  $('scan-bar').hidden = false;
+  $('scan-label').textContent = res.hours == null
+    ? 'looking for new openings…'
+    : 'looking for new openings (last one was ' + Math.round(res.hours) + 'h ago)…';
+  $('scan-fill').style.width = '0';
+  clearInterval(POLL);
+  POLL = setInterval(pollScan, 600);
 }
 
 function fillSources(list) {

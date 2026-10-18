@@ -12,6 +12,7 @@ import os
 import sys
 import threading
 import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import api, backup as backupmod, db as dbm, scanner, update as updatemod
@@ -252,6 +253,7 @@ class JsApi:
         self._staged: str | None = None          # a downloaded, verified build
         self._staged_version: str | None = None
         self._asked = False                      # see launch()
+        self._picker_shown = False                # see boot_scan()
 
     def matches(self, limit: int | None = None) -> list[dict]:
         """Matches under the stored profile, best first. Filtering is client-side.
@@ -340,6 +342,8 @@ class JsApi:
         rows = profmod.list_profiles()
         ask = len(rows) > 1 and not self._asked
         self._asked = True
+        # boot_scan must not fill a workspace the user has not chosen yet
+        self._picker_shown = ask
         return {"ask": ask, "profiles": rows,
                 "active": profmod.read_active()}
 
@@ -394,6 +398,51 @@ class JsApi:
         if SCAN is None:
             SCAN = ScanJob(self.cfg)
         return SCAN.start({s for s in only.split(",") if s} if only else set())
+
+    def boot_scan(self) -> dict:
+        """Look for new openings when the window opens, if the last look is old.
+
+        Everything time-based in this app is inert without regular scans: "fresh
+        from the source" is only meaningful if somebody looks daily, the
+        lead-time measurement stays a curiosity, and a role being re-advertised
+        is invisible. Until now that only happened when a person pressed Scan.
+
+        This is the cheap, cross-platform half of running by itself -- no
+        scheduler and no daemon, just a look on open. Two refusals matter:
+
+        * never while the profile picker is on screen. A profile is a whole
+          workspace, and scanning before the user has chosen would fill
+          whichever one happened to be current;
+        * never when a scan is already running.
+        """
+        from . import db as dbm
+        global SCAN
+        if getattr(self, "_picker_shown", False):
+            return {"started": False, "reason": "waiting for you to pick a profile"}
+        if SCAN is not None and SCAN.running:
+            return {"started": False, "reason": "already scanning"}
+        hours = float(self.cfg.prefs.get("scan_if_older_hours", 24) or 0)
+        if hours <= 0:
+            return {"started": False, "reason": "automatic scans are off"}
+        since = None
+        with dbm.LOCK:
+            run = dbm.get_run(self.conn)
+        if run is not None:
+            stamp = run["finished_at"] or run["started_at"]
+            try:
+                when = datetime.fromisoformat(str(stamp))
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+                since = (datetime.now(timezone.utc) - when).total_seconds() / 3600.0
+            except (ValueError, TypeError):
+                since = None       # unreadable timestamp: scan rather than assume
+        if since is not None and since < hours:
+            return {"started": False, "reason": f"last scan was {since:.1f}h ago",
+                    "hours": round(since, 1)}
+        started = self.start_scan("")
+        started["auto"] = True
+        started["hours"] = None if since is None else round(since, 1)
+        return started
 
     def scan_progress(self) -> dict:
         if SCAN is None:

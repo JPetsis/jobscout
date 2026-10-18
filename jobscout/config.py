@@ -22,6 +22,11 @@ preferences:
   # filters what it has, so this only needs to be large enough to cover the
   # board: the footer says when it is not.
   max_results: 2000
+  # Look for new openings when the window opens, if the last scan is older than
+  # this many hours. 0 turns it off and leaves scanning to the button. Nothing
+  # time-based works without this: "fresh from the source" needs regular looks,
+  # and so does anything measured from posting history.
+  scan_if_older_hours: 24
   # How recent a posting from the employer's own board has to be to count as
   # "fresh from the source" in the app. Only that tier gets the mark: an
   # aggregator carrying the same role later is a republisher, and the window

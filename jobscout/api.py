@@ -335,6 +335,15 @@ SETTINGS = [
      "group": "How strict",
      "label": "Ignore postings older than this",
      "help": "In days."},
+    {"key": "preferences.scan_if_older_hours", "op": "scalar", "kind": "number",
+     "default": 24,
+     "group": "How strict",
+     "label": "Look for new openings when the last scan is older than",
+     "help": "In hours, 0 to only ever scan when you press the button. This is "
+             "what keeps everything time-based honest: freshness, the lead-time "
+             "measurement, and a role being re-advertised all need the boards "
+             "to be looked at regularly. The window opens and works normally "
+             "while it scans."},
     {"key": "preferences.max_results", "op": "scalar", "kind": "number",
      "default": 2000,
      "group": "How strict",
@@ -467,7 +476,10 @@ def validate_setting(key: str, value):
         # which is slow on a big board but never hides one.
         if key.endswith("max_results") and not (0 <= int(value) <= 200000):
             raise ValueError(f"{key} must be between 0 and 200000 (0 loads everything)")
-        return int(value) if key.endswith(("max_age_days", "query_budget", "max_results")) \
+        if key.endswith("scan_if_older_hours") and not (0 <= int(value) <= 8760):
+            raise ValueError(f"{key} must be between 0 and 8760 (0 never scans by itself)")
+        return int(value) if key.endswith(("max_age_days", "query_budget",
+                                           "max_results", "scan_if_older_hours")) \
             else float(value)
 
     if kind == "bool":

@@ -7,6 +7,7 @@ out at launch, and a guard that only works on the platform it guards is untested
 """
 import re
 import types
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import threading
@@ -214,6 +215,103 @@ def test_the_window_does_not_ask_for_a_fixed_number(ws):
     assert "pywebview.api.matches()" in js
     assert "pywebview.api.matches(400)" not in js
     assert "matches loaded" in js, "the footer must be able to say the list was cut"
+
+
+# --- looking after itself --------------------------------------------------
+
+def _set_last_run(ws, *, started, finished="__same__"):
+    """Backdate the newest run, since start_run/finish_run always use now."""
+    from jobscout import db as dbm
+    from jobscout.config import load_config
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    rid = dbm.start_run(conn)
+    done = started if finished == "__same__" else finished
+    conn.execute("UPDATE runs SET started_at=?, finished_at=? WHERE id=?",
+                 (started, done, rid))
+    conn.commit()
+    conn.close()
+    return cfg
+
+
+def _fake_scan_started(monkeypatch):
+    calls = []
+    monkeypatch.setattr(appmod.JsApi, "start_scan",
+                        lambda self, only="": calls.append(only) or {"started": True})
+    return calls
+
+
+def test_it_looks_for_new_openings_on_open_when_the_last_look_is_old(ws, monkeypatch):
+    """Everything time-based here is inert without regular scans."""
+    calls = _fake_scan_started(monkeypatch)
+    _set_last_run(ws, started="2026-10-01T09:00:00+00:00")
+
+    out = appmod.JsApi().boot_scan()
+    assert out["started"] is True and out["auto"] is True
+    assert calls == [""], "it scans everything, not one source"
+
+
+def test_a_recent_scan_is_left_alone(ws, monkeypatch):
+    _fake_scan_started(monkeypatch)
+    now = datetime.now(timezone.utc)
+    _set_last_run(ws, started=(now - timedelta(hours=3)).isoformat(timespec="seconds"))
+
+    out = appmod.JsApi().boot_scan()
+    assert out["started"] is False
+    assert "3." in out["reason"] or "2." in out["reason"], out["reason"]
+
+
+def test_the_setting_can_turn_automatic_scans_off(ws, monkeypatch):
+    calls = _fake_scan_started(monkeypatch)
+    from jobscout import api
+    from jobscout.config import load_config
+    api.write_setting(load_config().path, "preferences.scan_if_older_hours", 0)
+
+    out = appmod.JsApi().boot_scan()
+    assert out["started"] is False
+    assert "off" in out["reason"]
+    assert calls == [], "and the button is still the way to scan"
+
+
+def test_a_scan_never_starts_before_the_profile_is_chosen(ws, monkeypatch):
+    """A profile is a whole workspace: scanning before the picker is answered
+    would fill whichever one happened to be current."""
+    calls = _fake_scan_started(monkeypatch)
+    _set_last_run(ws, started="2026-10-01T09:00:00+00:00")
+
+    api_obj = appmod.JsApi()
+    api_obj._picker_shown = True                 # what launch() sets
+    out = api_obj.boot_scan()
+    assert out["started"] is False
+    assert "pick a profile" in out["reason"]
+    assert calls == []
+
+
+def test_an_interrupted_scan_counts_as_stale(ws, monkeypatch):
+    """finished_at NULL means the app went away mid-scan: look again rather than
+    assume the boards were covered."""
+    calls = _fake_scan_started(monkeypatch)
+    _set_last_run(ws, started="2026-10-01T09:00:00+00:00", finished=None)
+
+    assert appmod.JsApi().boot_scan()["started"] is True
+    assert calls == [""]
+
+
+def test_an_unreadable_timestamp_scans_rather_than_assuming(ws, monkeypatch):
+    calls = _fake_scan_started(monkeypatch)
+    _set_last_run(ws, started="not a timestamp")
+
+    assert appmod.JsApi().boot_scan()["started"] is True
+    assert calls == [""]
+
+
+def test_the_header_says_what_the_last_scan_brought_in(ws):
+    """A run number answers nothing: when and what arrived is the question."""
+    js = (Path(__file__).resolve().parent.parent / "jobscout" / "web" / "app.js").read_text(encoding="utf-8")
+    assert "function scanLine(" in js
+    assert "function timeAgo(" in js
+    assert "maybeAutoScan()" in js, "the window never asks to scan"
+    assert "pywebview.api.boot_scan()" in js
 
 
 def test_missing_config_shows_a_window_instead_of_exiting_silently(monkeypatch, tmp_path):
