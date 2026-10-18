@@ -5,11 +5,16 @@
 
 # jobscout
 
-Local-first job search for DACH + remote roles. One command fetches postings from
-public job boards (LinkedIn's guest API, StepStone, XING, stellenanzeigen.de,
-karriere.at, jobs.ch, Arbeitnow, Berlin Startup Jobs, HN Who is hiring and more),
-scores them against your preferences with transparent rules, dedupes across
-sources, and writes a markdown digest.
+Local-first job search. One command fetches postings from public job boards
+(LinkedIn's guest API, StepStone, XING, stellenanzeigen.de, karriere.at, jobs.ch,
+Arbeitnow, Berlin Startup Jobs, HN Who is hiring and more), scores them against
+your preferences with transparent rules, dedupes across sources, and writes a
+markdown digest.
+
+It ships set up for DACH and remote roles, which is a default rather than a
+scope: the titles, the skills, the countries and the boards all live in
+`config.yaml`, the source list covers the US and the EU as well, and a profile in
+another field starts from an empty template.
 
 **No API keys, no accounts, no metered calls.** Every source is a public endpoint
 that a browser also uses. Your data (preferences, postings, digests) lives in
@@ -103,7 +108,7 @@ A profile is a whole workspace, not a filter over a shared pool:
   jobscout.db
   active-profile                which profile is in use
   profiles/
-    Archaeology/                a profile: its own config, database and reports
+    Part-time/                  a profile: its own config, database and reports
     Freelance/
 ```
 
@@ -120,9 +125,9 @@ than one profile exists), or from a terminal:
 
 ```
 jobscout profile                     # what exists, and what is in use
-jobscout profile create Archaeology  # a new, empty workspace
-jobscout profile use Archaeology     # switch to it
-jobscout profile remove Archaeology --yes
+jobscout profile create Part-time    # a new, empty workspace
+jobscout profile use Part-time       # switch to it
+jobscout profile remove Part-time --yes
 ```
 
 `remove` takes a backup into `~/jobscout-backups/` first and deletes nothing if
@@ -189,9 +194,9 @@ jobscout add-company URL
 
 ### Goals
 
-A goal is **one standalone target, never a bundle**. "Austria, senior,
-Düsseldorf" is not a goal, it is three goals and two countries that can never be
-true at once. Coherence is the acceptance test.
+A goal is **one standalone target, never a bundle**. "Senior, in Austria or
+Switzerland" is not a goal: the country half is two countries that can never both
+be true at once, so it is really three goals. Coherence is the acceptance test.
 
 Many goals can be defined, exactly one is active. The active goal is the
 **default view** for `list` and `triage`, so the count you see is a count you
@@ -343,38 +348,39 @@ not in `sources.enabled` yet.
 
 ## Looking inside what you have collected
 
-The store holds more than a list of links: 20k postings and 70+MB of advert
-text, and these four read it.
+The store keeps the whole advert, not just a link, and four features read that
+text.
 
 **Search the advert text.** Tick *in the advert text* next to the search box (or
-`jobscout list --text "laravel vue"`) and the words are looked for inside every
-advert, not just the titles. It is an FTS5 index, built on first use (about a
-second, ~30MB); words match from their start, so `ausgrab` finds *Ausgrabung*,
-and diacritics fold, so `grabung` finds *Graebung*. Each card shows the words
-that put it there, so a result can be checked rather than trusted.
+`jobscout list --text "team lead"`) and the words are looked for inside every
+advert, not just the titles. It is an FTS5 index, built on first use (a second or
+two, and tens of megabytes on a store of that size). Words match from their
+start, so `teach` finds *Teaching*, and diacritics fold, so `fur` finds *für*.
+Each card shows the words that put it there, so a result can be checked rather
+than trusted.
 
 **What the jobs pay.** The *Pay* button (or `jobscout salary`) reports what the
-postings advertise per year, from your own board. It never mixes currencies,
-never draws a range from fewer than five figures, and always says how many
-postings carry a number and which board supplied them. On a real store that was
-1,322 of 4,581, and 69% of those came from one board, which the report says out
-loud.
+postings in your own board advertise, per year. It never mixes currencies, never
+draws a range from fewer than five figures, and always says how many postings
+carry a number and which board supplied them. Coverage is part of the answer:
+some boards state pay in most adverts and others in almost none, so a figure
+drawn from one board is not a picture of the market.
 
 **Application deadlines.** An advert's closing date is read out of its text and
 shown on the card ("closes in 3 days", struck through once it has passed), with
-the sentence it came from in the tooltip. Only full adverts state one: 0.25% of
-stored teasers do, against 8 of 14 real academic adverts, so each scan spends
-`deadline_probe_per_scan` page fetches completing adverts, and
-`jobscout deadlines --fetch 40` does the same thing on demand. German and
-English phrasings are understood, and start dates deliberately are not.
+the sentence it came from in the tooltip. Teasers rarely state one and full
+adverts often do, which is why each scan spends `deadline_probe_per_scan` page
+fetches completing adverts, and `jobscout deadlines --fetch 40` does the same on
+demand. German and English phrasings are understood; start dates deliberately
+are not.
 
 **Fresh from the source.** Postings from a channel the employer publishes into
 themselves (nine ATS families, four academic portals, two public-sector sites)
 are marked, and *Fresh from the source* filters to the recent ones nobody has
-republished yet. The reason is measured rather than assumed: of 27,357 postings
-only 73 roles appear on more than one source, so what those boards bring is
-largely unavailable anywhere else. *Companies you follow* in Settings lists and
-edits that list, and `jobscout add-company <url>` adds to it from the CLI.
+republished yet. The reason is that the same role rarely appears on two boards
+at once, so the employer's own channel is usually the only place it is listed.
+*Companies you follow* in Settings lists and edits that list, and
+`jobscout add-company <url>` adds to it from the CLI.
 
 ## Restoring a backup
 
@@ -509,15 +515,15 @@ grouping the Settings screen uses, so the two read the same way:
 | `academics` | academic | Germany's academic jobs board (ZEIT group) |
 | `wissenschaftskarriere` | academic | Academic jobs portal (DE/AT/CH) |
 | `myscience` | academic | Science jobs in Germany, Switzerland and Austria |
-| `greenhouse` | your employers | Company boards — public job board API |
-| `ashby` | your employers | Company boards — public posting API |
-| `recruitee` | your employers | Public company boards API (`<host>/api/offers/`) |
-| `lever` | your employers | Company boards — public postings API |
-| `smartrecruiters` | your employers | Company boards — public postings API (+ detail for descriptions) |
-| `workable` | your employers | Company boards — public widget API |
-| `workday` | your employers | CXS — the per-company job API behind Fortune 500 careers sites |
-| `teamtailor` | your employers | Per-company boards with a public JSON Feed |
-| `join` | your employers | DACH SMB ATS with public per-company boards |
+| `greenhouse` | Company boards | Public job board API |
+| `ashby` | Company boards | Public posting API |
+| `recruitee` | Company boards | Public company boards API (`<host>/api/offers/`) |
+| `lever` | Company boards | Public postings API |
+| `smartrecruiters` | Company boards | Public postings API (+ detail for descriptions) |
+| `workable` | Company boards | Public widget API |
+| `workday` | Company boards | CXS — the per-company job API behind Fortune 500 careers sites |
+| `teamtailor` | Company boards | Per-company boards with a public JSON Feed |
+| `join` | Company boards | DACH SMB ATS with public per-company boards |
 
 The two keyed sources ship **disabled**. Enable them in Settings once you have a
 key. If you enable one without a key, the scan says so by name and prints the
