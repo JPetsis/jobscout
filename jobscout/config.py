@@ -27,6 +27,10 @@ preferences:
   # time-based works without this: "fresh from the source" needs regular looks,
   # and so does anything measured from posting history.
   scan_if_older_hours: 24
+  # How many days before its deadline a posting counts as "closing soon" in
+  # the app. Deadlines come from the full advert text, which the scan fetches a
+  # few of at a time (`deadline_probe_per_scan`), so this fills up over scans.
+  closing_days: 14
   # How recent a posting from the employer's own board has to be to count as
   # "fresh from the source" in the app. Only that tier gets the mark: an
   # aggregator carrying the same role later is a republisher, and the window
@@ -139,6 +143,13 @@ preferences:
   # 12). Rows are probed at most once ever; this is the per-scan budget.
   # 0 = off.
   detail_probe_per_scan: 10
+  # Its own budget for the separate pass that completes advert pages looking for
+  # an application deadline. Measured on real academic adverts, 8 of 14 state
+  # one, and almost none of the teasers do, so this is where a deadline comes
+  # from. Each one is a real page fetch on a real site (measured ~10s each on
+  # university sites), so this is also how much longer a scan takes. 0 turns the
+  # pass off, and `jobscout deadlines --fetch N` does the same thing on demand.
+  deadline_probe_per_scan: 25
 
   # --- ANYWHERE keywords (title + company + location + description) ---
   keywords: [agile, scrum, kanban]

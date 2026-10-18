@@ -15,9 +15,10 @@ from __future__ import annotations
 import json
 import pathlib
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from . import db as dbm
+from . import deadlines
 from . import salary as salmod
 from . import sources
 
@@ -150,6 +151,18 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
     out["direct_note"] = sources.direct_note(out.get("source") or "")
     out["age_days"] = posting_age_days(row)
     out["republished"] = list(twins or [])
+    # Deadlines are worded in Python, once, so the card, the pane and the
+    # summary cannot disagree about what "closes in 3 days" means.
+    when = _cell(row, "deadline_at").strip()
+    out["deadline_text"] = deadlines.describe(when) if when else ""
+    out["closes_in_days"] = None
+    if when:
+        try:
+            days = (date.fromisoformat(when[:10])
+                    - datetime.now(timezone.utc).date()).days
+            out["closes_in_days"] = days
+        except ValueError:
+            out["closes_in_days"] = None
     return out
 
 
@@ -370,6 +383,8 @@ def stats(conn, prefs: dict) -> dict:
         # the window the "fresh from the source" filter uses; the filter itself
         # runs in the window, which already has the rows
         "insider_days": float(prefs.get("insider_days", 7)),
+        # the window the "closing soon" filter uses, same reasoning
+        "closing_days": float(prefs.get("closing_days", 14)),
         # what the head start has actually measured so far, not what it promises
         "lead": lead,
         "histogram": hist,
@@ -440,6 +455,14 @@ SETTINGS = [
              "measurement, and a role being re-advertised all need the boards "
              "to be looked at regularly. The window opens and works normally "
              "while it scans."},
+    {"key": "preferences.closing_days", "op": "scalar", "kind": "number",
+     "default": 14,
+     "group": "How strict",
+     "label": "How close a deadline counts as closing soon",
+     "help": "In days. Deadlines are read out of the advert text, and only "
+             "from the full advert: most boards publish a teaser that has no "
+             "date in it at all, so 'Closing soon' fills up as the scan "
+             "completes the advert pages it can reach."},
     {"key": "preferences.max_results", "op": "scalar", "kind": "number",
      "default": 2000,
      "group": "How strict",
@@ -574,8 +597,10 @@ def validate_setting(key: str, value):
             raise ValueError(f"{key} must be between 0 and 200000 (0 loads everything)")
         if key.endswith("scan_if_older_hours") and not (0 <= int(value) <= 8760):
             raise ValueError(f"{key} must be between 0 and 8760 (0 never scans by itself)")
-        return int(value) if key.endswith(("max_age_days", "query_budget",
-                                           "max_results", "scan_if_older_hours")) \
+        if key.endswith("closing_days") and not (0 <= int(value) <= 365):
+            raise ValueError(f"{key} must be between 0 and 365")
+        return int(value) if key.endswith(("max_age_days", "query_budget", "max_results",
+                                           "scan_if_older_hours", "closing_days")) \
             else float(value)
 
     if kind == "bool":

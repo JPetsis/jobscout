@@ -336,6 +336,41 @@ board behind it, validates the token against the ATS API, appends it to
 `companies.<source>.tokens` in your config, and enables the source if it was
 not in `sources.enabled` yet.
 
+## Looking inside what you have collected
+
+The store holds more than a list of links: 20k postings and 70+MB of advert
+text, and these four read it.
+
+**Search the advert text.** Tick *in the advert text* next to the search box (or
+`jobscout list --text "laravel vue"`) and the words are looked for inside every
+advert, not just the titles. It is an FTS5 index, built on first use (about a
+second, ~30MB); words match from their start, so `ausgrab` finds *Ausgrabung*,
+and diacritics fold, so `grabung` finds *Graebung*. Each card shows the words
+that put it there, so a result can be checked rather than trusted.
+
+**What the jobs pay.** The *Pay* button (or `jobscout salary`) reports what the
+postings advertise per year, from your own board. It never mixes currencies,
+never draws a range from fewer than five figures, and always says how many
+postings carry a number and which board supplied them. On a real store that was
+1,322 of 4,581, and 69% of those came from one board, which the report says out
+loud.
+
+**Application deadlines.** An advert's closing date is read out of its text and
+shown on the card ("closes in 3 days", struck through once it has passed), with
+the sentence it came from in the tooltip. Only full adverts state one: 0.25% of
+stored teasers do, against 8 of 14 real academic adverts, so each scan spends
+`deadline_probe_per_scan` page fetches completing adverts, and
+`jobscout deadlines --fetch 40` does the same thing on demand. German and
+English phrasings are understood, and start dates deliberately are not.
+
+**Fresh from the source.** Postings from a channel the employer publishes into
+themselves (nine ATS families, four academic portals, two public-sector sites)
+are marked, and *Fresh from the source* filters to the recent ones nobody has
+republished yet. The reason is measured rather than assumed: of 27,357 postings
+only 73 roles appear on more than one source, so what those boards bring is
+largely unavailable anywhere else. *Companies you follow* in Settings lists and
+edits that list, and `jobscout add-company <url>` adds to it from the CLI.
+
 ## Restoring a backup
 
 If jobscout starts and finds no workspace, it looks for a backup first. That is
@@ -515,7 +550,16 @@ Known limitations, on purpose:
 
 ## Scheduling
 
-Run it whenever you like, or wire it to cron/launchd:
+The app looks for new openings by itself: when the window opens and the last
+scan is older than `preferences.scan_if_older_hours` (default 24, 0 to turn it
+off) it starts one in the background and the header says what it brought in
+("last scan 4 hours ago - brought in 214 new"). Nothing time-based works without
+regular scans, because freshness, the lead-time report and a role being
+re-advertised all need the boards to be looked at. This is the cheap,
+cross-platform half of running by itself, with no scheduler to install.
+
+For anything outside the window, run it whenever you like, or wire it to
+cron/launchd:
 
 ```cron
 0 8 * * * cd ~/Projekte/Personal/jobscout && uv run jobscout scan --quiet && uv run jobscout digest

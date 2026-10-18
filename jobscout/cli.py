@@ -8,12 +8,14 @@ import re
 import subprocess
 import sys
 import tarfile
-from datetime import datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from . import __version__
 from . import api                      # the contract the CLI and the GUI share
 from . import db as dbm
+from . import deadlines as deadlinesmod
+from . import sources
 from . import detail as detailmod
 from . import digest as digestmod
 from . import companies as companiesmod
@@ -404,11 +406,26 @@ def cmd_list(args) -> int:
         if not text_hits:
             print(ui.dim(f"nothing in the advert text matches “{args.text}”"))
             return 0
-    wide = goals_sel or wants_text      # never let the row limit cut a match away
+    # A stated deadline, read out of the advert text. Only rows whose advert
+    # states one can appear here, which is why the count is small at first.
+    closing = getattr(args, "closing", None)
+    # never let the row limit cut a match away from a filtered view
+    wide = bool(goals_sel or wants_text or closing is not None)
     rows = dbm.list_postings(conn, min_score=min_score, status=args.status,
                              source=args.source, limit=100000 if wide else args.limit)
     if wants_text:
         rows = [r for r in rows if r["id"] in text_hits][:args.limit]
+    if closing is not None:
+        today = datetime.now(timezone.utc).date()
+        def days_left(r):
+            try:
+                return (date.fromisoformat(str(r["deadline_at"])[:10]) - today).days
+            except (ValueError, TypeError):
+                return None
+        rows = [r for r in rows
+                if days_left(r) is not None and 0 <= days_left(r) <= int(closing)]
+        rows.sort(key=days_left)
+        rows = rows[:args.limit]
     if goals_sel:
         # goals only narrow the base profile; they never resurrect a filtered row
         rows = [r for r in rows
@@ -443,6 +460,10 @@ def cmd_list(args) -> int:
         badge = ui.score_text(f"{r['score']:5g}", r["score"], min_score, strong_th)
         tail = ui.dim(f"  {meta[:62]}") if meta else ""
         print(f"  {rid}  {badge}{status}{pill}  {r['title'][:58]}{tail}")
+        if r["deadline_at"]:
+            print(ui.dim(f"        {deadlinesmod.describe(r['deadline_at'])}"
+                         + (f"  ·  from the advert: “{r['deadline_note']}”"
+                            if r["deadline_note"] else "")))
         if text_hits:
             # where it matched, so the result is checkable rather than taken on
             # faith: a search that only says "trust me" is worse than no search
@@ -453,8 +474,89 @@ def cmd_list(args) -> int:
                      f"`--all-goals` shows the full pool"))
         return 0
     note = f" matching “{args.text}” in the advert text" if wants_text else ""
+    if closing is not None:
+        note += f" closing within {int(closing)} days"
     print(ui.dim(f"\n{len(rows)} shown{note} · min score {min_score:g} · "
                  f"strong ≥ {strong_th:g} · `jobscout list --filtered` shows the rejects"))
+    return 0
+
+
+def cmd_deadlines(args) -> int:
+    """Find application deadlines: in what is stored, and on the advert pages.
+
+    Two passes, because they cost very different things. Reading the text we
+    already have is free and finds almost nothing (0.25% of stored teasers on
+    this store state a deadline). Completing advert pages costs requests and
+    finds a lot -- 8 of 14 real academic adverts stated one -- so it is capped
+    per call and again per scan (`deadline_probe_per_scan`).
+    """
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    today = datetime.now(timezone.utc).date()
+    min_score = float(cfg.prefs.get("min_score", 6))
+
+    rows = conn.execute("SELECT id, description FROM postings "
+                        "WHERE description != '' AND deadline_at = ''").fetchall()
+    found = 0
+    for r in rows:
+        got = deadlinesmod.extract(r["description"], today=today)
+        if got:
+            dbm.set_deadline(conn, r["id"], got[0], got[1])
+            found += 1
+    print(ui.dim(f"  read the text already stored: {len(rows)} postings checked, "
+                 f"{found} deadline{'s' if found != 1 else ''} found"))
+
+    if args.fetch:
+        from .http import Fetcher
+        from . import scanner as scannermod
+        fetcher = Fetcher()
+
+        # Only boards that can actually be completed: a source without a detail
+        # fetcher cannot be asked for its advert page at all, and counting those
+        # as "tried and found nothing" is how a first run looks broken. The
+        # candidate list is deliberately wider than the cap for that reason.
+        cand = conn.execute("""
+            SELECT * FROM postings
+            WHERE dup_of IS NULL AND filtered = 0 AND deadline_at = ''
+              AND detail_fetched_at IS NULL AND score >= ?
+            ORDER BY first_seen_at DESC LIMIT ?""",
+            (min_score, max(400, int(args.fetch) * 8))).fetchall()
+        todo = [r for r in cand
+                if getattr(sources.REGISTRY.get(r["source"]), "fetch_detail", None)][:int(args.fetch)]
+        skipped = len(cand) - len(todo)
+        print(ui.dim(f"  completing {len(todo)} advert pages"
+                     + (f" ({skipped} skipped: those boards publish no advert page to read)"
+                        if skipped else "") + "…"))
+
+        got_any, empty = 0, 0
+        for row in todo:
+            fn = getattr(sources.REGISTRY.get(row["source"]), "fetch_detail")
+            try:
+                text = fn(dbm.row_to_posting(row), fetcher) or ""
+            except Exception as e:                            # noqa: BLE001
+                print(ui.dim(f"    could not read {row['source']}: {type(e).__name__}"))
+                continue
+            if not text:
+                empty += 1
+                continue
+            dbm.set_description(conn, row["id"], text)
+            got = scannermod._note_deadline(conn, row["id"], text)
+            if got:
+                got_any += 1
+                print(f"    {ui.green('deadline ' + got[0])}  "
+                      + ui.dim(f"{row['source']:16} {row['title'][:40]}  “{got[1][:60]}”"))
+        # Both numbers, because "3 of 25" is a different fact when 20 of them
+        # came back empty (a page we could not read) than when they were read
+        # and simply said nothing about a date.
+        print(ui.dim(f"  {got_any} of {len(todo)} advert pages stated a deadline"
+                     + (f"; {empty} came back with nothing readable" if empty else "")))
+
+    have = conn.execute("SELECT COUNT(*) FROM postings WHERE deadline_at != ''").fetchone()[0]
+    live = conn.execute("SELECT COUNT(*) FROM postings WHERE deadline_at != '' AND deadline_at >= ?",
+                        (today.isoformat(),)).fetchone()[0]
+    print(ui.bold(f"  {have} postings have a deadline now, {live} of them still ahead"))
+    print(ui.dim("  the app's 'Closing soon' filter uses these, and every scan "
+                 "completes a few more advert pages on its own"))
     return 0
 
 
@@ -1234,11 +1336,20 @@ def main(argv=None) -> int:
                    help="only postings whose advert text matches (all words, "
                         "partial words count). Builds the search index on first "
                         "use, which takes a moment.")
+    p.add_argument("--closing", nargs="?", const=14, type=int, metavar="DAYS",
+                   help="only postings whose advert states an application "
+                        "deadline within DAYS (default 14), soonest first")
     p.add_argument("--goal", action="append", metavar="NAME",
                    help="view this goal instead of the active one; repeatable, ALL given goals must match")
     p.add_argument("--all-goals", action="store_true", dest="all_goals",
                    help="ignore the active goal and show the full pool")
     p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("deadlines", help="find application deadlines in the adverts")
+    p.add_argument("--fetch", type=int, default=0, metavar="N",
+                   help="also complete up to N advert pages, which is where "
+                        "deadlines actually live (costs requests, politeness applies)")
+    p.set_defaults(fn=cmd_deadlines)
 
     p = sub.add_parser("salary", help="what the postings advertise, per year")
     p.add_argument("--text", metavar="WORDS",

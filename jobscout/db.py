@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS postings (
   filtered_reason TEXT NOT NULL DEFAULT '',
   dup_of INTEGER,
   status TEXT NOT NULL DEFAULT 'new',
+  deadline_at TEXT NOT NULL DEFAULT '',
+  deadline_note TEXT NOT NULL DEFAULT '',
   detail_fetched_at TEXT,
   expires_at TEXT NOT NULL DEFAULT ''
 );
@@ -109,6 +111,8 @@ CREATE TABLE IF NOT EXISTS runs (
 
 
 _NEW_COLUMNS = [
+    ("deadline_at", "TEXT NOT NULL DEFAULT ''"),
+    ("deadline_note", "TEXT NOT NULL DEFAULT ''"),
     ("salary_min", "REAL"),
     ("salary_max", "REAL"),
     ("salary_currency", "TEXT NOT NULL DEFAULT ''"),
@@ -410,6 +414,14 @@ def get_posting(conn, pid: int) -> sqlite3.Row | None:
 def set_status(conn, pid: int, status: str) -> None:
     with LOCK:
         conn.execute("UPDATE postings SET status=? WHERE id=?", (status, pid))
+        conn.commit()
+
+
+def set_deadline(conn: sqlite3.Connection, pid: int, when: str, note: str) -> None:
+    """Record an extracted deadline, and the words it came from."""
+    with LOCK:
+        conn.execute("UPDATE postings SET deadline_at=?, deadline_note=? WHERE id=?",
+                     (when or "", (note or "")[:400], int(pid)))
         conn.commit()
 
 

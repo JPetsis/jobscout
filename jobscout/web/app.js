@@ -8,7 +8,8 @@
 
 let ALL = [];                 // every match, unfiltered
 let STATS = {};               // header numbers
-const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false, text: false };
+const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false,
+            text: false, closing: false };
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
 let TEXT_TIMER = null;        // debounce for typing
@@ -228,6 +229,7 @@ function wireFilters() {
   $('source').addEventListener('change', (e) => { F.source = e.target.value; render(); });
   $('status').addEventListener('change', (e) => { F.status = e.target.value; render(); });
   $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
+  $('closing').addEventListener('change', (e) => { F.closing = e.target.checked; render(); });
 
   for (const b of document.querySelectorAll('#band button')) {
     b.addEventListener('click', () => {
@@ -237,6 +239,20 @@ function wireFilters() {
       render();
     });
   }
+}
+
+/* "Closing soon": the advert states a deadline and it is close.
+
+   The deadline is read from the full advert text by the scan, so this is the
+   one filter whose results GROW over time without anything new being posted. */
+function closingDays() {
+  const d = Number(STATS.closing_days ?? 14);
+  return isFinite(d) && d > 0 ? d : 14;
+}
+
+function closingSoon(r) {
+  const days = r.closes_in_days;
+  return days !== null && days !== undefined && days >= 0 && days <= closingDays();
 }
 
 /* Search inside the advert text.
@@ -279,6 +295,7 @@ function visible() {
     if (F.band === 'strong' && r.score < strongTh) return false;
     if (F.band === 'match' && r.score < minSc) return false;
     if (F.fresh && !freshFromSource(r)) return false;
+    if (F.closing && !closingSoon(r)) return false;
     if (F.q) {
       const hay = ((r.title || '') + ' ' + (r.company || '') + ' ' +
                    (r.location || '') + ' ' + (r.source || '')).toLowerCase();
@@ -304,6 +321,10 @@ function render() {
   if (F.fresh) {
     rows.sort((a, b) => (Number(a.age_days ?? 1e9) - Number(b.age_days ?? 1e9)));
   }
+  if (F.closing) {
+    // soonest deadline first: with the filter on, the order IS the answer
+    rows.sort((a, b) => (Number(a.closes_in_days ?? 1e9) - Number(b.closes_in_days ?? 1e9)));
+  }
 
   const strongTh = Number(STATS.strong_threshold ?? 10);
   const frag = document.createDocumentFragment();
@@ -315,6 +336,10 @@ function render() {
   $('fresh-text').textContent = nFresh
     ? 'Fresh from the source (' + nFresh + ')'
     : 'Fresh from the source';
+  const nClosing = ALL.filter(closingSoon).length;
+  $('closing-text').textContent = nClosing
+    ? 'Closing soon (' + nClosing + ')'
+    : 'Closing soon';
 
   // Never let a ceiling be silent: if the window was handed fewer rows than the
   // board holds, a filter can be hiding something without saying so.
@@ -355,6 +380,17 @@ function card(r, strongTh) {
     const c2 = el('span', 'chip also', 'also on ' + tw.source);
     c2.title = 'Another board carried this role on ' + String(tw.seen_at || '').slice(0, 10) + '.';
     top.appendChild(c2);
+  }
+  // A stated deadline, worded once in Python. The tooltip carries the words it
+  // came from, so a wrong one can be spotted rather than guessed at.
+  if (r.deadline_text) {
+    const gone = (r.closes_in_days ?? 0) < 0;
+    const chip = el('span', 'chip deadline' + (closingSoon(r) ? ' soon' : '') + (gone ? ' gone' : ''),
+                    r.deadline_text);
+    chip.title = r.deadline_note
+      ? 'From the advert: “' + r.deadline_note + '”'
+      : 'Deadline stated in the advert.';
+    top.appendChild(chip);
   }
   if (r.salary) top.appendChild(el('span', 'chip salary', r.salary));
   if (r.status && r.status !== 'new') {
@@ -652,6 +688,10 @@ function renderDetail(d) {
     put('Liveness', d.liveness.status +
       (d.liveness.note ? ' → ' + d.liveness.note : '') +
       (d.liveness.checked_at ? ' · checked ' + d.liveness.checked_at.slice(0, 10) : ''));
+  }
+  if (d.deadline_text) {
+    put('Deadline', d.deadline_text +
+      (d.deadline_note ? '  ·  from the advert: “' + d.deadline_note + '”' : ''));
   }
   if (d.status) put('Status', d.status);
   body.appendChild(dl);

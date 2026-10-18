@@ -181,6 +181,11 @@ body {
 .chip.direct { color: var(--blue); border-color: transparent; background: var(--chip); }
 .chip.direct.fresh { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.14); font-weight: 600; }
 .chip.also { color: var(--muted); border-style: dashed; }
+/* A stated application deadline. "soon" is the one that must not be missed;
+   "gone" is a closed advert kept for the record. */
+.chip.deadline { color: var(--muted); }
+.chip.deadline.soon { color: var(--warn, #b3261e); border-color: transparent; background: rgba(179,38,30,.10); font-weight: 600; }
+.chip.deadline.gone { opacity: .6; text-decoration: line-through; }
 /* The words a full-text search matched, on the card that matched them. */
 .snippet {
   margin-top: 6px;
