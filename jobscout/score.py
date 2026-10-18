@@ -262,6 +262,21 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
         s.filtered, s.reason = True, f"stack_min_hits:{len(stack_hits)}<{min_hits}"
         return s
 
+    # A posting whose TITLE matches none of your titles is not a match, however
+    # well it scores on the rest. The bonuses exist to RANK a relevant posting,
+    # not to make an irrelevant one relevant, and until this gate existed they
+    # could: measured on a real store, 211 of 1,293 matches had no title hit at
+    # all and reached the board on "unbefristet + Germany" alone. That is where
+    # the Product Managers, Collection Specialists and the museum curators came
+    # from. Set `require_title_match: false` to sweep a market by location only.
+    wants_titles = bool(prefs.get("title_terms"))
+    if (prefs.get("require_title_match", True) and wants_titles
+            and not title_relevant):
+        # An empty title list is not a strict profile, it is an unfinished one:
+        # gating on it would match nothing at all.
+        s.filtered, s.reason = True, "no_title_hit"
+        return s
+
     _boost(s, prefs.get("title_terms", []), title, "title",
            _num(prefs, "title_boost", 3), _num(prefs, "title_cap", 6))
     # The interest scale (`stack_preferred`, term -> 1..3) is scored FIRST and

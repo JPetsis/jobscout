@@ -455,6 +455,14 @@ SETTINGS = [
              "measurement, and a role being re-advertised all need the boards "
              "to be looked at regularly. The window opens and works normally "
              "while it scans."},
+    {"key": "preferences.require_title_match", "op": "scalar", "kind": "bool",
+     "default": True,
+     "group": "How strict",
+     "label": "Only match jobs whose title matches your job titles",
+     "help": "On by default, and the reason your board stays about your work: "
+             "permanent contract, location and keywords are bonuses on a "
+             "relevant posting, and with this off they are enough on their own, "
+             "which is how a museum curatorship ends up next to a PHP role."},
     {"key": "preferences.closing_days", "op": "scalar", "kind": "number",
      "default": 14,
      "group": "How strict",

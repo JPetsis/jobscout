@@ -41,7 +41,9 @@ def test_title_cap():
 
 
 def test_keyword_cap():
-    prefs = dict(PREFS, keyword_cap=1)
+    # about the keyword cap, not about relevance, hence the gate off: otherwise
+    # the title "x" would be filtered before the keywords were ever weighed
+    prefs = dict(PREFS, keyword_cap=1, require_title_match=False)
     sc = score_posting(prefs, mk(title="x", description="python docker"))
     assert sc.score == 1
 
@@ -77,9 +79,55 @@ def test_location_deny_and_require_match():
 
 
 def test_remote_bonus():
-    sc = score_posting(PREFS, mk(title="Developer", location="Remote (EU)"))
+    # the bonus is the subject; a title that misses `title_terms` would be
+    # filtered by the relevance gate first
+    sc = score_posting(dict(PREFS, require_title_match=False),
+                       mk(title="Developer", location="Remote (EU)"))
     assert sc.score == 3  # loc:remote +2, remote bonus +1
     assert "remote" in [r[0] for r in sc.reasons]
+
+
+def test_a_title_less_match_is_not_a_match():
+    """Measured on a real store: 211 of 1,293 matches had no title hit at all.
+
+    They arrived on the bonuses alone -- a permanent contract (+4) in Germany
+    (+2) reaches min_score 6 from zero relevance, which is how a museum
+    curator post ends up next to the PHP roles.
+    """
+    sc = score_posting(PREFS, mk(title="Abteilungsleiter Landesmuseum",
+                                 location="Halle (Saale)",
+                                 description="Die Stelle ist unbefristet."))
+    assert sc.filtered and sc.reason == "no_title_hit"
+    assert sc.score == 0
+
+
+def test_the_gate_can_be_turned_off_on_purpose():
+    """A location-only sweep is a legitimate thing to want, as long as that is
+    what you asked for."""
+    prefs = dict(PREFS, require_title_match=False)
+    sc = score_posting(prefs, mk(title="Abteilungsleiter Landesmuseum",
+                                 location="Halle (Saale)",
+                                 description="Die Stelle ist unbefristet."))
+    # not filtered: with the gate off the row is judged on the bonuses alone,
+    # and this fixture's location matches none of the test's preferences, so a
+    # score of 0 is the honest answer. What matters is that nothing rejected it.
+    assert not sc.filtered
+    assert sc.reason == ""
+
+
+def test_a_title_hit_still_admits_the_bonuses():
+    sc = score_posting(PREFS, mk(title="Softwareentwickler",
+                                 location="Berlin",
+                                 description="unbefristet, php"))
+    assert not sc.filtered
+    assert sc.score > 3, "title + location + contract"
+
+
+def test_an_empty_title_list_is_an_unfinished_profile_not_a_strict_one():
+    """The gate must be inert until there are titles to require: a fresh config
+    would otherwise match nothing at all."""
+    sc = score_posting({"title_terms": [], "keywords": []}, mk(title="Anything"))
+    assert not sc.filtered
 
 
 def test_empty_prefs_never_filters():
@@ -115,7 +163,8 @@ def test_stack_min_hits_gate():
 
 
 def test_description_terms_only_match_description():
-    prefs = dict(PREFS, description_terms=["tdd"], description_weight=2, description_cap=4)
+    prefs = dict(PREFS, description_terms=["tdd"], description_weight=2,
+                 description_cap=4, require_title_match=False)
     sc = score_posting(prefs, mk(title="TDD Developer", location="", description=""))
     assert "desc:tdd" not in [r[0] for r in sc.reasons]
     sc2 = score_posting(prefs, mk(title="Developer", location="", description="we practise tdd"))

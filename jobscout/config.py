@@ -27,6 +27,12 @@ preferences:
   # time-based works without this: "fresh from the source" needs regular looks,
   # and so does anything measured from posting history.
   scan_if_older_hours: 24
+  # A posting must match one of your job titles to be a match at all. The other
+  # signals (permanent contract, country, preferred city, keywords) are bonuses
+  # that RANK a relevant posting; without this gate they can carry an irrelevant
+  # one over `min_score` on their own. Turn it off to sweep a market by location
+  # only, knowing that is what you will get.
+  require_title_match: true
   # How many days before its deadline a posting counts as "closing soon" in
   # the app. Deadlines come from the full advert text, which the scan fetches a
   # few of at a time (`deadline_probe_per_scan`), so this fills up over scans.

@@ -4,7 +4,12 @@ from jobscout import db as dbm
 from jobscout.models import Posting
 from jobscout.score import prefs_hash, score_posting
 
-PREFS = {"title_terms": ["entwickler"], "title_boost": 3, "keywords": [], "exclude_terms": []}
+# These tests are about the DATABASE -- upsert, dedupe, listing, counting -- so
+# they switch the relevance gate off: a fixture titled "Junior" is a row to store
+# and filter on score, not a claim about anybody's job search. The gate itself is
+# tested in test_score.py.
+PREFS = {"title_terms": ["entwickler"], "title_boost": 3, "keywords": [],
+         "exclude_terms": [], "require_title_match": False}
 
 
 def _conn(tmp_path):
