@@ -85,6 +85,13 @@ def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
         return None
     if not desc:
         return None
+    # A fetch that says no more than the text already stored is a failed probe,
+    # not a shorter advert. Without this, a bad fetch replaced a 4,700-character
+    # advert with a 242-character teaser, stamped the row as done (so it was
+    # never retried) and froze its score at the teaser's points: the ALDI SUD
+    # PHP/Laravel role read 14 from XING and 19 from stellenanzeigen.de.
+    if not dbm._prefer_fresh(desc, row["description"] or ""):
+        return None
     dbm.set_description(conn, pid, desc)
     _note_deadline(conn, pid, desc)
     row = conn.execute("SELECT * FROM postings WHERE id=?", (pid,)).fetchone()

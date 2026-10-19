@@ -48,6 +48,33 @@ def test_probe_promotes_a_near_threshold_row_once(tmp_path):
                                        {"left": 1}, None) is None
 
 
+def test_a_shorter_fetch_is_a_failed_probe_not_a_new_teaser(tmp_path):
+    """The ALDI case: XING's detail fetch came back shorter than the text the
+    row already held, so the advert was replaced by its own teaser, the row was
+    stamped as fetched, and its score froze at the teaser's 14 while the same
+    role from stellenanzeigen.de scored 19."""
+    conn = dbm.connect(tmp_path / "db.sqlite")
+    full = ("Software Engineer PHP / Laravel. "
+            + "Wir arbeiten agil und mit modernen Werkzeugen. " * 80)
+    p = Posting(source="fake", title="Software Engineer", external_id="1",
+                url="https://example.invalid/1", description=full)
+    sc = score_posting(PREFS, p)           # title hits only: no permanence word
+    run = dbm.start_run(conn)
+    pid, _, _ = dbm.upsert(conn, p, sc, run, "2026-10-15T00:00:00+00:00")
+    teaser = "Bewirb Dich als Software Engineer bei ALDI SUED in Muelheim (Ruhr)."
+    mod = types.SimpleNamespace(fetch_detail=lambda post, fetcher: teaser)
+    cfg = types.SimpleNamespace(prefs=PREFS)
+    fetcher = types.SimpleNamespace(errors=[])
+
+    assert scanner._maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
+                                       {"left": 1}, None) is None
+    row = conn.execute("SELECT description, detail_fetched_at, score "
+                       "FROM postings WHERE id=?", (pid,)).fetchone()
+    assert row["description"] == full, "a failed probe must not shorten the advert"
+    assert row["detail_fetched_at"] is None, "and must not close the once-only gate"
+    assert row["score"] == sc.score
+
+
 def test_probe_also_bumps_rows_already_over_the_threshold(tmp_path):
     """The boost must apply on its merits, not only to near-misses: a match
     that already sits at 12 gets its detail completed and climbs to 16, so a
