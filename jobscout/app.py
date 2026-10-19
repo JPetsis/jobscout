@@ -220,7 +220,8 @@ class ScanJob:
         try:
             conn = dbm.connect(self.cfg.root / "jobscout.db")
             conn.execute("PRAGMA busy_timeout = 30000")
-            summary = scanner.scan(self.cfg, conn, Fetcher(), only=only,
+            delay = float(self.cfg.prefs.get("host_delay", 0.6) or 0)
+            summary = scanner.scan(self.cfg, conn, Fetcher(host_delay=delay), only=only,
                                    on_event=self._emit, cancel=self._cancel.is_set)
             with self.lock:
                 self.summary = summary

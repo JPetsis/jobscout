@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from . import db as dbm
@@ -140,8 +140,9 @@ def _fetch_source(cfg, mod, name: str, *, index: int, of: int, fetcher,
     except Exception as e:  # a broken source must never kill the run
         fetcher.errors.append(f"{name}: {type(e).__name__}: {e}")
         postings = []
+    failed = not postings and any(e.startswith(f"{name}:") for e in fetcher.errors)
     return {"name": name, "postings": postings, "index": index, "of": of,
-            "requests": fetcher.requests - before}
+            "requests": fetcher.requests - before, "ok": not failed}
 
 
 def _store_source(cfg, conn, mod, item: dict, *, run_id, min_score: float,
@@ -214,7 +215,8 @@ def scan(cfg, conn, fetcher, *,
          only: set[str] | None = None,
          on_event: OnEvent | None = None,
          cancel: Cancel | None = None,
-         post_sources: Callable[[], dict | None] | None = None) -> dict:
+         post_sources: Callable[[], dict | None] | None = None,
+         force: bool = False) -> dict:
     """Run one scan. Returns the summary dict the CLI prints and the app shows.
 
     `post_sources` runs after the source loop but BEFORE the run is closed, so
@@ -250,6 +252,32 @@ def scan(cfg, conn, fetcher, *,
     # re-resolve every source name through the registry on each loop pass.
     adapters = dict(iter_sources(cfg.enabled))
     names = [n for n in adapters if not only or n in only]
+
+    # The setting exists to stop a scan repeating work it just did, but only the
+    # boot scan honoured it: pressing Scan fetched all 47 sources again, 40
+    # minutes after the last one. A source counts as fresh when it was fetched
+    # successfully within the window; `force` overrides that.
+    fresh_hours = float(cfg.prefs.get("scan_if_older_hours", 0) or 0)
+    skipped_fresh: list[str] = []
+    if fresh_hours > 0 and not force and names:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=fresh_hours)
+        stamps = dbm.sources_scanned(conn)
+        due: list[str] = []
+        for n in names:
+            stamp = stamps.get(n)
+            fresh = False
+            if stamp:
+                try:
+                    fresh = datetime.fromisoformat(stamp) > cutoff
+                except ValueError:
+                    fresh = False
+            if fresh:
+                skipped_fresh.append(n)
+            else:
+                due.append(n)
+        if skipped_fresh:
+            emit({"kind": "skipped_fresh", "names": skipped_fresh, "hours": fresh_hours})
+        names = due
 
     # `--only X` where X exists but is NOT enabled scans nothing and looks
     # exactly like a source that had no jobs today. Name the skipped ones and
@@ -318,6 +346,9 @@ def scan(cfg, conn, fetcher, *,
         stats["sources"][r["name"]] = r["stats"]
         total_new += r["new"]
         matches.extend(r["matches"])
+        if item.get("ok"):
+            dbm.mark_source_scanned(
+                conn, r["name"], datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
     used_probes = probe_start - probe_budget["left"]
     if used_probes:
@@ -346,7 +377,7 @@ def scan(cfg, conn, fetcher, *,
         "strong_threshold": strong_th, "matches_top": matches,
         "errors": list(fetcher.errors), "requests": fetcher.requests,
         "sources": stats["sources"], "cancelled": stopped_early,
-        "unmarked": unmarked,
+        "unmarked": unmarked, "skipped_fresh": skipped_fresh,
     }
     emit({"kind": "done", **{k: v for k, v in summary.items() if k != "matches_top"}})
     return summary

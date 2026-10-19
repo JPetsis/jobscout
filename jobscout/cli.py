@@ -295,7 +295,7 @@ def cmd_scan(args) -> int:
         return {"verified": counts} if counts else None
 
     summary = scanner.scan(cfg, conn, fetcher, only=only, on_event=on_event,
-                           post_sources=post_sources)
+                           post_sources=post_sources, force=bool(getattr(args, "force", False)))
 
     min_score, strong_th = summary["min_score"], summary["strong_threshold"]
     if summary["matches_top"]:
@@ -755,22 +755,32 @@ def _flag(value) -> bool:
     return bool(value)
 
 
-def _fetcher() -> Fetcher:
+def _fetcher(cfg=None) -> Fetcher:
     """Fetcher with certifi's CA bundle when available.
 
     europa.eu (EURES) serves a GlobalSign chain that the macOS trust store does
     not carry, so the default context refuses the connection. Prefer adding the
     root over disabling verification; every other host works unchanged.
+
+    `host_delay` is read here so one setting governs the feeds and APIs that do
+    not ask for their own pace; the scrapers keep theirs, because a search page
+    is a different thing to hammer than a JSON endpoint.
     """
+    delay = 0.6
+    try:
+        delay = float((cfg or load_config()).prefs.get("host_delay", 0.6) or 0)
+    except Exception:                                         # noqa: BLE001
+        pass
     try:
         import certifi
         import ssl
-        return Fetcher(ssl_context=ssl.create_default_context(cafile=certifi.where()))
+        return Fetcher(host_delay=delay,
+                       ssl_context=ssl.create_default_context(cafile=certifi.where()))
     except ImportError as e:
         # Do not fail silently: hosts like europa.eu will then error per request.
         print(f"(certifi unavailable, TLS verification falls back to the system "
               f"store: {e})", file=sys.stderr)
-        return Fetcher()
+        return Fetcher(host_delay=delay)
 
 
 def _row_expires(row) -> str:
@@ -1314,6 +1324,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("scan", help="fetch all enabled sources, score, store new postings")
     p.add_argument("--only", help="comma-separated source names to run (e.g. stepstone,xing)")
     p.add_argument("--quiet", action="store_true")
+    p.add_argument("--force", action="store_true",
+                   help="re-fetch sources even if scanned within scan_if_older_hours")
     p.set_defaults(fn=cmd_scan)
 
     p = sub.add_parser("digest", help="write a markdown digest for a run (default: latest)")

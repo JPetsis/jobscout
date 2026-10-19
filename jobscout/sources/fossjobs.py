@@ -61,7 +61,7 @@ def parse(text: str) -> list[Posting]:
 
 def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
     try:
-        status, text = fetcher.get(FEED, host_delay=1.0)
+        status, text = fetcher.get(FEED)
     except Exception as e:                                      # noqa: BLE001
         fetcher.errors.append(f"{NAME}: {e}")
         return []

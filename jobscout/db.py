@@ -155,6 +155,25 @@ def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:20]
 
 
+SCAN_STAMP = "scan_at:"
+
+
+def mark_source_scanned(conn, name: str, when: str) -> None:
+    """Remember a successful fetch of one source, for the freshness gate."""
+    with LOCK:
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                     (SCAN_STAMP + name, when))
+        conn.commit()
+
+
+def sources_scanned(conn) -> dict[str, str]:
+    """{source: last successful scan time} for every source we have a stamp for."""
+    with LOCK:
+        return {r["key"][len(SCAN_STAMP):]: r["value"]
+                for r in conn.execute("SELECT key, value FROM meta WHERE key LIKE ?",
+                                      (SCAN_STAMP + "%",))}
+
+
 def canonical_url(url: str) -> str:
     """Strip query/fragment and trailing slash for stable fingerprints."""
     u = (url or "").strip()

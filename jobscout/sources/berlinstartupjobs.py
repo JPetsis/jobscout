@@ -56,7 +56,7 @@ def parse(text: str) -> list[Posting]:
 
 
 def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
-    status, text = fetcher.get(FEED, host_delay=1.0)
+    status, text = fetcher.get(FEED)
     if status != 200:
         fetcher.errors.append(f"berlinstartupjobs: HTTP {status}")
         return []

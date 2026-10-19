@@ -72,7 +72,7 @@ def parse(text: str) -> list[Posting]:
 
 
 def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
-    status, text = fetcher.get(FEED, host_delay=1.0)
+    status, text = fetcher.get(FEED)
     if status != 200:
         fetcher.errors.append(f"larajobs: HTTP {status}")
         return []
@@ -82,7 +82,7 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
     """No body in the feed: read the job page. Theme-agnostic main-region
     text first, the page's meta description as fallback (JS shells)."""
-    status, html = fetcher.get(p.url, host_delay=1.0)
+    status, html = fetcher.get(p.url)
     if status != 200 or not html:
         return None
     text = ""

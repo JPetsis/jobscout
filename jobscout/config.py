@@ -152,6 +152,12 @@ preferences:
   # match, not only to near-misses (a permanent 13 must outrank a fixed-term
   # 12). Rows are probed at most once ever; this is the per-scan budget.
   # 0 = off.
+  # Seconds between two requests to the SAME host, for sources that do not ask
+  # for their own pace (the scraper sources keep theirs). This is the scan's real
+  # cost: lever and teamtailor walk one request per company, so 150 companies at
+  # 0.6s is a minute and a half of pure waiting. Lower it if the boards you
+  # watch tolerate it; 0 disables the wait entirely (not recommended).
+  host_delay: 0.6
   # Sources are separate hosts, so they can be fetched at the same time. The
   # fetcher still waits 0.6s between requests to the SAME host, so politeness is
   # unchanged; 1 = the old one-at-a-time behaviour. Measured: 47 sources alone

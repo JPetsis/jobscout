@@ -34,6 +34,38 @@ def test_sources_scan_in_parallel_when_configured(tmp_path, monkeypatch):
     assert sorted(out["sources"]) == ["a", "b"]
 
 
+def test_a_source_scanned_inside_the_window_is_not_fetched_again(tmp_path, monkeypatch):
+    """47 sources took 26 minutes, and pressing Scan again 40 minutes later did
+    all of it again: the freshness setting was only honoured at boot."""
+    conn = dbm.connect(tmp_path / "db.sqlite")
+    cfg = types.SimpleNamespace(
+        prefs={"min_score": 6, "scan_workers": 1, "title_terms": [],
+               "scan_if_older_hours": 24},
+        enabled=set(), root=tmp_path)
+    calls = []
+
+    def make(name):
+        def fetch(settings, fetcher):
+            calls.append(name)
+            return []
+        return types.SimpleNamespace(fetch=fetch)
+
+    monkeypatch.setattr(scanner, "iter_sources",
+                        lambda enabled: [("a", make("a")), ("b", make("b"))])
+    monkeypatch.setattr(scanner, "source_settings", lambda cfg, name: {})
+
+    scanner.scan(cfg, conn, Fetcher())
+    assert calls == ["a", "b"]
+
+    calls.clear()
+    out = scanner.scan(cfg, conn, Fetcher())
+    assert calls == [], "nothing is due inside the window"
+    assert sorted(out["skipped_fresh"]) == ["a", "b"]
+
+    out = scanner.scan(cfg, conn, Fetcher(), force=True)
+    assert calls == ["a", "b"], "force overrides the window"
+
+
 def test_one_worker_keeps_the_old_order(tmp_path, monkeypatch):
     conn = dbm.connect(tmp_path / "db.sqlite")
     cfg = types.SimpleNamespace(

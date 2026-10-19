@@ -58,7 +58,7 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
         kw = slug(str(q.get("keywords", "")))
         for page in range(1, int(q.get("pages", 1)) + 1):
             url = f"{BASE}/jobs/{kw}?page={page}"
-            status, text = fetcher.get(url, host_delay=1.0)
+            status, text = fetcher.get(url)
             if status != 200:
                 fetcher.errors.append(f"karriere_at: HTTP {status} for '{q.get('keywords')}' page {page}")
                 continue

@@ -88,7 +88,7 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
     cursor = None
     for page in range(max_pages):
         url = API + (f"&cursor={urllib.parse.quote(cursor)}" if cursor else "")
-        status, text = fetcher.get(url, host_delay=1.0)
+        status, text = fetcher.get(url)
         if status != 200:
             fetcher.errors.append(f"himalayas: HTTP {status} after {page} page(s)")
             break

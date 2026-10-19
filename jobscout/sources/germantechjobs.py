@@ -73,7 +73,7 @@ def parse_items(text: str, source: str) -> list[Posting]:
 
 def fetch_feed(fetcher: Fetcher, url: str, source: str) -> list[Posting]:
     try:
-        status, text = fetcher.get(url, host_delay=1.0)
+        status, text = fetcher.get(url)
     except Exception as e:                                      # noqa: BLE001
         fetcher.errors.append(f"{source}: {e}")
         return []
