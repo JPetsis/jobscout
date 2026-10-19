@@ -8,6 +8,7 @@ from __future__ import annotations
 import gzip
 import json
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -39,6 +40,16 @@ class Fetcher:
         self.requests = 0
         self.errors: list[str] = []
         self._last: dict[str, float] = {}
+        # Sources are fetched in parallel, and several of them can share a host
+        # (nine company boards all sit on boards-api.greenhouse.io). The lock is
+        # per host, so politeness is per host while different hosts still run at
+        # the same time.
+        self._host_locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+
+    def _host_lock(self, host: str) -> threading.Lock:
+        with self._locks_guard:
+            return self._host_locks.setdefault(host, threading.Lock())
 
     def _headers(self, extra: dict | None = None) -> dict:
         h = {
@@ -62,6 +73,13 @@ class Fetcher:
     def get(self, url: str, headers: dict | None = None,
             host_delay: float | None = None) -> tuple[int, str]:
         host = urllib.parse.urlsplit(url).netloc
+        # Held across the wait AND the request: the delay must be measured from
+        # the end of the previous request to that host, not from its start.
+        with self._host_lock(host):
+            return self._get(url, host, headers, host_delay)
+
+    def _get(self, url: str, host: str, headers: dict | None,
+             host_delay: float | None) -> tuple[int, str]:
         h = self._headers(headers)
         attempt = 0
         while True:

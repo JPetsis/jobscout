@@ -152,6 +152,11 @@ preferences:
   # match, not only to near-misses (a permanent 13 must outrank a fixed-term
   # 12). Rows are probed at most once ever; this is the per-scan budget.
   # 0 = off.
+  # Sources are separate hosts, so they can be fetched at the same time. The
+  # fetcher still waits 0.6s between requests to the SAME host, so politeness is
+  # unchanged; 1 = the old one-at-a-time behaviour. Measured: 47 sources alone
+  # took 26 minutes, almost all of it waiting on the network.
+  scan_workers: 4
   detail_probe_per_scan: 10
   # Its own budget for the separate pass that completes advert pages looking for
   # an application deadline. Measured on real academic adverts, 8 of 14 state

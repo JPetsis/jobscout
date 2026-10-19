@@ -15,6 +15,8 @@ next one, which is what "cancel" needs to mean here.
 """
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -23,7 +25,7 @@ from . import deadlines
 from . import salary as salmod
 from .config import source_settings
 from .http import FetchError
-from .score import contract_label_from_reasons, prefs_hash, score_posting
+from .score import Score, contract_label_from_reasons, prefs_hash, score_posting
 from .sources import iter_sources
 
 Event = dict
@@ -32,7 +34,7 @@ Cancel = Callable[[], bool]
 
 
 def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
-                        dup, deadline_budget: dict | None = None) -> float | None:
+                        dup, deadline_budget: dict | None = None) -> Score | None:
     """Complete the detail page of a match once, then rescore.
 
     WHY: a match may only LOOK weaker than it is because its contract type
@@ -121,6 +123,93 @@ def _note_deadline(conn, pid, text) -> tuple[str, str] | None:
     return got
 
 
+def _fetch_source(cfg, mod, name: str, *, index: int, of: int, fetcher,
+                  emit) -> dict:
+    """Fetch one source. Network only: no database, no score, no budget.
+
+    Sources are separate hosts, so these run in parallel; storage stays on the
+    thread that owns the connection, because SQLite here gives us one.
+    """
+    emit({"kind": "source_start", "name": name, "index": index, "of": of})
+    before = fetcher.requests
+    try:
+        postings = mod.fetch(source_settings(cfg, name), fetcher)
+    except FetchError as e:
+        fetcher.errors.append(f"{name}: {e.message}")
+        postings = []
+    except Exception as e:  # a broken source must never kill the run
+        fetcher.errors.append(f"{name}: {type(e).__name__}: {e}")
+        postings = []
+    return {"name": name, "postings": postings, "index": index, "of": of,
+            "requests": fetcher.requests - before}
+
+
+def _store_source(cfg, conn, mod, item: dict, *, run_id, min_score: float,
+                  strong_th: float, probe_budget: dict, deadline_budget: dict,
+                  fetcher, emit) -> dict:
+    """Store what one fetch returned: upsert, score, probe, prune."""
+    name = item["name"]
+    postings = item["postings"]
+    new_count = match_count = 0
+    found: list[tuple] = []
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for p in postings:
+        if not p.is_valid():
+            continue
+        salmod.fill(p)
+        sc = score_posting(cfg.prefs, p)
+        pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now, cfg.prefs)
+        # A deadline is worth recording whenever the text has one, and free
+        # to look for: no network, just the teaser we already have.
+        if p.description:
+            _note_deadline(conn, pid, p.description)
+        if is_new:
+            new_count += 1
+            if not sc.filtered and dup is None and sc.score >= min_score:
+                match_count += 1
+                found.append((pid, sc.score, p.title, p.company, p.location,
+                              contract_label_from_reasons(sc.reasons)))
+        probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
+                                     probe_budget, dup, deadline_budget)
+        if probed is not None:
+            if probed.score >= strong_th:
+                emit({"kind": "promoted", "id": pid, "score": probed.score,
+                      "title": p.title})
+            if is_new:
+                for i, m in enumerate(found):
+                    if m[0] == pid:
+                        found[i] = (pid, probed.score, p.title, p.company,
+                                    p.location,
+                                    contract_label_from_reasons(probed.reasons))
+                        break
+
+    source_stats = {
+        "fetched": len(postings),
+        "new": new_count,
+        "matches": match_count,
+        "requests": item["requests"],
+    }
+    # A source may declare its own post-scan housekeeping (e.g. himalayas
+    # pruning rows that can never be liveness-verified). Optional hook: a
+    # module without `prune_unverifiable` is simply skipped.
+    prune = getattr(mod, "prune_unverifiable", None)
+    if prune is not None:
+        try:
+            removed = prune(conn, {**source_settings(cfg, name),
+                                   "prune_below_score": min_score})
+        except Exception as e:  # housekeeping must never kill the run
+            fetcher.errors.append(
+                f"{name}: prune failed: {type(e).__name__}: {e}")
+            removed = 0
+        if removed:
+            source_stats["pruned"] = removed
+            emit({"kind": "pruned", "name": name, "removed": removed})
+    emit({"kind": "source_done", "name": name, "index": item["index"],
+          "of": item["of"], "fetched": len(postings), "new": new_count,
+          "matches": match_count})
+    return {"name": name, "stats": source_stats, "new": new_count, "matches": found}
+
+
 def scan(cfg, conn, fetcher, *,
          only: set[str] | None = None,
          on_event: OnEvent | None = None,
@@ -178,78 +267,57 @@ def scan(cfg, conn, fetcher, *,
           "count": len(names), "min_score": min_score, "strong_threshold": strong_th})
 
     stopped_early = False
-    for index, name in enumerate(names):
+    workers = max(1, int(cfg.prefs.get("scan_workers", 1) or 1))
+    workers = min(workers, max(1, len(names)))
+    emit_lock = threading.Lock()
+
+    def safe_emit(e: Event) -> None:
+        # Progress callbacks are not thread-safe (the CLI redraws a line in
+        # place), and two sources finishing together would tear the output.
+        with emit_lock:
+            emit(e)
+
+    items: list[dict] = []
+    if workers == 1:
+        for index, name in enumerate(names):
+            if cancelled():
+                stopped_early = True
+                safe_emit({"kind": "cancelled", "after": index, "of": len(names)})
+                break
+            items.append(_fetch_source(cfg, adapters[name], name, index=index,
+                                       of=len(names), fetcher=fetcher,
+                                       emit=safe_emit))
+    else:
+        # Sources are separate hosts, so fetching them together is still polite:
+        # the fetcher keeps its 0.6s wait per host. Storage stays serial, because
+        # SQLite hands us one connection and storage is cheap next to a fetch.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(_fetch_source, cfg, adapters[name], name,
+                            index=i, of=len(names), fetcher=fetcher,
+                            emit=safe_emit): name
+                for i, name in enumerate(names)
+            }
+            for fut in as_completed(futures):
+                name = futures[fut]
+                try:
+                    items.append(fut.result())
+                except Exception as e:  # one source must never kill the run
+                    fetcher.errors.append(
+                        f"{name}: scan crashed: {type(e).__name__}: {e}")
+
+    for item in items:
         if cancelled():
             stopped_early = True
-            emit({"kind": "cancelled", "after": index, "of": len(names)})
             break
-        mod = adapters[name]
-        emit({"kind": "source_start", "name": name, "index": index, "of": len(names)})
-        settings = source_settings(cfg, name)
-        before = fetcher.requests
-        try:
-            postings = mod.fetch(settings, fetcher)
-        except FetchError as e:
-            fetcher.errors.append(f"{name}: {e.message}")
-            postings = []
-        except Exception as e:  # a broken source must never kill the run
-            fetcher.errors.append(f"{name}: {type(e).__name__}: {e}")
-            postings = []
-        new_count = match_count = 0
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        for p in postings:
-            if not p.is_valid():
-                continue
-            salmod.fill(p)
-            sc = score_posting(cfg.prefs, p)
-            pid, is_new, dup = dbm.upsert(conn, p, sc, run_id, now, cfg.prefs)
-            # A deadline is worth recording whenever the text has one, and free
-            # to look for: no network, just the teaser we already have. Most
-            # boards publish no deadline at all (0.25% of stored teasers on this
-            # store), which is exactly why the probe below exists.
-            if p.description:
-                _note_deadline(conn, pid, p.description)
-            if is_new:
-                new_count += 1
-                if not sc.filtered and dup is None and sc.score >= min_score:
-                    match_count += 1
-                    matches.append((pid, sc.score, p.title, p.company, p.location,
-                                    contract_label_from_reasons(sc.reasons)))
-            probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
-                                         probe_budget, dup, deadline_budget)
-            if probed is not None:
-                if probed.score >= strong_th:
-                    emit({"kind": "promoted", "id": pid, "score": probed.score,
-                          "title": p.title})
-                if is_new:
-                    for i, m in enumerate(matches):
-                        if m[0] == pid:
-                            matches[i] = (pid, probed.score, p.title, p.company,
-                                          p.location,
-                                          contract_label_from_reasons(probed.reasons))
-                            break
-        stats["sources"][name] = {
-            "fetched": len(postings),
-            "new": new_count,
-            "matches": match_count,
-            "requests": fetcher.requests - before,
-        }
-        # A source may declare its own post-scan housekeeping (e.g. himalayas
-        # pruning rows that can never be liveness-verified). Optional hook: a
-        # module without `prune_unverifiable` is simply skipped.
-        prune = getattr(mod, "prune_unverifiable", None)
-        if prune is not None:
-            try:
-                removed = prune(conn, {**settings, "prune_below_score": min_score})
-            except Exception as e:  # housekeeping must never kill the run
-                fetcher.errors.append(f"{name}: prune failed: {type(e).__name__}: {e}")
-                removed = 0
-            if removed:
-                stats["sources"][name]["pruned"] = removed
-                emit({"kind": "pruned", "name": name, "removed": removed})
-        total_new += new_count
-        emit({"kind": "source_done", "name": name, "index": index, "of": len(names),
-              "fetched": len(postings), "new": new_count, "matches": match_count})
+        r = _store_source(cfg, conn, adapters[item["name"]], item,
+                          run_id=run_id, min_score=min_score, strong_th=strong_th,
+                          probe_budget=probe_budget,
+                          deadline_budget=deadline_budget, fetcher=fetcher,
+                          emit=safe_emit)
+        stats["sources"][r["name"]] = r["stats"]
+        total_new += r["new"]
+        matches.extend(r["matches"])
 
     used_probes = probe_start - probe_budget["left"]
     if used_probes:
