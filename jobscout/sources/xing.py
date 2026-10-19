@@ -19,6 +19,28 @@ _RE_COMPANY = re.compile(r'job-teaser-list-item-styles__Company[^"]*"[^>]*>([^<]
 _RE_LOC = re.compile(r'multi-location-display-styles__Container[^"]*"[^>]*>.*?<p[^>]*>([^<]+)', re.S)
 _RE_DATE_ISO = re.compile(r'job-teaser-list-item-styles__PublicationDate[^"]*"[^>]*>.*?<time[^>]*dateTime="([^"]+)"', re.S)
 _RE_DATE_TEXT = re.compile(r'job-teaser-list-item-styles__PublicationDate[^"]*"[^>]*>.*?<span[^>]*>([^<]{2,40})<', re.S)
+# Pay sits in the same "marker" pill as the employment type ("Vollzeit"), with no
+# testid to tell them apart: the two are identical markup with different text.
+# On one Berlin search page 17 of 18 cards carried a salary this way,
+# and every one of them was being thrown away -- the card showed "70.000 €" and
+# the store kept no figure at all.
+_RE_MARKER = re.compile(r'data-xds="Marker"[^>]*>(.*?)</span>\s*</span>', re.S)
+_RE_TAG = re.compile(r"<[^>]+>")
+_RE_MONEY = re.compile(r"€|\bEUR\b", re.I)
+_RE_DIGIT = re.compile(r"\d")
+
+
+def _pay(chunk: str) -> str:
+    """The salary pill's text ("70.000 €", "50.000 – 60.000 €"), or "".
+
+    A marker counts as pay when it carries a currency; everything else in that
+    row ("Vollzeit", "Hybrid", "Senior") is employment metadata, not money.
+    """
+    for m in _RE_MARKER.finditer(chunk):
+        text = clean_html(_RE_TAG.sub(" ", m.group(1)))
+        if text and _RE_MONEY.search(text) and _RE_DIGIT.search(text):
+            return text
+    return ""
 
 
 def _cards(text: str) -> list[str]:
@@ -56,6 +78,7 @@ def parse(text: str) -> list[Posting]:
             url=(BASE + href) if href.startswith("/") else href,
             external_id=href.rsplit("-", 1)[-1] if href else "",
             posted_at=posted,
+            compensation=_pay(chunk),
         ))
     return out
 

@@ -29,6 +29,22 @@ def test_stepstone(fixture_text, strip_styles):
     assert "<" not in p.location
 
 
+def test_xing_reads_the_pay_pill(fixture_text, strip_styles):
+    """Two real cards: one advertises 70.000 €, one advertises nothing.
+
+    The pill and the employment type are the same element with different words,
+    so the parser has to decide by content. Before this, both were ignored and
+    the store kept no figure for a posting whose card showed one.
+    """
+    postings = xing.parse(strip_styles(fixture_text("xing_salary_cards.html")))
+    assert len(postings) == 2
+    with_pay, without = postings
+    assert "Laravel" in with_pay.title
+    assert with_pay.compensation.startswith("70.000")
+    assert with_pay.compensation.endswith("€")
+    assert without.compensation == "", "no pill must not become a guess"
+
+
 def test_xing(fixture_text, strip_styles):
     postings = xing.parse(strip_styles(fixture_text("xing_list.html")))
     assert len(postings) == 2
