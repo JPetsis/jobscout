@@ -82,6 +82,49 @@ def test_annual_budget_is_not_a_salary():
     assert ok and ok["min"] == 18000 and ok["period"] == "year"
 
 
+def test_benefit_money_is_not_salary():
+    """A real Gymondo advert, which publishes no salary at all.
+
+    It says "Salary band: shared before your first interview" and then lists
+    "€30 monthly mobility budget" and "€1,000 annual training budget". Grouping
+    every EUR amount in that text produced a 30-1000 EUR monthly range, which is
+    worse than no figure: it looks like a real band and it is a bike subsidy.
+    """
+    gymondo = (
+        "Success requires positive energy.\n"
+        "\U0001f3d6\ufe0f 30 days of vacation per year + Christmas Eve & New Year's Eve\n"
+        "\U0001f6b2 \u20ac30 monthly mobility budget via Navit\n"
+        "\U0001f4da \u20ac1,000 annual training budget + a wide range of opportunities "
+        "for personal growth and development\n")
+    assert salmod.parse("", gymondo, "") is None
+    assert salmod.parse("", "\u20ac30 monthly mobility budget via Navit", "") is None
+    assert salmod.parse("", "\u20ac1,000 annual training budget", "") is None
+
+    # ...and the salary beside those benefits is still read, on both sides of it
+    both = gymondo + "Salary: \u20ac60,000 - \u20ac80,000 per year"
+    got = salmod.parse("", both, "")
+    assert got and got["min"] == 60000 and got["max"] == 80000
+    after = ("Salary: \u20ac60,000 - \u20ac80,000 per year. " + gymondo)
+    got = salmod.parse("", after, "")
+    assert got and got["min"] == 60000 and got["max"] == 80000
+
+    # a pay word rescues an amount that merely mentions a budget
+    named = salmod.parse("", "The salary budget for this role is \u20ac70,000 per year", "")
+    assert named and named["max"] == 70000
+
+    # ...and the plain words "benefit", "benefits" and "allowance" are NOT
+    # budget words: an early version matched them within 60 characters and
+    # cleared 753 real salaries ("£80k + benefits", "benefits of our package")
+    for text, lo, hi in (
+            ("Compensation: benefit from competitive salaries, starting from "
+             "\u00a380k and above", 80000, 80000),
+            ("\u00a380,000 - \u00a395,000 + benefits", 80000, 95000),
+            ("Salary \u20ac60,000 per year plus a \u20ac1,000 training budget", 60000, 60000),
+    ):
+        got = salmod.parse("", text, "")
+        assert got and got["min"] == lo and got["max"] == hi, (text, got)
+
+
 def test_giant_ids_and_headcounts_are_not_salaries():
     noisy = ("You have 4 to 6 years of experience in Controlling. Collaborate with a "
              "diverse team of 3,000+ people. Ref 7246471902838317000 and "

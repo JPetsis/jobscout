@@ -44,6 +44,24 @@ _PAYWORD_RE = re.compile(
     r"(salary|compensation|gehalt|remuneration|vergütung|we\s+pay|pay\s+range|"
     r"brutto|\brate\b|lohn|entgelt|\bpay\b|ote\b|per year|per hour|per month|"
     r"monatlich|jährlich|annual|hourly|salary range)", re.I)
+# Money that belongs to a BUDGET, not to the salary: "€30 monthly mobility
+# budget", "€1,000 annual training budget", "an annual development budget of
+# €2,000". An advert that publishes no salary at all still lists these, and
+# grouping every EUR amount in the text turned two of them into a 30-1000 EUR
+# monthly "range" (the Gymondo advert, which says "Salary band: shared before
+# your first interview").
+#
+# The word has to sit NEXT TO the amount: within three words after it, or
+# before it as "budget of €". A wide window is how this rule first went wrong --
+# matching the plain word "benefit" within 60 characters cleared 753 real
+# salaries, because "£80k + benefits" and "benefits of our compensation package"
+# are pay. Only the budget families qualify, and a pay word next to the amount
+# still wins: "the salary budget for this role is €70,000" is pay.
+_BUDGET_WORD = (r"(?:budget|weiterbild\w*|fortbild\w*|bildungsbudget|"
+                r"entwicklungsbudget|trainingsbudget)")
+_BUDGET_BEFORE = re.compile(_BUDGET_WORD + r"\s*(?:of|von|:|-|\u2013)?\s*$", re.I)
+_BUDGET_AFTER = re.compile(r"^\s*(?:\w+[\s,]+){0,2}?" + _BUDGET_WORD, re.I)
+
 # above this, a currency-less number only counts when the word is unambiguous pay
 _STRONG_HINT_RE = re.compile(
     r"(salary|gehalt|compensation|remuneration|vergütung|lohn|entgelt|brutto|"
@@ -147,12 +165,33 @@ def _units(text: str) -> list[tuple[int, int, float, float, str]]:
     return units
 
 
+def _is_benefit(text: str, start: int, end: int) -> bool:
+    """True when the money is budget money rather than pay.
+
+    Both sides are read, because "€30 monthly mobility budget" puts the word
+    after the number and "development budget of €2,000" puts it before. The pay
+    word check comes first so a "salary budget" still counts as pay.
+    """
+    before = text[max(0, start - 45): start]
+    hit = _BUDGET_BEFORE.search(before)
+    if hit:
+        # "salary budget of €70,000" is pay even though it says budget; the
+        # word in front of "budget" is what decides, not the distance to any
+        # pay word, because "Salary €60,000 ... €1,000 training budget" has
+        # "salary" 30 characters away from a training budget and would keep it.
+        head = before[:hit.start()]
+        if re.search(r"(?:salary|gehalt|verg\u00fctung|compensation|pay)s?[\s:,-]*$", head, re.I):
+            return False
+        return True
+    return bool(_BUDGET_AFTER.search(text[end: end + 45]))
+
+
 def _parse_text(text: str) -> dict | None:
     """Best salary reading from one piece of text, or None."""
     if not text:
         return None
     text = _SPACED_NUM_RE.sub("", text)   # "15 600" -> "15600"
-    units = _units(text)
+    units = [u for u in _units(text) if not _is_benefit(text, u[0], u[1])]
     if not units:
         return None
 
