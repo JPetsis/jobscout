@@ -240,3 +240,15 @@ def test_no_location_config_at_all_never_filters():
     prefs = {"min_score": 0, "title_terms": ["developer"]}
     for loc in ("Berlin", "Wien", "", "Remote", "Timbuktu"):
         assert not score_posting(prefs, _p(loc)).filtered
+
+
+def test_place_key_folds_the_ways_boards_spell_one_city():
+    """The duplicate key used the location verbatim, so one advert on two boards
+    ("Mülheim (Ruhr)" and "Mülheim an der Ruhr") never matched itself."""
+    assert geo.place_key("Mülheim (Ruhr)") == geo.place_key("Mülheim an der Ruhr")
+    assert geo.place_key("Berlin, Deutschland") == "berlin"
+    assert geo.place_key("Vienna") == geo.place_key("Wien")
+    assert geo.place_key("Munich") == geo.place_key("München")
+    # the parenthesised word is information: these are different cities
+    assert geo.place_key("Frankfurt (Oder)") != geo.place_key("Frankfurt am Main")
+    assert geo.place_key("Frankfurt am Main") == "frankfurt main"

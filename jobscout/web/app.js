@@ -377,7 +377,7 @@ function card(r, strongTh) {
   // A republisher picked it up. Worth showing rather than hiding: it is the
   // clock running out on the head start, and the date says how fast.
   for (const tw of (r.republished || [])) {
-    const c2 = el('span', 'chip also', 'also on ' + tw.source);
+    const c2 = el('span', 'chip also', (tw.parent ? 'first seen on ' : 'also on ') + tw.source);
     c2.title = 'Another board carried this role on ' + String(tw.seen_at || '').slice(0, 10) + '.';
     top.appendChild(c2);
   }
@@ -682,7 +682,8 @@ function renderDetail(d) {
       (freshFromSource(d) ? ' \u00b7 fresh, and no other board has it yet' : ''));
   }
   for (const tw of (d.republished || [])) {
-    put('Also on', tw.source + ' since ' + String(tw.seen_at || '').slice(0, 10));
+    put(tw.parent ? 'First seen on' : 'Also on',
+        tw.source + ' since ' + String(tw.seen_at || '').slice(0, 10));
   }
   const sal = d.salary && (d.salary.text || d.salary.raw);
   put('Salary', sal);

@@ -196,6 +196,37 @@ REMOTE = re.compile(
 # Short, ambiguous codes must be matched as whole TOKENS, never as substrings.
 # "at" inside "austria" or "in" inside "Remote in Deutschland" produces false
 # countries; "se" inside "Münster" produced FR and SE for a German string.
+#: How boards translate the same city. Small on purpose: only the names that
+#: actually differ between German and English postings.
+_CITY_ALIAS = {
+    "munich": "münchen", "vienna": "wien", "zurich": "zürich",
+    "cologne": "köln", "nuremberg": "nürnberg", "hanover": "hannover",
+    "brunswick": "braunschweig", "mayence": "mainz", "vienna": "wien",
+}
+
+#: Connectors and country words that say nothing about WHICH city it is.
+_PLACE_FILLER = frozenset({"an", "der", "am", "im", "in", "bei"})
+_PLACE_COUNTRY = frozenset({"deutschland", "germany", "österreich", "austria",
+                            "schweiz", "switzerland", "de", "at", "ch"})
+
+
+def place_key(location: str) -> str:
+    """One city, however the board spells it.
+
+    "Mülheim (Ruhr)" and "Mülheim an der Ruhr" are the same place, and treating
+    them as different is how the same ALDI SUD role arrived twice with no
+    duplicate marking. The parenthesised word is KEPT, because "Frankfurt (Oder)"
+    and "Frankfurt am Main" are different cities; only connectors and trailing
+    country names are dropped.
+    """
+    words = [w for w in re.split(r"[^0-9a-zäöüß]+", norm(location)) if w]
+    words = [_CITY_ALIAS.get(w, w) for w in words]
+    words = [w for w in words if w not in _PLACE_FILLER]
+    while words and words[-1] in _PLACE_COUNTRY:
+        words.pop()
+    return " ".join(words)
+
+
 def _word_re(phrase: str) -> re.Pattern:
     return re.compile(rf"(?<![a-z]){re.escape(phrase)}(?![a-z])", re.I)
 

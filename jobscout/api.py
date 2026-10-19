@@ -93,6 +93,19 @@ def republished_as(conn, pid: int, source: str = "") -> list[dict]:
         out.append({"source": r["twin_source"], "seen_at": r["first_seen_at"],
                     "direct": sources.is_direct(r["twin_source"]),
                     "url": r["url"] or ""})
+    # A row that is itself a duplicate also needs a pill, naming the board it
+    # was republished FROM. Only the canonical row used to carry one, so the
+    # XING copy of a role looked like an unrelated single listing.
+    own = conn.execute(
+        "SELECT p.source AS own_source, parent.source AS parent_source, "
+        "       parent.first_seen_at, parent.url "
+        "FROM postings p JOIN postings parent ON parent.id = p.dup_of "
+        "WHERE p.id=?", (int(pid),)).fetchone()
+    if own and own["parent_source"] and own["parent_source"] != own["own_source"] \
+            and not (source and own["parent_source"] == source):
+        out.insert(0, {"source": own["parent_source"], "seen_at": own["first_seen_at"],
+                       "direct": sources.is_direct(own["parent_source"]),
+                       "url": own["url"] or "", "parent": True})
     return out
 
 
@@ -122,6 +135,20 @@ def republished_map(conn, rows: list[tuple[int, str]]) -> dict[int, list[dict]]:
             found.setdefault(dup_of, []).append(
                 {"source": r["twin_source"], "seen_at": r["first_seen_at"],
                  "direct": sources.is_direct(r["twin_source"]), "url": r["url"] or ""})
+        for r in conn.execute(
+                f"SELECT p.id, p.source AS own_source, parent.source AS parent_source, "
+                f"       parent.first_seen_at, parent.url "
+                f"FROM postings p JOIN postings parent ON parent.id = p.dup_of "
+                f"WHERE p.id IN ({marks})", [i for i, _ in chunk]):
+            pid = int(r["id"])
+            if not r["parent_source"]:
+                continue
+            if r["parent_source"] == r["own_source"] or r["parent_source"] == src_of.get(pid):
+                continue
+            found.setdefault(pid, []).insert(0, {
+                "source": r["parent_source"], "seen_at": r["first_seen_at"],
+                "direct": sources.is_direct(r["parent_source"]),
+                "url": r["url"] or "", "parent": True})
     return found
 
 

@@ -132,8 +132,28 @@ def test_a_later_row_from_another_board_counts_as_republished(tmp_path):
     twins = api.republished_as(conn, first)
     assert [t["source"] for t in twins] == ["arbeitnow"]
     assert twins[0]["direct"] is False
-    # and the republisher itself is nobody's twin
-    assert api.republished_as(conn, second) == []
+    # the republisher carries its own pill too, naming the board it came from;
+    # before this, only the canonical row was marked and the second copy read
+    # as an unrelated single listing
+    back = api.republished_as(conn, second)
+    assert [(t["source"], t.get("parent")) for t in back] == [("greenhouse", True)]
+
+
+def test_one_city_spelled_two_ways_is_still_one_role(tmp_path):
+    """The ALDI SUD case: "Mülheim (Ruhr)" on XING and "Mülheim an der Ruhr" on
+    stellenanzeigen.de produced different keys, so one advert sat twice with no
+    duplicate marking on either row."""
+    conn = _conn(tmp_path)
+    south, _ = _add(conn, source="xing", url="https://x/1",
+                    location="Mülheim (Ruhr)",
+                    seen="2026-10-03T20:43:21+00:00")
+    north, dup_of = _add(conn, source="stellenanzeigen", url="https://s/1",
+                         location="Mülheim an der Ruhr",
+                         seen="2026-10-03T20:43:24+00:00")
+    assert dup_of == south, "the same role in the same city, however spelled"
+    assert [t["source"] for t in api.republished_as(conn, south)] == ["stellenanzeigen"]
+    assert [(t["source"], t.get("parent")) for t in api.republished_as(conn, north)] == [
+        ("xing", True)]
 
 
 def test_a_board_reposting_its_own_listing_is_not_a_republisher(tmp_path):
@@ -152,6 +172,8 @@ def test_a_board_reposting_its_own_listing_is_not_a_republisher(tmp_path):
 
     assert api.republished_as(conn, first, "arbeitnow") == []
     assert api.republished_map(conn, [(first, "arbeitnow")]) == {}
+    # and the copy does not name its own board either
+    assert api.republished_as(conn, second) == []
 
 
 def test_a_real_second_board_still_shows_through_its_own_noise(tmp_path):

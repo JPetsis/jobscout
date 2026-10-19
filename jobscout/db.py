@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .models import Posting
 from .score import Score, prefs_hash, score_posting
+from . import geo
 from .textutil import norm
 
 # One connection is shared between the CLI (single-threaded) and the GUI, whose
@@ -175,10 +176,15 @@ def fingerprint(p: Posting) -> str:
 
 
 def alt_key(p: Posting) -> str | None:
-    """Cross-source identity: same company+title+location seen on another board."""
+    """Cross-source identity: same company+title+location seen on another board.
+
+    The location goes through `geo.place_key`, because boards spell one city
+    differently ("Mülheim (Ruhr)" against "Mülheim an der Ruhr") and a verbatim
+    comparison treats the same advert as two unrelated roles.
+    """
     if not (p.company and p.title):
         return None
-    return _sha1(f"{norm(p.company)}|{norm(p.title)}|{norm(p.location)}")
+    return _sha1(f"{norm(p.company)}|{norm(p.title)}|{geo.place_key(p.location)}")
 
 
 def _same_words(a: str, b: str) -> bool:
@@ -435,10 +441,19 @@ def set_description(conn, pid: int, description: str) -> None:
 
 
 def set_score(conn, pid: int, sc: Score) -> None:
+    """Store a score. Commits, like every other setter.
+
+    It used to leave the write to whichever commit happened next, and a caller
+    that ended straight after it (a repair script, a probe that only changed the
+    score) lost the update when the connection closed: the ALDI XING row sat at
+    its teaser score of 14 in the database while the rescan that had just run
+    read 19.
+    """
     conn.execute(
         "UPDATE postings SET score=?, reasons=?, filtered=?, filtered_reason=? WHERE id=?",
         (sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, pid),
     )
+    conn.commit()
 
 
 def all_postings(conn):
