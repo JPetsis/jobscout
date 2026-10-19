@@ -187,7 +187,7 @@ class ScanJob:
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def start(self, only: set[str] | None = None) -> dict:
+    def start(self, only: set[str] | None = None, force: bool = False) -> dict:
         if self.running:
             return {"started": False, "reason": "a scan is already running"}
         self.events.clear()
@@ -198,7 +198,7 @@ class ScanJob:
         # NOTE: args must be a TUPLE. `args=(only or set())` passes the set
         # itself, so threading unpacks it as positional args and _run gets
         # called with nothing (or worse, with strings it never expected).
-        self._thread = threading.Thread(target=self._run, args=(only or set(),),
+        self._thread = threading.Thread(target=self._run, args=(only or set(), force),
                                         daemon=True, name="jobscout-scan")
         self._thread.start()
         return {"started": True}
@@ -215,14 +215,15 @@ class ScanJob:
             if len(self.events) < 5000:
                 self.events.append(event)
 
-    def _run(self, only: set[str]) -> None:
+    def _run(self, only: set[str], force: bool = False) -> None:
         conn = None
         try:
             conn = dbm.connect(self.cfg.root / "jobscout.db")
             conn.execute("PRAGMA busy_timeout = 30000")
             delay = float(self.cfg.prefs.get("host_delay", 0.6) or 0)
             summary = scanner.scan(self.cfg, conn, Fetcher(host_delay=delay), only=only,
-                                   on_event=self._emit, cancel=self._cancel.is_set)
+                                   on_event=self._emit, cancel=self._cancel.is_set,
+                                   force=force)
             with self.lock:
                 self.summary = summary
         except Exception as e:                                   # noqa: BLE001
@@ -399,11 +400,16 @@ class JsApi:
         out["created"] = clean
         return out
 
-    def start_scan(self, only: str = "") -> dict:
+    def start_scan(self, only: str = "", force: bool = True) -> dict:
+        """Start a scan. True (the button) re-fetches even fresh sources.
+
+        The startup scan passes force=False and respects scan_if_older_hours;
+        a person pressing Scan means now, not "unless you did this recently".
+        """
         global SCAN
         if SCAN is None:
             SCAN = ScanJob(self.cfg)
-        return SCAN.start({s for s in only.split(",") if s} if only else set())
+        return SCAN.start({s for s in only.split(",") if s} if only else set(), force=force)
 
     def salary_report(self, words: str = "", city: str = "", days: int = 0) -> dict:
         """What the postings in this board advertise, with the caveats attached."""
@@ -467,7 +473,7 @@ class JsApi:
         if since is not None and since < hours:
             return {"started": False, "reason": f"last scan was {since:.1f}h ago",
                     "hours": round(since, 1)}
-        started = self.start_scan("")
+        started = self.start_scan("", force=False)
         started["auto"] = True
         started["hours"] = None if since is None else round(since, 1)
         return started

@@ -1557,6 +1557,8 @@ async function pollScan() {
       $('scan-fill').style.width = '100%';
       $('scan-label').textContent =
         s.new + ' new · ' + s.matches + ' matches this run' +
+        (((s.skipped_fresh || []).length)
+          ? ' · ' + s.skipped_fresh.length + ' sources were fresh' : '') +
         (s.cancelled ? '  (cancelled early)' : '');
     }
     $('scan-btn').disabled = false;

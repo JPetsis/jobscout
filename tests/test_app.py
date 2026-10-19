@@ -76,7 +76,7 @@ def test_scan_job_reports_a_start_failure_instead_of_raising(monkeypatch, tmp_pa
     cfg = type("C", (), {"root": tmp_path, "enabled": [], "prefs": {}})()
 
     job = appmod.ScanJob(cfg)
-    monkeypatch.setattr(job, "_run", lambda only: time.sleep(0.4))
+    monkeypatch.setattr(job, "_run", lambda only, force=False: time.sleep(0.4))
     assert job.start()["started"] is True
     second = job.start()
     assert second["started"] is False
@@ -91,25 +91,25 @@ def test_scan_job_passes_only_through_as_a_tuple(monkeypatch, tmp_path):
     job = appmod.ScanJob(cfg)
     seen = []
 
-    def fake_run(only):
-        seen.append(only)
+    def fake_run(only, force=False):
+        seen.append((only, force))
 
     monkeypatch.setattr(job, "_run", fake_run)
     job.start({"nodesk", "wwr"})
     job._thread.join(timeout=3)
     # the real _run clears `running` in its finally; this fake does not, so the
     # only meaningful assertion is that the set arrived as ONE argument
-    assert seen == [{"nodesk", "wwr"}]
+    assert seen == [({"nodesk", "wwr"}, False)]
 
 
 def test_scan_job_defaults_to_an_empty_set(monkeypatch, tmp_path):
     cfg = type("C", (), {"root": tmp_path, "enabled": [], "prefs": {}})()
     job = appmod.ScanJob(cfg)
     seen = []
-    monkeypatch.setattr(job, "_run", lambda only: seen.append(only))
+    monkeypatch.setattr(job, "_run", lambda only, force=False: seen.append((only, force)))
     job.start()
     job._thread.join(timeout=3)
-    assert seen == [set()]
+    assert seen == [(set(), False)]
 
 
 def test_scan_job_drains_events_once(tmp_path):
@@ -237,7 +237,7 @@ def _set_last_run(ws, *, started, finished="__same__"):
 def _fake_scan_started(monkeypatch):
     calls = []
     monkeypatch.setattr(appmod.JsApi, "start_scan",
-                        lambda self, only="": calls.append(only) or {"started": True})
+                        lambda self, only="", force=True: calls.append(only) or {"started": True})
     return calls
 
 
