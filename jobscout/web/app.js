@@ -397,11 +397,10 @@ function card(r, strongTh) {
     top.appendChild(el('span', 'chip st-' + r.status, r.status));
   }
   if ((r.verify_status || '') === 'dead') top.appendChild(el('span', 'chip', '⚠ dead'));
-  const cmark = (r.reasons || []).map(x => String(x[0])).find(l => l.startsWith('perm:') || l.startsWith('tmp:'));
-  // not slice(5): "perm:" is five characters and "tmp:" is four, so a fixed
-  // offset ate the first letter of the fixed-term label ("fixed term" ->
-  // "ixed term"). Strip the prefix by name instead of by width.
-  if (cmark) top.appendChild(el('span', 'chip', cmark.replace(/^(perm|tmp):/, '')));
+  // One canonical word ("permanent" / "fixed-term") for a fact that adverts
+  // say five different ways; api.posting_dict decides it in Python, and the
+  // phrase that matched stays in the reasons, visible in the "why" list.
+  if (r.contract) top.appendChild(el('span', 'chip', r.contract));
   c.appendChild(top);
 
   c.appendChild(el('div', 'title', r.title || '(untitled)'));

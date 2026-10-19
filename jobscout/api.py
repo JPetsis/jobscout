@@ -17,6 +17,7 @@ import pathlib
 import statistics
 from datetime import date, datetime, timedelta, timezone
 
+from . import contract
 from . import db as dbm
 from . import deadlines
 from . import salary as salmod
@@ -142,6 +143,9 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
         out["reasons"] = parsed if isinstance(parsed, list) else []
     except (ValueError, TypeError):
         out["reasons"] = []
+    # One word for the fact, whatever language the advert used; the matched
+    # phrase stays in the reasons, which is where the reading can be checked.
+    out["contract"] = contract.from_reasons(out["reasons"])
     try:
         out["salary"] = salmod.fmt_row(row) or ""
     except Exception:                                        # noqa: BLE001

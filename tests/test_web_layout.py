@@ -16,10 +16,14 @@ JS = (ROOT / "jobscout" / "web" / "app.js").read_text(encoding="utf-8")
 HTML = (ROOT / "jobscout" / "web" / "index.html").read_text(encoding="utf-8")
 
 
-def test_the_contract_label_strips_its_prefix_by_name():
-    """"tmp:" is four characters and "perm:" is five, so a fixed offset ate the
-    first letter: every fixed-term card said "ixed term"."""
-    assert "cmark.replace(/^(perm|tmp):/" in JS
+def test_the_contract_chip_shows_one_canonical_word():
+    """The chip used to repeat the matched phrase, so the same fact read
+    "unbefristet" on one card, "Festanstellung" on the next and "permanent" on a
+    third, in a window that is otherwise English. The prefix-stripping hack that
+    lived here is gone: api.posting_dict now decides the word in Python, and the
+    matched phrase stays in the reasons."""
+    assert "r.contract" in JS
+    assert "cmark.replace(/^(perm|tmp):/" not in JS, "the old strip is gone"
     assert "cmark.slice(5)" not in JS
 
 
