@@ -1,55 +1,99 @@
-"""Instaffo — jobs.instaffo.com, the public job board behind app.instaffo.com.
+"""Instaffo — jobs.instaffo.com, the board behind app.instaffo.com.
 
-The candidate app (app.instaffo.com) says `Disallow: /` in robots.txt and its
-`/api/` is off-limits too, so this reads what the site itself advertises for
-crawlers: `sitemap-jobs.xml` lists every live job twice (a `/de/` and an `/en/`
-URL per job), and each job page is server-rendered with a schema.org
-`JobPosting` carrying the description, the employer, the place, the posting date,
-the valid-through date and sometimes a salary band.
+The candidate API (app.instaffo.com/api/v1/…) answers
+`403 {"errors":{"base":"not_allowed"}}` to an anonymous client: that is a login
+gate, not obfuscation, so it is out of bounds. The app shell is `Disallow: /` in
+robots.txt as well.
 
-Walking all of them is ~1,800 page fetches (measured 2026-10-20: 3,610 URLs,
-1,805 jobs), so a scan takes the newest `max_jobs` by the sitemap's `lastmod`:
-the board's freshest roles, bounded, the same shape himalayas uses with its
-newest pages. Older roles are reachable by raising the cap.
+The public half is the board the marketing site links to: jobs.instaffo.com
+renders ten job cards per list page (`/de/jobs/find?page=N`), newest first, so
+discovering the whole board costs one request per ten roles instead of one per
+role. Measured 2026-10-20: about 180 pages for 1,805 roles.
+
+Cards carry the title, the employer, the city, a salary badge when the employer
+published one, and a relative age ("vor 16 Stunden"). They carry no description,
+so this behaves like every other teaser board: the scan's existing detail probe
+completes the rows that scored, from the job page, which is server-rendered with
+a schema.org JobPosting.
 """
 from __future__ import annotations
 
+import html as htmllib
 import json
 import re
+from datetime import date, timedelta
 
-from ..http import FetchError
 from ..models import Posting
 from ..textutil import clean_html_lines
 
 NAME = "instaffo"
 LABEL = "Instaffo"
-SITEMAP = "https://jobs.instaffo.com/sitemap-jobs.xml"
+BASE = "https://jobs.instaffo.com"
+LIST = BASE + "/de/jobs/find?page={page}"
 
-_LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>\s*(?:<lastmod>\s*([^<\s]+)\s*</lastmod>)?", re.S)
-_JOB = re.compile(r"https://jobs\.instaffo\.com/(de|en)/job/([^/?#]+)")
+_LINK = re.compile(r'<a class="[^"]*"\s+href="(/de/job/[^"?#]+)', re.S)
+_TITLE = re.compile(r'data-variant="title-m_bold"[^>]*>(.*?)</h2>', re.S)
+_H2 = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
+_LOGO = re.compile(r'alt="([^"]+?) logo"')
+_PARAGRAPH = re.compile(r'<p class="[^"]*variant_body-m[^"]*"[^>]*>(.*?)</p>', re.S)
+#: The city sits in a <p> with no class at all, between the company's size chip
+#: ("SMBs • 101-500") and the age; every other paragraph carries a variant class.
+_BARE_PARAGRAPH = re.compile(r"<p(?![^>]*class=)[^>]*>(.*?)</p>", re.S)
+_BADGE = re.compile(r'salaryBadge[^"]*"[^>]*>(.*?)</div>', re.S)
+_AGO = re.compile(r"vor\s+(\d+|einem|einer)\s+(Stunde|Tag|Woche|Monat|Jahr)", re.I)
 _LD = re.compile(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', re.S)
 _UNIT = {"YEAR": "jährlich", "MONTH": "monatlich", "HOUR": "stündlich",
          "DAY": "täglich", "WEEK": "wöchentlich"}
+_DAYS = {"stunde": 1 / 24, "tag": 1, "woche": 7, "monat": 30, "jahr": 365}
 
 
-def parse_sitemap(text: str) -> list[tuple[str, str, str]]:
-    """(lastmod, job_id, url) for every job, one URL each, newest first.
+def _text(fragment: str) -> str:
+    # "Werkstudent:in Product &amp; Customer Operations" is one card's real title
+    return htmllib.unescape(
+        re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", fragment or ""))).strip()
 
-    One job has two URLs (German and English). The German page is preferred and
-    used as the canonical link, but the cap is applied to JOBS, not to URLs, or
-    half of it would be spent on translations of the same roles.
-    """
-    jobs: dict[str, dict[str, str]] = {}
-    for loc, lastmod in _LOC.findall(text or ""):
-        m = _JOB.match(loc)
-        if not m:
-            continue
-        lang, jid = m.group(1), m.group(2)
-        rec = jobs.setdefault(jid, {"lastmod": "", "de": "", "en": ""})
-        rec[lang] = loc
-        rec["lastmod"] = max(rec["lastmod"], lastmod or "")
-    out = [(rec["lastmod"], jid, rec["de"] or rec["en"]) for jid, rec in jobs.items()]
-    out.sort(key=lambda r: (r[0], r[2]), reverse=True)
+
+def _posted_at(fragment: str) -> str:
+    """"vor 16 Stunden" as a date. Relative on purpose: the card states no date."""
+    m = _AGO.search(_text(fragment))
+    if not m:
+        return ""
+    n = 1 if m.group(1).lower() in ("einem", "einer") else int(m.group(1))
+    return (date.today() - timedelta(days=_DAYS[m.group(2).lower()] * n)).isoformat()
+
+
+def _card(fragment: str, url: str) -> Posting | None:
+    m = _TITLE.search(fragment) or _H2.search(fragment)
+    title = _text(m.group(1)) if m else ""
+    if not title:
+        return None
+    paragraphs = [_text(p) for p in _PARAGRAPH.findall(fragment)]
+    bare = [_text(p) for p in _BARE_PARAGRAPH.findall(fragment)]
+    logo = _LOGO.search(fragment)
+    company = _text(logo.group(1)) if logo else (paragraphs[0] if paragraphs else "")
+    location = bare[0] if bare else (paragraphs[1] if len(paragraphs) > 1 else "")
+    badge = _BADGE.search(fragment)
+    return Posting(
+        source=NAME,
+        title=title,
+        company=company,
+        location=location,
+        url=url,
+        external_id=url.rsplit("-", 1)[-1],
+        compensation=_text(badge.group(1)) if badge else "",
+        posted_at=_posted_at(fragment),
+    )
+
+
+def parse_cards(html: str) -> list[Posting]:
+    """The job cards on one list page, in page order."""
+    out = []
+    for m in _LINK.finditer(html or ""):
+        end = html.find("</a>", m.end())
+        fragment = html[m.start(): end if end > 0 else m.end() + 4000]
+        p = _card(fragment, BASE + m.group(1))
+        if p is not None:
+            out.append(p)
     return out
 
 
@@ -137,17 +181,27 @@ def parse(text: str, url: str = "") -> Posting | None:
 
 
 def fetch(settings, fetcher) -> list[Posting]:
-    max_jobs = max(1, int(settings.get("max_jobs", 60) or 60))
-    status, text = fetcher.get(SITEMAP)
-    if status != 200:
-        raise FetchError(SITEMAP, f"HTTP {status}")
+    """The newest `max_pages` list pages, ten cards each, newest first."""
+    max_pages = max(1, int(settings.get("max_pages", 10) or 10))
     out: list[Posting] = []
-    for _lastmod, _jid, url in parse_sitemap(text)[:max_jobs]:
-        status, html = fetcher.get(url)
+    seen: set[str] = set()
+    for page in range(1, max_pages + 1):
+        status, html = fetcher.get(LIST.format(page=page))
         if status != 200:
-            fetcher.errors.append(f"instaffo: HTTP {status} for {url}")
-            continue
-        p = parse_job(html, url)
-        if p is not None:
-            out.append(p)
+            fetcher.errors.append(f"instaffo: HTTP {status} for page {page}")
+            break
+        fresh = [p for p in parse_cards(html) if p.url not in seen]
+        if not fresh:
+            break                    # past the end of the list
+        seen.update(p.url for p in fresh)
+        out.extend(fresh)
     return out
+
+
+def fetch_detail(p: Posting, fetcher) -> str | None:
+    """The full advert, for the scan's detail probe."""
+    status, html = fetcher.get(p.url)
+    if status != 200:
+        return None
+    got = parse_job(html, p.url)
+    return got.description if got else None

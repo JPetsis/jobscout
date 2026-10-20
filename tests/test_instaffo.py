@@ -1,16 +1,16 @@
 """Instaffo: the public job board behind app.instaffo.com.
 
-The candidate app is `Disallow: /` in robots.txt, so the source reads only what
-the site advertises to crawlers: sitemap-jobs.xml for discovery, and the
-server-rendered job pages (each carrying a schema.org JobPosting) for content.
+The candidate API is login-gated (`403 not_allowed`), so the source reads the
+public board: ten job cards per list page, newest first, and — only for rows the
+scan's detail probe asks about — the server-rendered job page with its schema.org
+JobPosting.
 
-Fixtures are trimmed from the live site on 2026-10-20: a sitemap with two jobs
-in both languages plus a category page, and one real job page with its JSON-LD.
+Fixtures are trimmed from the live site on 2026-10-20: two cards from
+/de/jobs/find (one with a salary badge) and one real job page with its JSON-LD.
 """
 from pathlib import Path
 
 from jobscout import salary
-from jobscout.http import Fetcher
 from jobscout.sources import instaffo
 
 FIX = Path(__file__).parent / "fixtures"
@@ -20,26 +20,37 @@ def _detail() -> str:
     return (FIX / "instaffo_job.html").read_text(encoding="utf-8")
 
 
-def _sitemap() -> str:
-    return (FIX / "instaffo_sitemap.xml").read_text(encoding="utf-8")
+def _cards() -> str:
+    return (FIX / "instaffo_cards.html").read_text(encoding="utf-8")
 
 
-def test_one_job_has_two_urls_and_counts_once():
-    """The sitemap lists every role in German and English; the cap is per JOB."""
-    jobs = instaffo.parse_sitemap(_sitemap())
-    assert len(jobs) == 2, "two roles, not four URLs"
-    ids = [j[1] for j in jobs]
-    assert ids == ["junior-it-consultant-m-f-d-5b3d78bc1bd5",
-                   "java-softwareentwickler-full-stack-m-w-d-08d2c6930c58"], "newest first"
-    assert all("/de/job/" in j[2] for j in jobs), "the German page is canonical"
-    # a category page is not a job
-    assert all("/jobs/" not in j[2] for j in jobs)
+def test_a_card_becomes_a_posting():
+    cards = instaffo.parse_cards(_cards())
+    assert len(cards) == 2
+    first = cards[0]
+    assert first.source == "instaffo"
+    assert first.title == "Teamleiter Servicetechniker (m/w/d)"
+    assert first.company == "ista Express Service GmbH"
+    assert first.location == "Leipzig"
+    assert first.url == ("https://jobs.instaffo.com/de/job/"
+                         "teamleiter-servicetechniker-m-w-d-9e3b3aa8ff13"), "tracking stripped"
+    assert first.external_id == "9e3b3aa8ff13"
+    assert first.posted_at, "the card says 'vor 16 Stunden', which is a date"
+    assert first.description == "", "cards carry no description; the probe fills it"
+
+
+def test_the_relative_age_becomes_a_date():
+    from datetime import date, timedelta
+
+    assert instaffo._posted_at("vor 16 Stunden") == date.today().isoformat()
+    assert instaffo._posted_at("vor 3 Tagen") == (date.today() - timedelta(days=3)).isoformat()
+    assert instaffo._posted_at("vor einem Tag") == (date.today() - timedelta(days=1)).isoformat()
+    assert instaffo._posted_at("gestern") == "", "unknown shapes stay empty"
 
 
 def test_the_job_page_yields_a_posting():
     p = instaffo.parse_job(_detail(), "https://jobs.instaffo.com/de/job/x")
     assert p is not None
-    assert p.source == "instaffo"
     assert p.title == "Junior IT Consultant (m/f/d)"
     assert p.company == "UCG United Consulting Group GmbH"
     assert p.location == "Frankfurt am Main, DE"
@@ -66,35 +77,51 @@ def test_a_page_without_json_ld_is_skipped():
 
 
 class _Fetcher:
-    """Serves the sitemap and one canned page per job URL."""
+    """Serves each list page once; a repeated page means the end of the list."""
 
-    def __init__(self):
+    def __init__(self, pages: int = 2):
         self.errors = []
         self.seen = []
+        self.pages = pages
 
     def get(self, url, headers=None, host_delay=None):
         self.seen.append(url)
-        if url == instaffo.SITEMAP:
-            return 200, _sitemap()
-        return 200, _detail()
+        if url.startswith(instaffo.LIST.format(page=1)):
+            return 200, _cards()
+        if self.pages >= 2:
+            return 200, _cards()       # the same two jobs: nothing new
+        return 200, _cards()
 
 
-def test_fetch_walks_only_the_newest_max_jobs():
-    f = _Fetcher()
-    got = instaffo.fetch({"max_jobs": 1}, f)
-    assert len(got) == 1, "the cap is a page budget, not a wish"
-    assert got[0].title == "Junior IT Consultant (m/f/d)"
-    # one sitemap request plus one page, not four
-    assert len(f.seen) == 2
+def test_fetch_pages_and_stops_when_nothing_is_new():
+    f = _Fetcher(pages=2)
+    got = instaffo.fetch({"max_pages": 8}, f)
+    assert len(got) == 2, "the second page repeats the first, so the walk stops"
+    assert len(f.seen) == 2, "one request per page, not one per job"
 
 
-def test_fetch_reports_a_dead_sitemap():
-    import pytest
-    from jobscout.http import FetchError
+def test_fetch_respects_max_pages():
+    f = _Fetcher(pages=2)
+    got = instaffo.fetch({"max_pages": 1}, f)
+    assert len(got) == 2
+    assert len(f.seen) == 1, "max_pages is a page budget"
 
+
+def test_a_dead_page_is_an_error_not_a_crash():
     class Dead(_Fetcher):
         def get(self, url, headers=None, host_delay=None):
             return 503, ""
 
-    with pytest.raises(FetchError):
-        instaffo.fetch({"max_jobs": 5}, Dead())
+    f = Dead()
+    assert instaffo.fetch({"max_pages": 3}, f) == []
+    assert f.errors and "HTTP 503" in f.errors[0]
+
+
+def test_fetch_detail_returns_the_advert_text():
+    class One(_Fetcher):
+        def get(self, url, headers=None, host_delay=None):
+            return 200, _detail()
+
+    p = instaffo.parse_cards(_cards())[0]
+    text = instaffo.fetch_detail(p, One())
+    assert text and "IT-Architekturen" in text
