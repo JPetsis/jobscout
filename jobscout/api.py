@@ -538,7 +538,59 @@ SETTINGS = [
              "the previous one is kept until the swap succeeds."},
 ]
 
-_BY_KEY = {s["key"]: s for s in SETTINGS}
+# Per-source knobs worth putting in the window. Only a knob whose key is already
+# in the config gets a row (cfgwrite will not invent structure, and a control that
+# cannot save is worse than no control); the template documents all of them.
+#
+# (source, key, label, min, max, help)
+SOURCE_KNOBS = [
+    ("himalayas", "max_pages", "pages per scan", 1, 60,
+     "20 jobs per page, and the board rate-limits, so the scan walks the newest "
+     "pages only. Ten pages is 200 postings."),
+    ("himalayas", "max_age_days", "stop at postings older than (days)", 1, 365,
+     "Paging stops once a page brings nothing newer than this."),
+    ("xing", "max_pages", "pages per search query", 1, 20,
+     "Each query is a search page; more pages means more roles and more time."),
+    ("xing", "max_age_days", "stop at postings older than (days)", 1, 365,
+     "Stops walking a query's result pages once the roles are older than this."),
+    ("stepstone", "max_pages", "pages per search query", 1, 20,
+     "Each query is a results page; more pages means more roles and more time."),
+    ("stepstone", "max_age_days", "stop at postings older than (days)", 1, 365,
+     "Stops walking a query's result pages once the roles are older than this."),
+    ("instaffo", "max_pages", "pages per scan", 1, 500,
+     "Ten jobs per page, newest first. The whole board is about 90 pages; a "
+     "full walk took 58 seconds and found 903 roles."),
+]
+
+
+def _source_knob_specs() -> list[dict]:
+    from .sources import REGISTRY
+    out = []
+    for source, knob, label, _lo, _hi, help_text in SOURCE_KNOBS:
+        name = getattr(REGISTRY.get(source), "LABEL", source)
+        out.append({
+            "key": f"sources.{source}.{knob}", "op": "scalar", "kind": "number",
+            "group": "Per source", "source_knob": True,
+            "label": f"{name} · {label}", "help": help_text,
+        })
+    return out
+
+
+def _all_settings() -> list[dict]:
+    """SETTINGS with the per-source knobs slotted in where they belong.
+
+    Right after the board list, because they answer the same question ("where do
+    I look, and how hard"), and the window groups by first appearance.
+    """
+    specs = list(SETTINGS)
+    i = next((k for k, s in enumerate(specs) if s["key"] == "sources.enabled"), -1) + 1
+    specs[i:i] = _source_knob_specs()
+    return specs
+
+
+ALL_SETTINGS = _all_settings()
+_BY_KEY = {s["key"]: s for s in ALL_SETTINGS}
+_KNOB_RANGE = {f"sources.{s}.{k}": (lo, hi) for s, k, _l, lo, hi, _h in SOURCE_KNOBS}
 
 
 def source_options(enabled) -> list[dict]:
@@ -566,9 +618,13 @@ def read_settings(path) -> list[dict]:
     from . import cfgwrite
     text = pathlib.Path(path).read_text(encoding="utf-8")
     out = []
-    for spec in SETTINGS:
+    for spec in ALL_SETTINGS:
         row = dict(spec)
         value = cfgwrite.get_value(text, spec["key"])
+        if value is None and spec.get("source_knob"):
+            # Not in this config: nothing to edit, so do not offer a control
+            # that would fail with "key not found" on save.
+            continue
         if value is None and "default" in spec:
             # Not in the file: a config written before this setting existed.
             # Show what is actually in effect -- None would render as "off" and
@@ -618,6 +674,13 @@ def validate_setting(key: str, value):
     kind = spec["kind"]
 
     if kind == "number":
+        if key in _KNOB_RANGE:
+            lo, hi = _KNOB_RANGE[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{key} expects a number")
+            if not (lo <= int(value) <= hi):
+                raise ValueError(f"{key} must be between {lo} and {hi}")
+            return int(value)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{key} expects a number, got {type(value).__name__}")
         if value != value or value in (float("inf"), float("-inf")):

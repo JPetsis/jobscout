@@ -46,7 +46,7 @@ def cfgfile(tmp_path):
 def test_read_settings_returns_every_editable_key_with_a_value(cfgfile):
     rows = api.read_settings(cfgfile)
     by = {r["key"]: r for r in rows}
-    assert len(rows) == len(api.SETTINGS)
+    assert {s["key"] for s in api.SETTINGS} <= set(by), "every static setting is here"
     assert by["preferences.min_score"]["value"] == 6
     assert by["preferences.country_allow"]["value"] == ["de"]
     assert by["preferences.stack_preferred"]["value"] == {"php": 3}
