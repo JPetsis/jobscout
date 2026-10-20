@@ -335,6 +335,13 @@ sources:
     max_pages: 20        # newest N pages walked per scan
     max_age_days: 21     # stop paging once postings older than this appear
 
+  instaffo:
+    # The public job board behind app.instaffo.com. Its sitemap lists every role
+    # twice (de/en) and each page carries a schema.org JobPosting, so a scan
+    # walks the newest max_jobs of them, one request each: 60 is about half a
+    # minute. The app itself is Disallow: / in robots.txt and is not touched.
+    max_jobs: 60
+
   themuse:
     # The Muse's public API needs no key. Registering only raises the rate
     # limit, so `api_key` is optional.
