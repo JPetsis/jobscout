@@ -361,6 +361,15 @@ sources:
     roles: [software-engineer]
     max_pages: 3
 
+  dice:
+    # Dice, the US tech board. robots.txt disallows the /job prefix; this project
+    # treats a robots file as a wish rather than a wall, and Dice answers 200 from
+    # nginx with no Cloudflare challenge, so the pages are read like any other
+    # board. A search page returns 33 cards with title, employer, place, age and
+    # often a salary band; the job page has a schema.org JobPosting for the probe.
+    queries:
+      - { keywords: software engineer, location: "New York, NY", pages: 2 }
+
   themuse:
     # The Muse's public API needs no key. Registering only raises the rate
     # limit, so `api_key` is optional.

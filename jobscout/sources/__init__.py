@@ -23,7 +23,7 @@ SOURCE_NAMES = [
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience",
-    "instaffo", "ycombinator", "wellfound",
+    "instaffo", "ycombinator", "wellfound", "dice",
 ]
 
 REGISTRY = {name: import_module(f".{name}", __package__) for name in SOURCE_NAMES}
@@ -55,7 +55,7 @@ GROUPS = {
     "jobscout24": "DACH", "jobware": "DACH", "englishjobs": "DACH",
     "talent": "DACH", "instaffo": "DACH",
     # United States
-    "themuse": "US", "usajobs": "US", "governmentjobs": "US",
+    "themuse": "US", "usajobs": "US", "governmentjobs": "US", "dice": "US",
     # European Union
     "eures": "Europe (EU)", "euraxess": "Europe (EU)",
     # worldwide, and remote-first boards
@@ -149,6 +149,8 @@ NOT_DIRECT = frozenset({
     # startup boards: the employer usually posts, but recruiters and agencies do
     # too, so a per-row "direct" claim would sometimes be wrong
     "ycombinator", "wellfound",
+    # a US tech board where staffing firms are heavy posters (Jobot, Randstad)
+    "dice",
     # European and US boards that mix sources
     "eures", "themuse", "adzuna",
     # worldwide and remote boards, which mix employer ads with republished ones

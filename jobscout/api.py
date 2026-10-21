@@ -561,6 +561,8 @@ SOURCE_KNOBS = [
      "About 41 roles a page; the whole software-engineer list is 46 pages."),
     ("ycombinator", "max_jobs", "roles kept per role path", 1, 500,
      "The role page lists what was added recently; this caps the scan's share."),
+    ("dice", "max_pages", "pages per search query", 1, 20,
+     "33 roles a page. The default query is software engineer in New York."),
     ("instaffo", "max_pages", "pages per scan", 1, 500,
      "Ten jobs per page, newest first. The whole board is about 90 pages; a "
      "full walk took 58 seconds and found 903 roles."),
