@@ -342,6 +342,25 @@ sources:
     # candidate API answers 403 not_allowed to anonymous clients and is not used.
     max_pages: 10
 
+  ycombinator:
+    # Y Combinator's public job board. robots.txt allows it, the role pages are
+    # server-rendered, and each job page carries a schema.org JobPosting for the
+    # detail probe. `roles` are the site's own role slugs; a city slug added to
+    # `locations` narrows one (/jobs/role/software-engineer/new-york).
+    # This is the "added recently" list, not the archive: Work at a Startup's
+    # full search sits behind a login.
+    roles: [software-engineer]
+    locations: []
+    max_jobs: 120
+
+  wellfound:
+    # Wellfound (ex-AngelList Talent): startups, server-rendered role pages,
+    # about 41 roles a page — 1,899 software-engineer roles over 46 pages when
+    # measured in October 2026. Cards carry a salary band; job pages have the
+    # schema.org JobPosting the detail probe reads.
+    roles: [software-engineer]
+    max_pages: 3
+
   themuse:
     # The Muse's public API needs no key. Registering only raises the rate
     # limit, so `api_key` is optional.
