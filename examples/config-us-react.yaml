@@ -1,0 +1,452 @@
+# ---------------------------------------------------------------------------
+# Example profile: JavaScript / TypeScript / React developer, United States,
+# New York State first.
+#
+# Use it as a starting point: copy it to ~/.jobscout/config.yaml (the packaged
+# app creates one for you, so keep a copy first) and change the titles, the
+# stack and the places for the next person.
+#
+# What makes this profile do what it says:
+#   * title_terms carry the roles; a posting with no title hit is not a match.
+#   * stack_preferred is the interest scale: react and typescript weigh 3, so a
+#     React/TS advert beats a generic web one.
+#   * country_allow: [us] is the gate; locations_prefer is only a ranking bonus,
+#     which is why New York can be a priority without Texas dropping out.
+# ---------------------------------------------------------------------------
+# jobscout config - everything here is editable; rerun `jobscout scan` after changes.
+# Data lives in ~/.jobscout (a hidden folder). Shortcuts:
+#   jobscout config --open   reveal it in Finder
+#   jobscout config --edit   open this file in your editor
+# No API keys, no accounts: every source below is a public endpoint.
+
+preferences:
+  max_age_days: 21        # drop postings older than this when a date is known
+  # How many matches the app loads. They load best-scored first, and the window
+  # filters what it has, so this only needs to be large enough to cover the
+  # board: the footer says when it is not.
+  max_results: 2000
+  # Look for new openings when the window opens, if the last scan is older than
+  # this many hours. 0 turns it off and leaves scanning to the button. Nothing
+  # time-based works without this: "fresh from the source" needs regular looks,
+  # and so does anything measured from posting history.
+  scan_if_older_hours: 24
+  # A posting must match one of your job titles to be a match at all. The other
+  # signals (permanent contract, country, preferred city, keywords) are bonuses
+  # that RANK a relevant posting; without this gate they can carry an irrelevant
+  # one over `min_score` on their own. Turn it off to sweep a market by location
+  # only, knowing that is what you will get.
+  require_title_match: true
+  # How many days before its deadline a posting counts as "closing soon" in
+  # the app. Deadlines come from the full advert text, which the scan fetches a
+  # few of at a time (`deadline_probe_per_scan`), so this fills up over scans.
+  closing_days: 14
+  # How recent a posting from the employer's own board has to be to count as
+  # "fresh from the source" in the app. Only that tier gets the mark: an
+  # aggregator carrying the same role later is a republisher, and the window
+  # is the point at which you are early.
+  insider_days: 7
+  # rough score anchors: 6 = right title + one more signal; 10 = right title
+  # + a technology you actually want. Calibrate anytime with `jobscout stats`.
+  min_score: 6            # below this a posting is stored but not shown in digests
+  # 10, not 12: measured on a real store, the histogram breaks hard at 10
+  # (192 rows at >=9, then 21 at >=10, 4 at >=11). 12 leaves almost nothing.
+  strong_threshold: 10
+
+  # --- TITLE rules (the job title only) ---
+  # scoring terms are compound-friendly: "entwickler" also hits "Softwareentwickler"
+  title_terms:
+    - react
+    - frontend
+    - front-end
+    - full stack
+    - fullstack
+    - software engineer
+    - software developer
+    - web developer
+    - typescript
+    - javascript
+    - ui engineer
+  title_boost: 3          # points per title term hit
+  title_cap: 6            # total cap for title points
+  # whole-word match in TITLE -> filtered out
+  # (role-type words belong here, not in exclude_terms)
+  title_deny:
+    - sales
+    - account executive
+    - recruiter
+    - recruiting
+    - internship
+    - intern
+    - working student
+    - co-op
+    - apprentice
+
+  # --- STACK rules (title + description) ---
+  # The interest scale: 3 = the stack this profile is for, 1 = nice to have.
+  # A term found in the title or the description scores its weight once.
+  stack_preferred:
+    react: 3
+    typescript: 3
+    javascript: 2
+    next.js: 2
+    node: 2
+    redux: 1
+    graphql: 1
+    css: 1
+    jest: 1
+    aws: 1
+    docker: 1
+  stack_preferred_cap: 9  # total cap for stack points
+  stack_min_hits: 0       # 1+ requires at least N stack hits, everything else is filtered
+  # stack points only count when the TITLE is role-relevant (title_terms above).
+  # Without this, company boilerplate that lists every technology inflates
+  # non-dev roles; set to false if you want stack points everywhere.
+  stack_needs_title_match: true
+
+  # --- DESCRIPTION rules (the job description only) ---
+  description_terms: []   # e.g. [tdd, "open source", "pair programming"]
+  description_weight: 1
+  description_cap: 6
+  description_deny: []    # e.g. [reisebereitschaft, schichtarbeit] -> filtered
+
+  # --- PERMANENCE (a positive signal only: no word, no points) ---
+  # Open-ended contract. Scanned: title + description, and the description
+  # may carry a contract note a source parsed from its listing (academics.de).
+  # The chip shows one canonical word ("permanent") whatever the advert says:
+  # the matched phrase stays in the score breakdown. These are the German,
+  # Austrian ("fix", "Planstelle"), Swiss and English words for it, seeded from
+  # jobscout/contract.py and kept in step with it by a test.
+  permanent_terms: [unbefristet, festanstellung, feste anstellung, feste stelle, dauerstelle, fixe anstellung, fixe stelle, planstelle, permanent, open-ended, open ended, indefinite]
+  permanent_boost: 4
+  permanent_cap: 4
+  # The inverse marker (0 points): no permanence word, but the text says
+  # fixed-term -> a "fixed-term" chip. "befristet" never fires on
+  # "unbefristet" (the elif against a real perm hit guards it).
+  temporary_terms: [befristet, zeitvertrag, vertrag auf zeit, elternzeitvertretung, karenzvertretung, urlaubsvertretung, temporary, fixed-term, fixed term, maternity cover, parental leave cover, temporär]
+  # Academic-rank titles are filtered before scoring. Boundary-FRIENDLY
+  # matching on purpose, so compounds hit ("Universitätsprofessur" ->
+  # "professur"). Empty list switches it off.
+  academic_deny: []
+  # Seconds between two requests to the SAME host, for sources that do not ask
+  # for their own pace (the scraper sources keep theirs). This is the scan's real
+  # cost: lever and teamtailor walk one request per company, so 150 companies at
+  # 0.6s is a minute and a half of pure waiting. Lower it if the boards you
+  # watch tolerate it; 0 disables the wait entirely (not recommended).
+  host_delay: 0.6
+  # Sources are separate hosts, so they can be fetched at the same time. The
+  # fetcher still waits 0.6s between requests to the SAME host, so politeness is
+  # unchanged; 1 = the old one-at-a-time behaviour. Measured: 47 sources alone
+  # took 26 minutes, almost all of it waiting on the network.
+  scan_workers: 4
+  # Complete the detail page of a new MATCH once when its permanence is not
+  # yet visible, then rescore -- so the permanence boost applies to every
+  # match, not only to near-misses (a permanent 13 must outrank a fixed-term
+  # 12). Rows are probed at most once ever; this is the per-scan budget.
+  # 0 = off.
+  detail_probe_per_scan: 10
+  # Its own budget for the separate pass that completes advert pages looking for
+  # an application deadline. Measured on real academic adverts, 8 of 14 state
+  # one, and almost none of the teasers do, so this is where a deadline comes
+  # from. Each one is a real page fetch on a real site (measured ~10s each on
+  # university sites), so this is also how much longer a scan takes. 0 turns the
+  # pass off, and `jobscout deadlines --fetch N` does the same thing on demand.
+  deadline_probe_per_scan: 25
+
+  # --- ANYWHERE keywords (title + company + location + description) ---
+  keywords: [agile, scrum, ci/cd, equity]
+  keyword_weight: 1
+  keyword_cap: 8
+  # whole-word, anywhere -> filtered out of digests (stored, with reason)
+  exclude_terms:
+    - unpaid
+    - unbezahlt
+    - commission only
+    - personalvermittlung
+    - arbeitsvermittlung
+
+  # --- LOCATION rules ---
+  # a known location must match one of these to score; deny wins over allow.
+  # empty locations are always kept unless require_location_match is true.
+  # The country gate: a posting whose country resolves to anything but the US
+  # is filtered. Locations that resolve to no country at all (remote, "anywhere")
+  # are kept, which is what a US-remote search wants.
+  country_allow: [us]
+  # Ranking only. These hit the "where" bonus; New York is the priority.
+  locations_allow:
+    - remote
+    - hybrid
+    - united states
+    - usa
+    - anywhere
+  locations_prefer:
+    - new york
+    - new york city
+    - nyc
+    - brooklyn
+    - manhattan
+    - queens
+    - bronx
+    - staten island
+    - long island
+    - westchester
+    - albany
+    - buffalo
+    - rochester
+    - syracuse
+    - ithaca
+    - yonkers
+  locations_deny: []
+  location_boost: 3
+  remote_bonus: 1         # extra point when the location says remote / homeoffice
+  require_location_match: false
+
+  # --- SALARY (0 = off) ---
+  # Known annual pay below this is filtered out. Conversions: year = 1x,
+  # month = 12x, day = 260x, hour = 2080x. Postings without a parsed salary
+  # are kept. No FX conversion: currencies are compared as numbers and shown
+  # in the digest, so a USD figure is not silently treated as EUR.
+  min_salary: 0
+
+  # --- liveness of saved/applied postings ---
+  verify_on_scan: true      # re-check saved/applied URLs during scans
+  verify_max_age_days: 3    # only entries whose last check is older than this
+  verify_per_scan: 15       # cap of checks per scan
+
+sources:
+  # sources run in this order; remove entries to disable them
+  enabled: [linkedin, hn, themuse, usajobs, governmentjobs, remotive, wwr,
+            remoteok, himalayas, jobicy, workingnomads, nodesk, greenhouse, ashby,
+            recruitee, lever, workable, smartrecruiters, teamtailor, join, workday]
+
+  linkedin:
+    # LinkedIn's public guest search (no login). Keep the budget small or
+    # LinkedIn starts answering 429s; max_requests is a hard per-run cap.
+    max_requests: 24
+    fresh_days: 14        # only postings from the last N days (0 = no filter)
+    queries:
+      - { keywords: softwareentwickler, location: "Berlin, Germany", pages: 2 }
+      - { keywords: php developer, location: Deutschland, pages: 1 }
+
+  stepstone:
+    # 25 results per page
+    queries:
+      - { keywords: softwareentwickler, location: Berlin, pages: 1 }
+
+  xing:
+    queries:
+      - { keywords: softwareentwickler, location: berlin, pages: 1 }
+
+  stellenanzeigen:
+    queries:
+      - { keywords: softwareentwickler, location: Berlin, pages: 1 }
+
+  karriere_at:
+    queries:
+      - { keywords: softwareentwickler, pages: 1 }
+
+  jobs_ch:
+    # rows max is 20 (API limit) - use pages for more
+    queries:
+      - { keywords: softwareentwickler, location: "", pages: 3, rows: 20 }
+
+  arbeitnow:
+    pages: 2
+
+  ams:
+    # jobs.ams.at (Austrian public employment service). The JSON API is public;
+    # each request is signed with a client-side HMAC-SHA512 over a key that
+    # ships in the app bundle (see sources/ams.py). No account, no API key.
+    page_size: 100         # the API rejects 200 with HTTP 400
+    max_pages: 2           # pages per query
+    max_age_days: 45
+    sort_field: _LAST_MODIFIED
+    sort_order: desc
+    queries:
+      - { keywords: Softwareentwickler }
+      - { keywords: Softwareentwickler_in }
+      - { keywords: Software Developer }
+      - { keywords: DevOps Engineer }
+
+  eures:
+    # EU official portal, public JSON search at europa.eu/eures/api.
+    # locationCodes are NUTS codes: at = Austria, de = Germany, ch = Switzerland.
+    search_code: TITLE    # EVERYWHERE is very fuzzy (KFZ techs match); TITLE is precise
+    publication_period: LAST_MONTH
+    per_page: 50          # the API rejects >50 with HTTP 400
+    max_pages: 2          # pages walked per query
+    max_age_days: 45
+    queries:
+      - { keywords: software engineer, location: at }
+      - { keywords: software developer, location: at }
+      - { keywords: developer, location: at }
+      - { keywords: devops, location: at }
+
+  hn:
+    max_comments: 120     # top-level comments read from the latest "Who is hiring?"
+
+  remotive:
+    limit: 100
+    search: ""
+
+  wwr:
+    categories: [remote-programming-jobs]
+
+  himalayas:
+    # 20 jobs per page, hard rate limit (HTTP 429): keep the budget small.
+    max_pages: 20        # newest N pages walked per scan
+    max_age_days: 21     # stop paging once postings older than this appear
+
+  instaffo:
+    # The public board behind app.instaffo.com: ten jobs per list page, newest
+    # first, so a scan reads the first max_pages pages — one request per ten
+    # roles — and the detail probe completes the adverts that scored. The
+    # candidate API answers 403 not_allowed to anonymous clients and is not used.
+    max_pages: 10
+
+  themuse:
+    # The Muse's public API needs no key. Registering only raises the rate
+    # limit, so `api_key` is optional.
+    #
+    # It has NO free-text search: the axes are category, location and level.
+    # Leave `categories` empty to fetch everything newest-first and let the
+    # scorer decide, or name categories to fetch narrower and faster.
+    # https://www.themuse.com/developers/api/v2
+    pages: 5                 # 20 postings per page
+    categories: []           # e.g. [Software Engineering, Data Science]
+    location: ""             # e.g. United States, New York, NY ("" = anywhere)
+    api_key: ""              # optional
+
+  workday:
+    # The API behind a large share of large-employer careers sites. No key.
+    # Add employers under `companies.workday.tokens` below; with none added
+    # this source does nothing, which is why it is off by default.
+    pages: 3                 # 20 postings per page, per query
+    queries: []              # keywords only; from your profile unless set
+
+  adzuna:
+    # Needs a free key — leave this source disabled until you have one.
+    # https://developer.adzuna.com/signup (instant, no card).
+    # Unlike the others, `country` is what makes it useful outside Germany:
+    # it is a path segment and picks both the market and the salary currency
+    # (us, gb, de, at, ch, nl, fr, au, ca).
+    # Free tier: 25 requests/min, 250/day — ONE request per scan is the
+    # default for that reason.
+    app_id: ""
+    app_key: ""
+    country: us              # us, gb, de, at, ch, nl, fr, au, ca
+    what: ""                 # search keywords ("" = everything)
+    where: ""                # location restriction
+    pages: 1                 # requests per scan
+
+  usajobs:
+    # Needs a free key — leave this source disabled until you have one.
+    # https://developer.usajobs.gov/apirequest/ (a form; the key is emailed).
+    # US federal agencies only. The email must be a real address: it is sent
+    # as the User-Agent, which is how USAJOBS identifies you.
+    key: ""
+    email: ""
+    keyword: ""              # "" = everything
+    results_per_page: 25     # max 500
+
+  jobup:
+    # jobup.ch (French-speaking Switzerland): the same public API family as jobs.ch.
+    queries: []              # from your profile unless set
+
+  jobscout24:
+    # jobscout24.ch (Switzerland). Search param: SearchWhat; pager: `p`
+    # (`page=` is silently ignored - use `p` in hand-written queries too).
+    queries: []              # from your profile unless set
+
+  jobware:
+    # jobware.de (Germany). Result cards are buttons, not links - see
+    # sources/jobware.py before touching the parser.
+    queries: []              # from your profile unless set
+
+  talent:
+    # talent.com (aggregator, German front); k/l/p query parameters.
+    queries: []              # from your profile unless set
+
+  englishjobs:
+    # English-speaking jobs in Germany. Category pages, not keyword search.
+    categories: [remote]     # e.g. remote, visa-sponsorship, part-time
+    pages: 2
+
+  governmentjobs:
+    # US public-sector board (NEOGOV), keyword search.
+    queries: []              # from your profile unless set
+
+  jobicy:
+    # Free remote-jobs API, no key. Its notice asks for a visible credit
+    # wherever its jobs are shown (the README credits it).
+    count: 50                # max 50 per request
+    max_pages: 3             # cursor pages walked per scan
+    geo: ""                  # e.g. germany (server-side filter)
+    industry: ""
+    tag: ""
+
+  teamtailor:
+    # Every Teamtailor board exposes a JSON Feed. Add employers under
+    # companies.teamtailor.tokens; with none added this source does nothing,
+    # which is why it is off by default.
+    max_pages: 2             # 100 postings per page
+
+  academics:
+    # academics.de (ZEIT group): universities, research institutes and the
+    # public sector, every discipline. The listing URL ignores keyword
+    # search, so the newest pages are walked: `pages` x 50 postings.
+    pages: 2
+
+  wissenschaftskarriere:
+    # Wissenschaftskarriere (DUZ) academic board. Plain HTTP reaches the
+    # newest 20 offers; the rest of its result page loads by script.
+
+  euraxess:
+    # EURAXESS, the EU's official researcher-jobs portal (all disciplines
+    # incl. fellowships). 10 per page, newest first; the site's own paging
+    # is zero-based, `pages` here is 1-based like everywhere else.
+    pages: 2
+
+  myscience:
+    # myScience: science jobs in Germany, Switzerland and Austria. Keyword
+    # search via ?q=; one page (21 postings) per query. Does not take a
+    # location parameter.
+    queries: []              # from your profile unless set
+
+companies:
+  greenhouse:
+    # board tokens from https://boards.greenhouse.io/<token>
+    tokens: [getyourguide, celonis, trivago, sumup]
+  ashby:
+    # board tokens from https://jobs.ashbyhq.com/<token>
+    tokens: [n8n, langfuse, supabase]
+  lever:
+    # board tokens from https://jobs.lever.co/<token>
+    tokens: []
+  smartrecruiters:
+    # company ids from https://jobs.smartrecruiters.com/<id> (e.g. BoschGroup)
+    tokens: []
+  workable:
+    # account names from https://apply.workable.com/<account>/
+    tokens: []
+  teamtailor:
+    # board tokens from https://<token>.teamtailor.com/jobs (e.g. teamviewer)
+    tokens: []
+  join:
+    # company slugs from https://join.com/companies/<slug>
+    tokens: []
+
+ui:
+  theme: system           # system | light | dark. Also switchable in the
+                          # window header; "system" follows your OS setting.
+
+updates:
+  # Ask GitHub whether a newer release exists, at most once a day, and show a
+  # notice in the window if there is one. Set check to false to stop the app
+  # asking on its own; running `jobscout update` yourself still works.
+  check: true
+  # Install a newer version WITHOUT asking. Off by default: a window that
+  # replaces and restarts itself is a decision the app should not make on
+  # somebody's behalf. On, the download is verified before anything is
+  # replaced and the previous build is kept until the swap has succeeded, so
+  # a failed update leaves the working version in place.
+  auto: false

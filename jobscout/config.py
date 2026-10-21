@@ -147,11 +147,6 @@ preferences:
   # "professur"). Empty list switches it off.
   academic_deny: [professur, professorship, professor, postdoc, postdoktorand,
                   doktorand, doktorat, phd, w1, w2, w3, tenure, universitätsassistent]
-  # Complete the detail page of a new MATCH once when its permanence is not
-  # yet visible, then rescore -- so the permanence boost applies to every
-  # match, not only to near-misses (a permanent 13 must outrank a fixed-term
-  # 12). Rows are probed at most once ever; this is the per-scan budget.
-  # 0 = off.
   # Seconds between two requests to the SAME host, for sources that do not ask
   # for their own pace (the scraper sources keep theirs). This is the scan's real
   # cost: lever and teamtailor walk one request per company, so 150 companies at
@@ -163,6 +158,11 @@ preferences:
   # unchanged; 1 = the old one-at-a-time behaviour. Measured: 47 sources alone
   # took 26 minutes, almost all of it waiting on the network.
   scan_workers: 4
+  # Complete the detail page of a new MATCH once when its permanence is not
+  # yet visible, then rescore -- so the permanence boost applies to every
+  # match, not only to near-misses (a permanent 13 must outrank a fixed-term
+  # 12). Rows are probed at most once ever; this is the per-scan budget.
+  # 0 = off.
   detail_probe_per_scan: 10
   # Its own budget for the separate pass that completes advert pages looking for
   # an application deadline. Measured on real academic adverts, 8 of 14 state
