@@ -91,7 +91,7 @@ def test_an_unfamiliar_prefix_keeps_its_whole_subject(repo):
 
 
 def test_a_release_commit_is_left_out(repo):
-    """`release: 0.2.2` tells a reader of the notes nothing."""
+    """A version bump tells a reader of the notes nothing, however it is written."""
     git(repo, "tag", "v0.1.0")
     commit(repo, "feat: a thing")
     commit(repo, "release: 0.2.2")
@@ -101,6 +101,32 @@ def test_a_release_commit_is_left_out(repo):
 
     assert "- a thing" in out
     assert "- 0.2.2" not in out
+
+
+def test_a_scoped_release_commit_is_left_out_too(repo):
+    """The repo actually bumps with `chore(release): 0.4.0`, whose kind is chore.
+
+    The kind-only rule let it through and "0.4.0" appeared in the notes as if it
+    were a change, which is how this test came to exist.
+    """
+    git(repo, "tag", "v0.1.0")
+    commit(repo, "feat: a thing")
+    commit(repo, "chore(release): 0.4.0")
+    git(repo, "tag", "v0.4.0")
+
+    out = notes(repo, "v0.4.0")
+
+    assert "- a thing" in out
+    assert "0.4.0" not in out, "a version bump is not a change"
+
+
+def test_a_chore_that_mentions_release_notes_is_kept(repo):
+    """"release" as a scope is the rule; a word in the text is not."""
+    git(repo, "tag", "v0.1.0")
+    commit(repo, "chore: refresh the release notes footer")
+    git(repo, "tag", "v0.2.0")
+
+    assert "- refresh the release notes footer" in notes(repo, "v0.2.0")
 
 
 def test_each_change_appears_exactly_once(repo):

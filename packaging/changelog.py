@@ -16,6 +16,7 @@ the commits ARE the changelog.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 
@@ -30,6 +31,23 @@ GROUPS = [
 
 # Says nothing to someone reading the notes.
 IGNORED = ("release",)
+
+#: A commit whose whole message is a version number. This repo bumps with
+#: `chore(release): 0.4.0`, whose TYPE is `chore`, so the kind test above misses
+#: it and "0.4.0" lands in the notes as if it were a change.
+_VERSION_ONLY = re.compile(r"^v?\d+\.\d+\.\d+$")
+
+
+def is_release_commit(subject: str) -> bool:
+    """A version bump, by kind (`release: x`) or by scope (`chore(release): x`)."""
+    head, sep, rest = subject.partition(":")
+    if not sep:
+        return False
+    kind = head.split("(", 1)[0].strip().lower()
+    scope = head.partition("(")[2].rstrip(")").strip().lower()
+    if kind in IGNORED or scope in IGNORED:
+        return True
+    return bool(_VERSION_ONLY.match(rest.strip()))
 
 
 def git(*args: str, cwd: str | None = None) -> str:
@@ -74,6 +92,8 @@ def build_notes(prev: str, target: str, cwd: str | None = None) -> str:
     buckets: dict[str, list[str]] = {title: [] for title, _ in GROUPS}
     unlabelled: list[str] = []
     for subject in subjects:
+        if is_release_commit(subject):
+            continue
         parsed = split_subject(subject)
         if parsed is None:
             unlabelled.append(subject)
