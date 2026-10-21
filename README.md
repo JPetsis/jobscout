@@ -494,9 +494,11 @@ grouping the Settings screen uses, so the two read the same way:
 | `jobware` | DACH | German job board, server-rendered (Qwik) |
 | `talent` | DACH | Global job aggregator with a German front (de.talent.com) |
 | `englishjobs` | DACH | English-speaking jobs in Germany |
+| `instaffo` | DACH | The public board behind app.instaffo.com — ten cards a list page, no login |
 | `themuse` | US | Public jobs API, no key required |
 | `usajobs` | US | US federal job announcements (requires a free Authorization-Key) |
 | `governmentjobs` | US | US public-sector job board, server-rendered |
+| `dice` | US | US tech board — server-rendered search, 33 cards a page |
 | `eures` | EU | The EU's official job vacancy portal (public JSON search API) |
 | `euraxess` | EU | The EU's official researcher-jobs portal (all disciplines) |
 | `linkedin` | global / remote | Public guest search — no login, no API key |
@@ -510,6 +512,8 @@ grouping the Settings screen uses, so the two read the same way:
 | `himalayas` | global / remote | Public jobs API (global remote roles, cursor paginated) |
 | `adzuna` | global / remote | Multinational job-search API (requires a free app_id + app_key) |
 | `jobicy` | global / remote | Free public remote-jobs API (no key) |
+| `ycombinator` | global / remote | Y Combinator's public job board — role pages, schema.org detail |
+| `wellfound` | global / remote | Startup roles, server-rendered role pages (ex-AngelList Talent) |
 | `wordpressjobs` | global / remote | The official WP job board, RSS |
 | `pythonjobs` | global / remote | The PSF job board, RSS |
 | `fossjobs` | global / remote | Free/open-source software jobs, RSS |
