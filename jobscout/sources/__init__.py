@@ -36,47 +36,56 @@ REGISTRY = {name: import_module(f".{name}", __package__) for name in SOURCE_NAME
 # source is added without a home, so the decision cannot be forgotten.
 GROUP_OTHER = "Other"
 
+# English names: the window is English throughout, and "DACH" is German
+# shorthand for the three countries rather than a word the reader may know.
+GROUP_DACH = "Germany, Austria & Switzerland"
+GROUP_US = "United States"
+GROUP_EU = "European Union"
+GROUP_GLOBAL = "Global & remote"
+GROUP_ACADEMIC = "Academic & research"
+GROUP_COMPANY = "Company boards"
+
 GROUP_ORDER = [
-    "DACH",
-    "US",
-    "Europe (EU)",
-    "Global and remote",
-    "Academic and research",
-    "Company boards",
+    GROUP_DACH,
+    GROUP_US,
+    GROUP_EU,
+    GROUP_GLOBAL,
+    GROUP_ACADEMIC,
+    GROUP_COMPANY,
     GROUP_OTHER,
 ]
 
 GROUPS = {
     # Germany, Austria, Switzerland
-    "stepstone": "DACH", "xing": "DACH", "stellenanzeigen": "DACH",
-    "karriere_at": "DACH", "jobs_ch": "DACH", "arbeitnow": "DACH",
-    "berlinstartupjobs": "DACH", "ams": "DACH", "jobsat": "DACH",
-    "germantechjobs": "DACH", "swissdevjobs": "DACH", "jobup": "DACH",
-    "jobscout24": "DACH", "jobware": "DACH", "englishjobs": "DACH",
-    "talent": "DACH", "instaffo": "DACH",
+    "stepstone": GROUP_DACH, "xing": GROUP_DACH, "stellenanzeigen": GROUP_DACH,
+    "karriere_at": GROUP_DACH, "jobs_ch": GROUP_DACH, "arbeitnow": GROUP_DACH,
+    "berlinstartupjobs": GROUP_DACH, "ams": GROUP_DACH, "jobsat": GROUP_DACH,
+    "germantechjobs": GROUP_DACH, "swissdevjobs": GROUP_DACH, "jobup": GROUP_DACH,
+    "jobscout24": GROUP_DACH, "jobware": GROUP_DACH, "englishjobs": GROUP_DACH,
+    "talent": GROUP_DACH, "instaffo": GROUP_DACH,
     # United States
-    "themuse": "US", "usajobs": "US", "governmentjobs": "US", "dice": "US",
+    "themuse": GROUP_US, "usajobs": GROUP_US, "governmentjobs": GROUP_US, "dice": GROUP_US,
     # European Union
-    "eures": "Europe (EU)", "euraxess": "Europe (EU)",
+    "eures": GROUP_EU, "euraxess": GROUP_EU,
     # worldwide, and remote-first boards
-    "linkedin": "Global and remote", "hn": "Global and remote",
-    "remotive": "Global and remote", "wwr": "Global and remote",
-    "remoteok": "Global and remote", "larajobs": "Global and remote",
-    "workingnomads": "Global and remote", "nodesk": "Global and remote",
-    "himalayas": "Global and remote", "jobicy": "Global and remote",
-    "ycombinator": "Global and remote", "wellfound": "Global and remote",
-    "adzuna": "Global and remote", "wordpressjobs": "Global and remote",
-    "pythonjobs": "Global and remote", "fossjobs": "Global and remote",
+    "linkedin": GROUP_GLOBAL, "hn": GROUP_GLOBAL,
+    "remotive": GROUP_GLOBAL, "wwr": GROUP_GLOBAL,
+    "remoteok": GROUP_GLOBAL, "larajobs": GROUP_GLOBAL,
+    "workingnomads": GROUP_GLOBAL, "nodesk": GROUP_GLOBAL,
+    "himalayas": GROUP_GLOBAL, "jobicy": GROUP_GLOBAL,
+    "ycombinator": GROUP_GLOBAL, "wellfound": GROUP_GLOBAL,
+    "adzuna": GROUP_GLOBAL, "wordpressjobs": GROUP_GLOBAL,
+    "pythonjobs": GROUP_GLOBAL, "fossjobs": GROUP_GLOBAL,
     # research and higher education
-    "academics": "Academic and research",
-    "wissenschaftskarriere": "Academic and research",
-    "myscience": "Academic and research",
+    "academics": GROUP_ACADEMIC,
+    "wissenschaftskarriere": GROUP_ACADEMIC,
+    "myscience": GROUP_ACADEMIC,
     # per-company boards: you choose the employers, and they can be anywhere
-    "greenhouse": "Company boards", "ashby": "Company boards",
-    "recruitee": "Company boards", "lever": "Company boards",
-    "smartrecruiters": "Company boards", "workable": "Company boards",
-    "workday": "Company boards", "teamtailor": "Company boards",
-    "join": "Company boards",
+    "greenhouse": GROUP_COMPANY, "ashby": GROUP_COMPANY,
+    "recruitee": GROUP_COMPANY, "lever": GROUP_COMPANY,
+    "smartrecruiters": GROUP_COMPANY, "workable": GROUP_COMPANY,
+    "workday": GROUP_COMPANY, "teamtailor": GROUP_COMPANY,
+    "join": GROUP_COMPANY,
 }
 
 

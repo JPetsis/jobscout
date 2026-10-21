@@ -1,13 +1,14 @@
 """Every source belongs to a market group, and the groups are honest.
 
-The Settings screen groups the board checkboxes by market (DACH, US, Europe,
-global/remote, academic, per-company). That grouping is only useful if it is
+The Settings screen groups the boards by market (Germany/Austria/Switzerland,
+United States, European Union, global/remote, academic, per-company). That
+grouping is only useful if it is
 COMPLETE: a board missing from the table would appear under "Other", which a
 user reads as "miscellaneous" rather than "someone forgot".
 """
 from collections import Counter
 
-from jobscout import api
+from jobscout import api, sources
 from jobscout.sources import (GROUPS, GROUP_ORDER, GROUP_OTHER, SOURCE_NAMES,
                               group_of)
 
@@ -62,14 +63,26 @@ def test_the_dach_group_is_the_regional_boards():
     """Spot-check the assignment that matters most to a German user."""
     for name in ("stepstone", "xing", "karriere_at", "jobs_ch", "ams", "jobsat",
                  "jobware", "englishjobs"):
-        assert group_of(name) == "DACH", name
+        assert group_of(name) == sources.GROUP_DACH, name
 
 
 def test_the_us_and_academic_groups_are_right():
     for name in ("themuse", "usajobs", "governmentjobs"):
-        assert group_of(name) == "US", name
+        assert group_of(name) == sources.GROUP_US, name
     for name in ("academics", "wissenschaftskarriere", "myscience"):
-        assert group_of(name) == "Academic and research", name
+        assert group_of(name) == sources.GROUP_ACADEMIC, name
+
+
+def test_group_names_are_english_not_shorthand():
+    """The window is English; "DACH" is German shorthand a reader may not know."""
+    import re
+
+    for name in sources.GROUP_ORDER:
+        if name == sources.GROUP_OTHER:
+            continue
+        assert not re.search(r"[äöüß]", name), name
+    assert sources.GROUP_DACH == "Germany, Austria & Switzerland"
+    assert sources.GROUP_US == "United States"
 
 
 def test_company_boards_are_the_ones_you_configure_yourself():

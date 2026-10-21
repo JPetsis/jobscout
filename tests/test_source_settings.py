@@ -27,7 +27,8 @@ def test_only_knobs_present_in_the_config_get_a_row(tmp_path):
     rows = {r["key"]: r for r in api.read_settings(_write(tmp_path)) if r.get("source_knob")}
     assert set(rows) == {"sources.himalayas.max_pages", "sources.instaffo.max_pages"}
     assert rows["sources.instaffo.max_pages"]["value"] == 10
-    assert rows["sources.instaffo.max_pages"]["label"].startswith("Instaffo \u00b7 ")
+    assert rows["sources.instaffo.max_pages"]["label"] == "pages per scan"
+    assert rows["sources.instaffo.max_pages"]["source_label"] == "Instaffo"
 
 
 def test_the_knob_sits_with_the_board_list(tmp_path):

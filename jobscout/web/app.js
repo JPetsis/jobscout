@@ -346,11 +346,11 @@ function render() {
   const total = Number(STATS.matches || 0);
   const cut = total > ALL.length;
   $('footer-note').textContent = (cut
-    ? ALL.length + ' of ' + total + ' matches loaded \u00b7 raise \u201cHow many results ' +
-      'to load\u201d in Settings to see the rest \u00b7 '
+    ? ALL.length + ' of ' + total + ' matches loaded \u00b7 raise \u201cHow many ' +
+      'matches to load\u201d under Matching \u2192 Advanced \u00b7 '
     : ALL.length + ' loaded \u00b7 ') +
     (F.text && TEXT_NOTE ? TEXT_NOTE + ' in the advert text \u00b7 ' : '') +
-    'click a card for details \u00b7 S / A / X to triage';
+    'click a card for details \u00b7 S/A/X triage';
 }
 
 function card(r, strongTh) {
@@ -929,12 +929,62 @@ function wireProfiles(launch) {
 
 /* ---------- settings ---------- */
 
+/* Six questions, one at a time, instead of one long scroll.
+ *
+ * The pane used to render every setting in a single column, which meant 23
+ * rows, a wall of 51 board checkboxes and a paragraph of help under each one:
+ * everything true, nothing findable. The rows still come from
+ * `api.read_settings` (a setting cannot be missing here), but each one now
+ * carries a `section`, so the window can show one question per pane and put
+ * the rare knobs behind "Advanced".
+ *
+ * The board list is the part that needed the most work: 51 checkboxes at once
+ * is not a choice, it is a chore. Boards are now cards under a market tab,
+ * their per-board limits open only when the board is on, and the whole market
+ * can be switched at once.
+ */
+
+const SET_SECTIONS = [
+  { id: 'profile',  title: 'Profile',        hint: 'The workspace you are in' },
+  { id: 'boards',   title: 'Job boards',     hint: 'Where jobscout looks' },
+  { id: 'wanted',   title: 'What you want',  hint: 'Titles, skills, what to reject' },
+  { id: 'where',    title: 'Where',          hint: 'Countries and places' },
+  { id: 'matching', title: 'Matching',       hint: 'How strict, how much' },
+  { id: 'updates',  title: 'Updates',        hint: 'Version and install' },
+];
+
+const SET_NOTE_DEFAULT = 'Changes save to config.yaml as you make them. ' +
+  'Your comments in that file are kept.';
+
+/* Units shown next to a number, so the help text does not have to be "In days." */
+const SET_UNITS = {
+  'preferences.min_score': 'points',
+  'preferences.strong_threshold': 'points',
+  'preferences.max_age_days': 'days',
+  'preferences.closing_days': 'days',
+  'preferences.insider_days': 'days',
+  'preferences.scan_if_older_hours': 'hours',
+  'preferences.max_results': 'matches',
+  'preferences.query_budget': 'queries',
+};
+
+let WATCH = [];                       // employers followed, read with the pane
+const SET = { rows: [], info: null, section: 'boards', query: '', market: 'all' };
+const SET_TIMERS = new Map();         // per key, so one field cannot cancel another
+
+function setNote(text, bad) {
+  const n = $('settings-note');
+  if (!n) return;
+  n.textContent = text || SET_NOTE_DEFAULT;
+  n.classList.toggle('warn', !!bad);
+}
 
 async function openSettings() {
   $('settings').hidden = false;
   $('detail').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = false;
+  setNote('');
   const body = $('settings-body');
   body.textContent = '';
   body.appendChild(el('p', 'loading', 'Loading…'));
@@ -958,40 +1008,633 @@ async function openSettings() {
     WATCH = [];
   }
   SETTINGS_ROWS = rows;
-  body.textContent = '';
-  body.appendChild(profileBlock());
+  SET.rows = rows;
+  SET.info = info;
+  SET.query = '';
+  renderSettings();
+}
 
-  // group by the `group` field, keeping the order api.SETTINGS declares
-  const groups = new Map();
-  for (const r of rows) {
-    if (!groups.has(r.group)) groups.set(r.group, []);
-    groups.get(r.group).push(r);
-  }
-  for (const [name, items] of groups) {
-    const g = el('section', 's-group');
-    g.appendChild(el('h3', null, name));
-    for (const r of items) g.appendChild(settingRow(r));
-    // The two switches govern what the app does ON ITS OWN. This is the other
-    // half: asking right now, which is a different question and works even
-    // when they are both off.
-    if (items.some((r) => r.key.startsWith('updates.'))) {
-      g.appendChild(checkNowRow(info));
+function renderSettings() {
+  const body = $('settings-body');
+  body.textContent = '';
+  const shell = el('div', 'set');
+  const rail = el('nav', 'set-rail');
+  rail.setAttribute('aria-label', 'Settings sections');
+
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'set-search';
+  search.placeholder = 'Search settings';
+  search.setAttribute('aria-label', 'Search settings');
+  search.value = SET.query;
+  search.addEventListener('input', () => {
+    SET.query = search.value.trim();
+    paintPanes(panes, rail);
+  });
+  rail.appendChild(search);
+
+  paintRail(rail);
+
+  const foot = el('div', 'set-rail-foot');
+  foot.appendChild(el('span', null, 'jobscout ' + ((SET.info && SET.info.version) || '')));
+  rail.appendChild(foot);
+
+  const panes = el('div', 'set-panes');
+  shell.append(rail, panes);
+  body.appendChild(shell);
+  paintPanes(panes, rail);
+}
+
+function paintRail(rail) {
+  // keep the search box; rebuild only the tabs
+  for (const old of rail.querySelectorAll('.set-tab')) old.remove();
+  const foot = rail.querySelector('.set-rail-foot');
+  const [on, total] = boardCounts();
+  for (const s of SET_SECTIONS) {
+    const tab = el('button', 'set-tab');
+    tab.type = 'button';
+    tab.dataset.section = s.id;
+    tab.title = s.hint;
+    tab.appendChild(el('span', 'set-tab-name', s.title));
+    if (s.id === 'boards') {
+      tab.appendChild(el('span', 'set-badge' + (on === 0 ? ' warn' : ''), on + '/' + total));
     }
-    body.appendChild(g);
-    // the companies you follow sit with the question they answer: where to look
-    if (name === 'Where to look') body.appendChild(followBlock());
+    if (s.id === SET.section && !SET.query) tab.classList.add('on');
+    tab.addEventListener('click', () => {
+      SET.section = s.id;
+      SET.query = '';
+      const box = rail.querySelector('.set-search');
+      if (box) box.value = '';
+      paintRail(rail);
+      paintPanes(rail.parentNode.querySelector('.set-panes'), rail);
+      const pane = rail.parentNode.querySelector('.set-panes');
+      if (pane) pane.scrollTop = 0;
+    });
+    if (foot) rail.insertBefore(tab, foot); else rail.appendChild(tab);
   }
 }
 
+function paintPanes(panes, rail) {
+  panes.textContent = '';
+  if (SET.query) {
+    panes.appendChild(searchResults());
+    return;
+  }
+  const build = {
+    profile: profilePane,
+    boards: boardsPane,
+    wanted: wantedPane,
+    where: wherePane,
+    matching: matchingPane,
+    updates: updatesPane,
+  }[SET.section] || boardsPane;
+  panes.appendChild(build());
+}
+
+function boardRow() {
+  return SET.rows.find((r) => r.key === 'sources.enabled');
+}
+
+function boardCounts() {
+  const row = boardRow();
+  if (!row || !row.options) return [0, 0];
+  return [row.options.filter((o) => o.checked).length, row.options.length];
+}
+
+function rowsFor(section, advanced) {
+  return SET.rows.filter((r) => !r.source_knob && r.section === section &&
+    !!r.advanced === !!advanced);
+}
+
+/* ---------- panes ---------- */
+
+function profilePane() {
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3', 'Profile'));
+  wrap.appendChild(el('p', 'set-lead',
+    'Each profile is a separate workspace: its own settings, job boards and ' +
+    'saved postings. Nothing is shared between them.'));
+
+  const current = (PROFILES.profiles || []).find((p) => p.active);
+  const card = el('div', 'set-card');
+  card.appendChild(el('p', 'set-card-title', 'Using: ' + (current ? current.label : 'Default')));
+  const btn = el('button', 'ghost small', 'Switch or create…');
+  btn.type = 'button';
+  btn.addEventListener('click', async () => {
+    const st = await pywebview.api.launch();   // fresh list, same endpoint
+    openPicker(st);
+  });
+  card.appendChild(btn);
+  wrap.appendChild(card);
+  return wrap;
+}
+
+function boardsPane() {
+  const wrap = el('section', 'set-pane-body');
+  const row = boardRow();
+  if (!row) {
+    wrap.appendChild(el('h3', 'set-h3', 'Job boards'));
+    wrap.appendChild(el('p', 'set-lead', 'This config has no board list.'));
+    return wrap;
+  }
+  const knobs = SET.rows.filter((r) => r.source_knob);
+  const markets = [];
+  for (const o of row.options) if (!markets.includes(o.group)) markets.push(o.group);
+
+  wrap.appendChild(el('h3', 'set-h3', 'Job boards'));
+  wrap.appendChild(el('p', 'set-lead',
+    'A board you switch off keeps everything it already found — it just stops ' +
+    'being scanned. Fewer boards is a faster scan.'));
+
+  const tabs = el('div', 'set-markets');
+  const list = el('div', 'set-boards');
+  const foot = el('div', 'set-boardfoot');
+  const tally = el('span', 'set-tally');
+  const bulk = el('div', 'set-bulk');
+
+  const visible = () => (SET.market === 'all'
+    ? row.options
+    : row.options.filter((o) => o.group === SET.market));
+
+  const paintTabs = () => {
+    tabs.textContent = '';
+    const entries = [['all', 'All boards']].concat(markets.map((m) => [m, m]));
+    for (const [id, label] of entries) {
+      const opts = id === 'all' ? row.options : row.options.filter((o) => o.group === id);
+      const on = opts.filter((o) => o.checked).length;
+      const b = el('button', 'set-market' + (SET.market === id ? ' on' : ''));
+      b.type = 'button';
+      b.appendChild(el('span', null, label));
+      b.appendChild(el('span', 'set-market-count', on + '/' + opts.length));
+      b.addEventListener('click', () => { SET.market = id; paintTabs(); paintList(); });
+      tabs.appendChild(b);
+    }
+  };
+
+  const paintList = () => {
+    list.textContent = '';
+    for (const opt of visible()) list.appendChild(boardCard(opt, knobs, row, () => {
+      paintTabs();
+      paintFoot();
+      paintRail(document.querySelector('.set-rail'));
+    }));
+    paintFoot();
+  };
+
+  const paintFoot = () => {
+    const [on, total] = boardCounts();
+    tally.textContent = on + ' of ' + total + ' boards on' +
+      (on === 0 ? ' — nothing will be scanned' : '');
+    tally.classList.toggle('warn', on === 0);
+    bulk.textContent = '';
+    if (SET.market === 'all') return;
+    const opts = visible();
+    const allOn = opts.every((o) => o.checked);
+    const b = el('button', 'ghost small', allOn ? 'Switch this market off' : 'Switch this market on');
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      const target = !allOn;
+      for (const o of opts) o.checked = target;
+      paintList();
+      paintTabs();
+      paintRail(document.querySelector('.set-rail'));
+      commitBoards(row);
+    });
+    bulk.appendChild(b);
+  };
+
+  paintTabs();
+  paintList();
+  wrap.append(tabs, list);
+  foot.append(tally, bulk);
+  wrap.appendChild(foot);
+
+  wrap.appendChild(followBlock());
+  return wrap;
+}
+
+function boardCard(opt, knobs, row, changed) {
+  const card = el('div', 'board' + (opt.checked ? ' on' : ''));
+  const head = el('label', 'board-head');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = !!opt.checked;
+  cb.setAttribute('aria-label', 'Scan ' + opt.label);
+  cb.addEventListener('change', () => {
+    opt.checked = cb.checked;
+    card.classList.toggle('on', cb.checked);
+    // the limits are only worth showing on a board that runs
+    const box = card.querySelector('.board-knobs');
+    if (box) box.hidden = !cb.checked;
+    if (changed) changed();
+    commitBoards(row);
+  });
+  head.appendChild(cb);
+  head.appendChild(el('span', 'board-name', opt.label));
+  // The config id is a tooltip, not a column: it is noise for everyone except
+  // the person editing config.yaml, and it was squeezing long board names.
+  if (opt.label.toLowerCase() !== opt.value) {
+    card.title = opt.value;
+  }
+  card.appendChild(head);
+
+  const mine = knobs.filter((k) => k.source === opt.value);
+  if (mine.length) {
+    const box = el('div', 'board-knobs');
+    box.hidden = !opt.checked;
+    for (const k of mine) box.appendChild(knobControl(k));
+    card.appendChild(box);
+  }
+  return card;
+}
+
+function knobControl(k) {
+  const line = el('label', 'knob');
+  line.appendChild(el('span', 'knob-name', k.label));
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.step = '1';
+  input.value = k.value != null ? k.value : '';
+  input.id = 'set-' + k.key;
+  const err = el('span', 'field-err');
+  err.hidden = true;
+  input.addEventListener('change', () => {
+    err.hidden = true;
+    const v = Number(input.value);
+    if (!isFinite(v)) {
+      err.textContent = 'Not a number';
+      err.hidden = false;
+      return;
+    }
+    commitSoon(k, v, err);
+  });
+  line.appendChild(input);
+  line.appendChild(err);
+  return line;
+}
+
+/* The board list is one config key, so a burst of ticks is one write. The
+ * sequence in the file is the scan order, which is why the selection keeps the
+ * order captured when the pane opened rather than the order boxes were ticked. */
+function commitBoards(row) {
+  const ticked = row.options.filter((o) => o.checked).map((o) => o.value);
+  const order = Array.isArray(row.value) ? row.value.slice() : [];
+  const rank = (v) => {
+    const i = order.indexOf(v);
+    return i === -1 ? order.length + ticked.indexOf(v) : i;
+  };
+  commitSoon(row, ticked.slice().sort((a, b) => rank(a) - rank(b)));
+}
+
+function wantedPane() {
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3', 'What you want'));
+  wrap.appendChild(el('p', 'set-lead',
+    'These three lists decide what is a match at all, and what rises to the top.'));
+  for (const r of rowsFor('wanted', false)) wrap.appendChild(fieldRow(r));
+  return wrap;
+}
+
+function wherePane() {
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3', 'Where'));
+  wrap.appendChild(el('p', 'set-lead',
+    'Countries decide what is allowed; places decide what ranks higher. ' +
+    'Leave both empty to look everywhere.'));
+  for (const r of rowsFor('where', false)) wrap.appendChild(fieldRow(r));
+  return wrap;
+}
+
+function matchingPane() {
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3', 'Matching'));
+  wrap.appendChild(el('p', 'set-lead',
+    'How strict the board is, and how much it loads.'));
+
+  const card = el('div', 'set-card');
+  for (const r of rowsFor('matching', false)) card.appendChild(fieldRow(r, true));
+  wrap.appendChild(card);
+
+  const advRows = rowsFor('matching', true);
+  if (advRows.length) {
+    const det = document.createElement('details');
+    det.className = 'set-adv';
+    det.appendChild(el('summary', null, 'Advanced'));
+    for (const r of advRows) det.appendChild(fieldRow(r, true));
+    wrap.appendChild(det);
+  }
+  return wrap;
+}
+
+function updatesPane() {
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3', 'Updates'));
+  wrap.appendChild(el('p', 'set-lead',
+    'jobscout asks GitHub, and never replaces a working build without a ' +
+    'verified download.'));
+  const card = el('div', 'set-card');
+  for (const r of rowsFor('updates', false)) card.appendChild(fieldRow(r, true));
+  wrap.appendChild(card);
+  wrap.appendChild(checkNowRow(SET.info));
+  return wrap;
+}
+
+/* ---------- one field ---------- */
+
+const SET_UNIT_KEYS = new Set(Object.keys(SET_UNITS));
+
+function fieldRow(r, compact) {
+  const f = el('div', 'field' + (compact ? ' compact' : ''));
+  const left = el('div', 'field-text');
+  const label = el('label', 'field-label', r.label);
+  label.htmlFor = 'set-' + r.key;
+  left.appendChild(label);
+  left.appendChild(el('p', 'field-help', r.help));
+  const right = el('div', 'field-control');
+  const err = el('div', 'field-err');
+  err.hidden = true;
+
+  let control;
+  if (r.kind === 'bool') {
+    control = switchControl(r, err);
+  } else if (r.kind === 'str_int_map') {
+    control = skillsControl(r, err);
+  } else if (r.kind === 'str_list') {
+    control = chipsControl(r, err);
+  } else {
+    control = numberControl(r, err);
+  }
+  right.appendChild(control);
+  right.appendChild(err);
+  f.append(left, right);
+  return f;
+}
+
+function numberControl(r, err) {
+  const box = el('div', 'num');
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = 'any';
+  input.id = 'set-' + r.key;
+  input.value = r.value != null ? r.value : '';
+  input.addEventListener('input', () => {
+    const v = Number(input.value);
+    if (input.value.trim() !== '' && isFinite(v)) commitSoon(r, v, err);
+  });
+  input.addEventListener('change', () => {
+    err.hidden = true;
+    const v = Number(input.value);
+    if (!isFinite(v)) {
+      err.textContent = 'Not a number';
+      err.hidden = false;
+      return;
+    }
+    commitSoon(r, v, err, 0);
+  });
+  box.appendChild(input);
+  const unit = SET_UNITS[r.key];
+  if (unit) box.appendChild(el('span', 'num-unit', unit));
+  return box;
+}
+
+function switchControl(r, err) {
+  const line = el('label', 'switch');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = 'set-' + r.key;
+  input.checked = r.value === true;
+  input.setAttribute('aria-label', r.label);
+  const track = el('span', 'switch-track');
+  line.append(input, track);
+  input.addEventListener('change', () => commitSoon(r, input.checked, err, 0));
+  return line;
+}
+
+/* A list as chips: typing a title and pressing Enter is one gesture, and the
+ * current list stays readable at a glance instead of being a textarea of lines. */
+function chipsControl(r, err) {
+  let values = Array.isArray(r.value) ? r.value.slice() : [];
+  const box = el('div', 'chips');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'chip-input';
+  input.id = 'set-' + r.key;
+  input.placeholder = 'Add and press Enter';
+  input.setAttribute('aria-label', 'Add to ' + r.label);
+
+  const paint = () => {
+    for (const old of box.querySelectorAll('.chip')) old.remove();
+    for (const v of values) {
+      const chip = el('span', 'chip');
+      chip.appendChild(el('span', 'chip-text', v));
+      const x = el('button', 'chip-x', '\u00d7');
+      x.type = 'button';
+      x.title = 'Remove ' + v;
+      x.setAttribute('aria-label', 'Remove ' + v);
+      x.addEventListener('click', () => {
+        values = values.filter((item) => item !== v);
+        paint();
+        commitSoon(r, values.slice(), err);
+      });
+      chip.appendChild(x);
+      box.insertBefore(chip, input);
+    }
+  };
+
+  const add = (text) => {
+    let changed = false;
+    for (const piece of String(text).split(/[\n,]/)) {
+      const v = piece.trim();
+      if (v && !values.includes(v)) { values.push(v); changed = true; }
+    }
+    if (changed) {
+      paint();
+      commitSoon(r, values.slice(), err);
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      add(input.value);
+      input.value = '';
+    } else if (e.key === 'Backspace' && !input.value && values.length) {
+      values = values.slice(0, -1);
+      paint();
+      commitSoon(r, values.slice(), err);
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (input.value.trim()) { add(input.value); input.value = ''; }
+  });
+  input.addEventListener('paste', (e) => {
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    if (/[\n,]/.test(text)) {
+      e.preventDefault();
+      add(text);
+      input.value = '';
+    }
+  });
+  box.appendChild(input);
+  paint();
+  return box;
+}
+
+/* Skills are a name and a weight, so they are rows rather than "name: 3" lines
+ * nobody should have to spell. */
+function skillsControl(r, err) {
+  let entries = Object.entries(r.value || {});
+  const box = el('div', 'skills');
+
+  const commit = () => {
+    const out = {};
+    for (const [name, weight] of entries) if (name) out[name] = weight;
+    commitSoon(r, out, err);
+  };
+
+  const paint = () => {
+    box.textContent = '';
+    for (const [name, weight] of entries) {
+      const line = el('div', 'skill');
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = name;
+      nameInput.className = 'skill-name';
+      nameInput.setAttribute('aria-label', 'Skill');
+      nameInput.addEventListener('change', () => {
+        const next = nameInput.value.trim();
+        const i = entries.findIndex(([n]) => n === name);
+        if (i >= 0) entries[i] = [next, weight];
+        paint();
+        commit();
+      });
+      const select = document.createElement('select');
+      select.className = 'skill-w';
+      select.setAttribute('aria-label', 'How much you want ' + name);
+      for (const [value, label] of [[3, '3 · strong'], [2, '2 · good'], [1, '1 · nice']]) {
+        const o = document.createElement('option');
+        o.value = String(value);
+        o.textContent = label;
+        if (Number(weight) === value) o.selected = true;
+        select.appendChild(o);
+      }
+      select.addEventListener('change', () => {
+        const i = entries.findIndex(([n]) => n === name);
+        if (i >= 0) entries[i] = [name, Number(select.value)];
+        commit();
+      });
+      const x = el('button', 'chip-x', '\u00d7');
+      x.type = 'button';
+      x.title = 'Remove ' + name;
+      x.addEventListener('click', () => {
+        entries = entries.filter(([n]) => n !== name);
+        paint();
+        commit();
+      });
+      line.append(nameInput, select, x);
+      box.appendChild(line);
+    }
+    const addLine = el('div', 'skill add');
+    const addInput = document.createElement('input');
+    addInput.type = 'text';
+    addInput.placeholder = 'Add a skill';
+    addInput.className = 'skill-name';
+    addInput.setAttribute('aria-label', 'Add a skill');
+    const addBtn = el('button', 'ghost small', 'Add');
+    addBtn.type = 'button';
+    const doAdd = () => {
+      const v = addInput.value.trim();
+      if (!v) return;
+      if (!entries.some(([n]) => n === v)) entries.push([v, 2]);
+      addInput.value = '';
+      paint();
+      commit();
+    };
+    addBtn.addEventListener('click', doAdd);
+    addInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
+    });
+    addLine.append(addInput, addBtn);
+    box.appendChild(addLine);
+  };
+
+  paint();
+  return box;
+}
+
+/* ---------- saving ---------- */
+
+function commitSoon(r, value, err, delay) {
+  clearTimeout(SET_TIMERS.get(r.key));
+  if (err) err.hidden = true;
+  const wait = delay == null ? 500 : delay;
+  SET_TIMERS.set(r.key, setTimeout(() => commitRow(r, value, err), wait));
+}
+
+async function commitRow(r, value, err) {
+  try {
+    const res = await pywebview.api.save_setting(r.key, value);
+    r.value = value;
+    setNote(res && res.changed ? 'Saved' : '');
+    if (res && res.changed) setTimeout(() => setNote(''), 1400);
+    // strictness changes rescore the list on next scan; the header must agree
+    STATS = await pywebview.api.stats();
+    renderStats();
+  } catch (e) {
+    setNote('Could not save ' + r.label + '.', true);
+    if (err) {
+      err.textContent = String(e && e.message ? e.message : e);
+      err.hidden = false;
+    }
+  }
+}
+
+/* ---------- search ---------- */
+
+function searchResults() {
+  const q = SET.query.toLowerCase();
+  const hits = SET.rows.filter((r) => {
+    const hay = [r.label, r.help, r.key, r.group, r.source_label || ''].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  const wrap = el('section', 'set-pane-body');
+  wrap.appendChild(el('h3', 'set-h3',
+    hits.length + (hits.length === 1 ? ' setting matches ' : ' settings match ') +
+    '\u201c' + SET.query + '\u201d'));
+  if (!hits.length) {
+    wrap.appendChild(el('p', 'set-lead', 'Try a word like score, boards, titles or updates.'));
+    return wrap;
+  }
+  for (const r of hits) {
+    if (r.key === 'sources.enabled') {
+      const jump = el('button', 'set-jump');
+      jump.type = 'button';
+      const [on, total] = boardCounts();
+      jump.textContent = 'Job boards \u2014 ' + on + ' of ' + total + ' on. Open them.';
+      jump.addEventListener('click', () => {
+        SET.section = 'boards';
+        SET.query = '';
+        renderSettings();
+      });
+      wrap.appendChild(jump);
+      continue;
+    }
+    wrap.appendChild(fieldRow(r));
+  }
+  return wrap;
+}
+
+/* ---------- updates: asking now ---------- */
+
 function checkNowRow(info) {
-  const row = el('div', 's-row');
+  const card = el('div', 'set-card');
   if (info && info.version) {
-    // Which build you are on, without a terminal and without a network call.
-    row.appendChild(el('p', 's-help',
+    card.appendChild(el('p', 'set-card-title',
       'You are running jobscout ' + info.version +
       (info.frozen ? '' : ' (a source checkout, which cannot install updates)')));
   }
-  const line = el('div', 's-check');
+  const line = el('div', 'set-check');
   const btn = el('button', 'ghost small', 'Check now');
   btn.type = 'button';
   const out = el('span', 'up-note', '');
@@ -1014,56 +1657,46 @@ function checkNowRow(info) {
       out.textContent = 'Up to date (jobscout ' + res.current + ').';
     }
   });
-  line.appendChild(btn);
-  line.appendChild(out);
-  row.appendChild(line);
-  row.appendChild(el('p', 's-help',
-    'Asks GitHub now instead of waiting for the daily check.'));
+  line.append(btn, out);
+  card.appendChild(line);
+  card.appendChild(el('p', 'field-help', 'Asks GitHub now instead of waiting for the daily check.'));
   if (info && info.log) {
-    row.appendChild(el('p', 's-help',
-      'Every check and what came of it is written to ' + info.log + '.'));
+    card.appendChild(el('p', 'field-help', 'Every check is written to ' + info.log + '.'));
   }
-  return row;
+  return card;
 }
 
-/* The per-company boards: the employers this profile follows. This is where the
-   "before everyone else" position actually comes from -- each board belongs to
-   one employer and is their own hiring system, so a vacancy is here when it is
-   published and usually nowhere else for a while. Adding one needs no account:
-   the employer's public board URL is enough, and it is validated against the
-   board's own API before anything is written to the config. */
-let WATCH = [];
+/* ---------- companies you follow ---------- */
+
+/* Each board belongs to one employer and is their own hiring system, so a
+ * vacancy is here when it is published and usually nowhere else for a while.
+ * Adding one needs no account: the employer's public board URL is enough, and
+ * it is validated against the board's own API before anything is written. */
 
 function followBlock() {
-  const sec = el('section', 's-group');
+  const sec = el('section', 'set-sub');
   sec.id = 'follow-group';
-  sec.appendChild(el('h3', null, 'Companies you follow'));
-  sec.appendChild(el('p', 's-help',
-    'One employer each, and it is their own system, so a vacancy appears here ' +
-    'the moment they publish it. Most of these roles never reach a big board ' +
-    'at all. Paste a careers page to follow one more.'));
+  sec.appendChild(el('h3', 'set-h3', 'Companies you follow'));
+  sec.appendChild(el('p', 'set-lead',
+    'Their own hiring system, so a role appears here the moment they publish ' +
+    'it. Most never reach a big board at all.'));
 
-  // The app checking its own claim, in numbers rather than adjectives. It is
-  // thin data and it says so: what makes it mean more is more scans, and this
-  // line is the only thing that will ever show whether the head start is real.
   const lead = STATS.lead || {};
   if (lead.pairs && lead.comparable) {
-    sec.appendChild(el('p', 's-help',
+    sec.appendChild(el('p', 'field-help',
       'Measured so far: ' + lead.pairs + ' role' + (lead.pairs === 1 ? '' : 's') +
       ' turned up on two boards. In ' + lead.comparable + ' of those one board had ' +
       'republished the other\u2019s advert: the employer\u2019s own board was first in ' +
       lead.direct_first + ', the republishing board in ' + lead.aggregator_first +
       (lead.median_days !== null && lead.median_days !== undefined
-        ? ' (median gap ' + lead.median_days + ' days)' : '') +
-      '. A small sample says little yet, and it only grows with regular scans.'));
+        ? ' (median gap ' + lead.median_days + ' days)' : '') + '.'));
   } else {
-    sec.appendChild(el('p', 's-help',
-      'No role has turned up on two boards yet, so nothing here is measured: ' +
-      'the head start is simply that these boards are the employer\u2019s own, and ' +
-      'a board that republishes somebody else\u2019s advert is a step behind them.'));
+    sec.appendChild(el('p', 'field-help',
+      'No role has turned up on two boards yet, so the head start is simply ' +
+      'that these boards are the employer\u2019s own.'));
   }
 
-  const add = el('div', 's-check');
+  const add = el('div', 'set-check');
   const input = el('input', 'w-url');
   input.type = 'text';
   input.placeholder = 'https://company.com/careers';
@@ -1093,22 +1726,20 @@ function followBlock() {
     }
     input.value = '';
     WATCH = await pywebview.api.watchlist();
-    say('Now following ' + res.token + ' on ' + res.board + '. ' +
-        'It joins the next scan.', false);
+    say('Now following ' + res.token + ' on ' + res.board + '. It joins the next scan.', false);
     refreshFollow();
   });
   add.append(input, btn, note);
   sec.appendChild(add);
 
   for (const b of WATCH) {
-    const det = el('details', 'w-board');
+    const det = document.createElement('details');
+    det.className = 'w-board';
     det.appendChild(el('summary', null,
       b.label + ' \u00b7 ' + b.count + (b.count === 1 ? ' company' : ' companies') +
       (b.enabled ? '' : ' \u00b7 board switched off')));
     const box = el('div', 'w-tokens');
-    if (!b.count) {
-      box.appendChild(el('span', 's-help', 'none yet'));
-    }
+    if (!b.count) box.appendChild(el('span', 'field-help', 'none yet'));
     for (const t of b.tokens) {
       const chip = el('span', 'w-token');
       chip.appendChild(el('span', null, t));
@@ -1143,225 +1774,6 @@ function followBlock() {
 function refreshFollow() {
   const old = document.getElementById('follow-group');
   if (old) old.replaceWith(followBlock());
-}
-
-function profileBlock() {
-  /* Which workspace you are in, and the way to a different one. Reuses the
-     pane's own classes, and opens the same picker the app asks with at launch
-     rather than a second, differently-behaving profile UI. */
-  const sec = el('section', 's-group');
-  sec.appendChild(el('h3', null, 'Profile'));
-  const row = el('div', 's-row');
-  const current = (PROFILES.profiles || []).find((p) => p.active);
-  const label = el('label', null, 'Using: ' + (current ? current.label : 'Default'));
-  row.appendChild(label);
-  row.appendChild(el('p', 's-help',
-    'Each profile is a separate workspace: its own settings, job boards and ' +
-    'saved postings. Nothing is shared between them.'));
-  const line = el('div', 's-check');
-  const btn = el('button', 'ghost small', 'Switch or create…');
-  btn.type = 'button';
-  btn.addEventListener('click', async () => {
-    const st = await pywebview.api.launch();   // fresh list, same endpoint
-    openPicker(st);
-  });
-  line.appendChild(btn);
-  row.appendChild(line);
-  sec.appendChild(row);
-  return sec;
-}
-
-function settingRow(r) {
-  const wrap = el('div', 's-row');
-  let timer = null;                 // per row, so one row cannot cancel another
-  // Captured ONCE, before any save can overwrite it. The config's order is
-  // meaningful ("sources run in this order"), and reading it back off r.value
-  // each time loses it the moment a save writes an empty or partial list.
-  const order = Array.isArray(r.value) ? r.value.slice() : [];
-  const isBool = r.kind === 'bool';
-  const label = el('label', null, r.label);
-  label.htmlFor = 'set-' + r.key;
-  wrap.appendChild(label);
-  wrap.appendChild(el('p', 's-help', r.help));
-
-  let input;
-  let checkboxes = null;
-
-  if (r.options) {
-    // A list whose possible values the backend knows (job boards). Checkboxes
-    // rather than a textarea: nobody should have to spell 'smartrecruiters'.
-    //
-    // Grouped by the market each board serves, so "which of these are for
-    // Germany" is answerable without knowing 47 board names. The order here is
-    // display only -- the write below uses the `order` snapshot taken above, so
-    // grouping can never rewrite the user's scan sequence.
-    checkboxes = [];
-    const byGroup = new Map();
-    for (const opt of r.options) {
-      const g = opt.group || 'Other';
-      if (!byGroup.has(g)) byGroup.set(g, []);
-      byGroup.get(g).push(opt);
-    }
-    for (const [group, opts] of byGroup) {
-      const sec = el('div', 's-boardgroup');
-      const head = el('div', 's-boardgroup-head');
-      head.appendChild(el('span', 's-boardgroup-name', group));
-      const on = opts.filter((o) => o.checked).length;
-      head.appendChild(el('span', 's-boardgroup-count', on + '/' + opts.length));
-      if (on === 0) head.classList.add('warn');
-      sec.appendChild(head);
-
-      const box = el('div', 's-choices');
-      for (const opt of opts) {
-        const line = el('label', 's-choice');
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = !!opt.checked;
-        cb.dataset.value = opt.value;
-        cb.dataset.group = group;
-        line.appendChild(cb);
-        line.appendChild(el('span', 's-choice-label', opt.label));
-        if (opt.label !== opt.value) line.appendChild(el('span', 's-choice-key', opt.value));
-        box.appendChild(line);
-        checkboxes.push(cb);
-      }
-      sec.appendChild(box);
-      wrap.appendChild(sec);
-    }
-    const tally = el('div', 's-tally');
-    wrap.appendChild(tally);
-
-    const updateTally = () => {
-      const n = checkboxes.filter((c) => c.checked).length;
-      tally.textContent = n + ' of ' + checkboxes.length + ' selected' +
-        (n === 0 ? ' — nothing will be scanned' : '');
-      tally.classList.toggle('warn', n === 0);
-      // and the per-group counts, so turning a whole market off is visible
-      for (const head of wrap.querySelectorAll('.s-boardgroup-head')) {
-        const box = head.nextElementSibling;
-        const boxes = [...box.querySelectorAll('input[type=checkbox]')];
-        const on = boxes.filter((c) => c.checked).length;
-        head.querySelector('.s-boardgroup-count').textContent = on + '/' + boxes.length;
-        head.classList.toggle('warn', on === 0);
-      }
-    };
-    updateTally();
-    for (const cb of checkboxes) cb.addEventListener('change', updateTally);
-  } else if (isBool) {
-    const line = el('div', 's-check');
-    input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = r.value === true;
-    line.appendChild(input);
-    line.appendChild(document.createTextNode('enabled'));
-    wrap.appendChild(line);
-  } else if (r.kind === 'str_int_map') {
-    // one `name: weight` per line -- matches how the config file reads
-    input = document.createElement('textarea');
-    input.value = Object.entries(r.value || {}).map(([k, v]) => k + ': ' + v).join('\n');
-    input.spellcheck = false;
-    wrap.appendChild(input);
-  } else if (r.kind === 'str_list') {
-    input = document.createElement('textarea');
-    input.value = (r.value || []).join('\n');
-    input.spellcheck = false;
-    wrap.appendChild(input);
-  } else {
-    input = document.createElement('input');
-    input.type = 'number';
-    input.step = 'any';
-    input.value = r.value != null ? r.value : '';
-    wrap.appendChild(input);
-  }
-  if (input) input.id = 'set-' + r.key;
-
-  const note = el('span', 's-saved', '');
-  const err = el('div', 's-err', '');
-  err.hidden = true;
-
-  const collect = () => {
-    if (checkboxes) {
-      // The config says "sources run in this order", so keep it. Ranking
-      // against the order captured at render time means the sequence survives
-      // even an untick-everything-then-retick cycle, which a filter against the
-      // current value cannot do: that information is already gone by then.
-      const ticked = checkboxes.filter((c) => c.checked).map((c) => c.dataset.value);
-      const rank = (v) => {
-        const i = order.indexOf(v);
-        return i === -1 ? order.length + ticked.indexOf(v) : i;
-      };
-      return ticked.slice().sort((a, b) => rank(a) - rank(b));
-    }
-    if (isBool) return input.checked;
-    if (r.kind === 'str_list') {
-      return input.value.split('\n').map((s) => s.trim()).filter(Boolean);
-    }
-    if (r.kind === 'str_int_map') {
-      const out = {};
-      for (const line of input.value.split('\n')) {
-        const t = line.trim();
-        if (!t) continue;
-        const i = t.lastIndexOf(':');
-        if (i < 0) throw new Error('expected  name: weight');
-        const k = t.slice(0, i).trim();
-        const v = Number(t.slice(i + 1).trim());
-        if (!k) throw new Error('expected  name: weight');
-        if (!isFinite(v)) throw new Error('weight for "' + k + '" is not a number');
-        out[k] = v;
-      }
-      return out;
-    }
-    const v = Number(input.value);
-    if (!isFinite(v)) throw new Error('not a number');
-    return v;
-  };
-
-  const save = async () => {
-    err.hidden = true;
-    let value;
-    try {
-      value = collect();
-    } catch (e) {
-      err.textContent = e.message;
-      err.hidden = false;
-      return;
-    }
-    try {
-      const res = await pywebview.api.save_setting(r.key, value);
-      r.value = value;
-      note.textContent = res && res.changed ? 'saved' : '';
-      if (note.textContent) setTimeout(() => { note.textContent = ''; }, 1600);
-      // strictness changes rescore the list on next scan; refresh the header
-      STATS = await pywebview.api.stats();
-      renderStats();
-    } catch (e) {
-      err.textContent = String(e && e.message ? e.message : e);
-      err.hidden = false;
-    }
-  };
-
-  // Debounce everything that can fire in a burst. Without this, "untick all"
-  // fired 25 writes back to back; each is a read-modify-write of the file, and
-  // they raced each other into corrupting config.yaml.
-  const saveSoon = (ms) => {
-    clearTimeout(timer);
-    timer = setTimeout(save, ms);
-  };
-
-  if (checkboxes) {
-    for (const cb of checkboxes) cb.addEventListener('change', () => saveSoon(400));
-  } else if (isBool) {
-    input.addEventListener('change', () => saveSoon(200));
-  } else {
-    input.addEventListener('input', () => saveSoon(700));
-    input.addEventListener('blur', () => {
-      clearTimeout(timer);
-      save();
-    });
-  }
-  wrap.appendChild(note);
-  wrap.appendChild(err);
-  return wrap;
 }
 
 /* ---------- update ---------- */

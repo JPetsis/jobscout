@@ -429,114 +429,123 @@ SETTINGS = [
      "group": "Where to look",
      "label": "Which job boards to scan",
      "options_from": "sources",
-     "help": "Untick the ones you do not want. Fewer boards means a faster "
-             "scan; anything already stored stays in your list either way."},
+     "help": "Fewer boards means a faster scan. A board you switch off keeps "
+             "everything it already found."},
 
     {"key": "preferences.title_terms", "op": "list", "kind": "str_list",
      "group": "What you are looking for",
      "label": "Job titles you want",
-     "help": "Each one becomes a search query at the sources. Add the titles you "
+     "help": "Each one becomes a search query at the boards. Add the titles you "
              "would actually take."},
     {"key": "preferences.stack_preferred", "op": "mapping", "kind": "str_int_map",
      "group": "What you are looking for",
-     "label": "Skills you care about, and how much",
-     "help": "Higher weight = more interested. 3 is a strong preference, "
-             "1 is a mild one."},
+     "label": "Skills, and how much you want them",
+     "help": "3 is a strong preference, 1 is a nice-to-have. A skill counts "
+             "once per posting."},
     {"key": "preferences.title_deny", "op": "list", "kind": "str_list",
      "group": "What you are looking for",
      "label": "Titles to reject",
-     "help": "Whole-word match against the title. A posting containing any of "
-             "these is filtered out."},
+     "help": "A posting whose title contains one of these is filtered out."},
 
     {"key": "preferences.country_allow", "op": "list", "kind": "str_list",
      "group": "Where",
      "label": "Countries to accept",
-     "help": "Two-letter codes, for example de for Germany. Empty means "
-             "no country filter."},
+     "help": "Two-letter codes, for example de or us. Empty means no country "
+             "filter; remote postings with no country are kept."},
     {"key": "preferences.locations_prefer", "op": "list", "kind": "str_list",
      "group": "Where",
      "label": "Places you prefer",
-     "help": "Postings here score higher. Substring match, so a city name is "
-             "usually enough."},
+     "help": "Postings here score higher. A city name is usually enough."},
 
     {"key": "preferences.min_score", "op": "scalar", "kind": "number",
      "group": "How strict",
      "label": "Minimum score to show",
-     "help": "Everything below this is stored but hidden from you."},
+     "help": "Everything below this is stored but hidden."},
     {"key": "preferences.strong_threshold", "op": "scalar", "kind": "number",
      "group": "How strict",
      "label": "Score that counts as a strong match",
-     "help": "Shown as the gold band. jobscout stats prints the histogram you "
-             "need to pick this from data."},
+     "help": "Shown as the gold band. `jobscout stats` prints the histogram to "
+             "pick this from data."},
     {"key": "preferences.max_age_days", "op": "scalar", "kind": "number",
      "group": "How strict",
-     "label": "Ignore postings older than this",
-     "help": "In days."},
+     "label": "Hide postings older than",
+     "help": "Days. Older postings stay stored; they are just not shown."},
     {"key": "preferences.scan_if_older_hours", "op": "scalar", "kind": "number",
      "default": 24,
      "group": "How strict",
-     "label": "Look for new openings when the last scan is older than",
-     "help": "In hours, 0 to only ever scan when you press the button. This is "
-             "what keeps everything time-based honest: freshness, the lead-time "
-             "measurement, and a role being re-advertised all need the boards "
-             "to be looked at regularly. The window opens and works normally "
-             "while it scans."},
+     "label": "Scan in the background when the last scan is older than",
+     "help": "Hours. 0 means only when you press Scan."},
     {"key": "preferences.require_title_match", "op": "scalar", "kind": "bool",
      "default": True,
      "group": "How strict",
-     "label": "Only match jobs whose title matches your job titles",
-     "help": "On by default, and the reason your board stays about your work: "
-             "permanent contract, location and keywords are bonuses on a "
-             "relevant posting, and with this off they are enough on their own, "
-             "which is how a museum curatorship ends up next to a PHP role."},
+     "label": "Only match jobs whose title matches your titles",
+     "help": "On, a posting with no title hit is not a match: permanence, place "
+             "and skills only rank a relevant posting. Off, they can carry a "
+             "posting on their own."},
     {"key": "preferences.closing_days", "op": "scalar", "kind": "number",
      "default": 14,
      "group": "How strict",
-     "label": "How close a deadline counts as closing soon",
-     "help": "In days. Deadlines are read out of the advert text, and only "
-             "from the full advert: most boards publish a teaser that has no "
-             "date in it at all, so 'Closing soon' fills up as the scan "
-             "completes the advert pages it can reach."},
+     "label": "Mark a deadline as closing soon within",
+     "help": "Days. Deadlines come from the full advert, so the mark fills in "
+             "as scans complete the pages they can reach."},
     {"key": "preferences.max_results", "op": "scalar", "kind": "number",
      "default": 2000,
      "group": "How strict",
-     "label": "How many results to load",
-     "help": "Best-scored first. The window filters everything it has loaded, "
-             "so a low number can hide a match from a filter, and the footer "
-             "says when that is happening. 0 loads everything."},
+     "label": "How many matches to load",
+     "help": "Best first. The window filters what it loaded, so a low number "
+             "can hide a match; the footer says when that happens. 0 loads all."},
     {"key": "preferences.insider_days", "op": "scalar", "kind": "number",
      "default": 7,
      "group": "How strict",
-     "label": "How recent counts as fresh from the source",
-     "help": "In days. A posting from the employer's own board (or an "
-             "institution's own announcement channel) younger than this is "
-             "marked on the card, and 'Fresh from the source' in the filter "
-             "bar shows only those. Nobody republishing it yet is part of the "
-             "marking, so this is the window in which you are early."},
+     "label": "Mark a posting as fresh for",
+     "help": "Days. A posting from the employer's own board, younger than this "
+             "and not yet republished, is marked on the card."},
     {"key": "preferences.query_budget", "op": "scalar", "kind": "number",
      "group": "How strict",
-     "label": "How many queries per source",
-     "help": "Queries are generated from your titles and skills. Higher finds "
-             "more and takes longer."},
+     "label": "Queries per board",
+     "help": "Queries come from your titles and skills. Higher finds more and "
+             "takes longer."},
     {"key": "preferences.stack_needs_title_match", "op": "scalar", "kind": "bool",
      "group": "How strict",
-     "label": "Only count a skill when the title mentions it too",
-     "help": "On for a narrow search, off to let the description convince you."},
+     "label": "Only count a skill when the title mentions it",
+     "help": "On for a narrow search; off to let the description convince you."},
     {"key": "updates.check", "op": "scalar", "kind": "bool", "default": True,
      "group": "Updates",
      "label": "Check for updates",
-     "help": "Ask GitHub whether a newer version exists, at most once a day, "
-             "when the app opens. The only thing sent is the request itself."},
+     "help": "Ask GitHub once a day, when the app opens. Only the request is "
+             "sent."},
     {"key": "updates.auto", "op": "scalar", "kind": "bool", "default": False,
      "group": "Updates",
-     "label": "Install updates automatically",
-     "help": "Off by default: when this is off you get a notice with an "
-             "Install button and decide yourself, which is the right way round. "
-             "On, a newer version is downloaded and checksum-checked in the "
-             "background and jobscout restarts on it. Either way nothing "
-             "replaces the build you have until the download has verified, and "
-             "the previous one is kept until the swap succeeds."},
+     "label": "Install updates without asking",
+     "help": "Off, you get a notice and decide. On, a newer version downloads, "
+             "is checksum-checked, and jobscout restarts on it."},
 ]
+
+# Which pane of the window a setting belongs to, and whether it is everyday
+# surface or tucked under "Advanced". One table rather than a field on every
+# literal, so the shape of the settings screen is reviewable at a glance.
+# Sections, in rail order: profile (built by the window), boards, wanted, where,
+# matching, updates.
+SECTION_OF = {
+    "sources.enabled": ("boards", False),
+    "preferences.title_terms": ("wanted", False),
+    "preferences.stack_preferred": ("wanted", False),
+    "preferences.title_deny": ("wanted", False),
+    "preferences.country_allow": ("where", False),
+    "preferences.locations_prefer": ("where", False),
+    "preferences.min_score": ("matching", False),
+    "preferences.strong_threshold": ("matching", False),
+    "preferences.max_age_days": ("matching", False),
+    "preferences.closing_days": ("matching", False),
+    "preferences.require_title_match": ("matching", False),
+    "preferences.stack_needs_title_match": ("matching", False),
+    "preferences.max_results": ("matching", True),
+    "preferences.insider_days": ("matching", True),
+    "preferences.query_budget": ("matching", True),
+    "preferences.scan_if_older_hours": ("matching", True),
+    "updates.check": ("updates", False),
+    "updates.auto": ("updates", False),
+}
 
 # Per-source knobs worth putting in the window. Only a knob whose key is already
 # in the config gets a row (cfgwrite will not invent structure, and a control that
@@ -576,8 +585,9 @@ def _source_knob_specs() -> list[dict]:
         name = getattr(REGISTRY.get(source), "LABEL", source)
         out.append({
             "key": f"sources.{source}.{knob}", "op": "scalar", "kind": "number",
-            "group": "Per source", "source_knob": True,
-            "label": f"{name} · {label}", "help": help_text,
+            "group": "Per source", "source_knob": True, "source": source,
+            "label": label, "help": help_text,
+            "source_label": name,
         })
     return out
 
@@ -637,6 +647,10 @@ def read_settings(path) -> list[dict]:
             # tell the user the opposite of the truth.
             value = spec["default"]
         row["value"] = value
+        if spec.get("source_knob"):
+            row["section"], row["advanced"] = "boards", False
+        else:
+            row["section"], row["advanced"] = SECTION_OF.get(spec["key"], ("matching", False))
         if spec.get("options_from") == "sources":
             row["options"] = source_options(row["value"])
         out.append(row)
