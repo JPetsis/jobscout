@@ -96,6 +96,16 @@ jobs:
       - name: install pyinstaller
         run: uv pip install "pyinstaller>=6.22,<7"
 
+      # Qt WebEngine needs libminizip and libopus, ships neither, and the runner
+      # has neither, so packaging/jobscout.spec could only warn and leave them to
+      # the user's system. Install them here and they go into the tarball.
+      - name: install the Qt WebEngine system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libopus0
+          sudo apt-get install -y libminizip1t64 || sudo apt-get install -y libminizip1
+
       # A bundle is only ever built from a green tree.
       - name: pytest
         run: uv run --no-sync pytest
