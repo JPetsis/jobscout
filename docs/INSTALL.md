@@ -10,11 +10,14 @@ Read the section for your system. It is a one-time step per downloaded copy.
 
 ## Windows
 
-**You need:** Windows 10 1803 or newer (Windows 11 is fine). The Microsoft Edge
-WebView2 runtime, which jobscout uses to draw its window, is already present on
-all of these. It is *not* present on Windows Server or LTSC images; if jobscout
-tells you it is missing, install the Evergreen Bootstrapper from
-<https://developer.microsoft.com/microsoft-edge/webview2/> and start it again.
+**You need:** Windows 10 1803 or newer (Windows 11 is fine). Nothing to install:
+the Microsoft Edge WebView2 runtime that draws the window is already part of
+those versions, and Qt is not used on Windows at all.
+
+Windows Server and LTSC images ship without Edge and therefore without that
+runtime. The download carries Microsoft's installer for exactly this case: start
+jobscout, answer **Yes** to its one question, and it installs the runtime itself.
+If that copy is somehow missing, the app names the download page instead.
 
 **First run:**
 
@@ -87,8 +90,9 @@ unzip it with Finder's own "Open" rather than a third-party archiver.
 
 ## Linux
 
-**You need:** a desktop session with either Qt or GTK available. The packaged
-build bundles Qt, so a normal desktop install should just work.
+**You need:** a desktop session. The packaged build carries Qt and its WebEngine
+inside the tarball, so there is no Qt to install: the only requirements are the
+system libraries any desktop already has (X11 or Wayland, libGL, fontconfig).
 
 1. Download `jobscout-linux-x86_64.tar.gz` (or `aarch64` for ARM) and unpack it:
 

@@ -105,6 +105,26 @@ jobs:
           uv run --no-sync pyinstaller packaging/jobscout.spec
           --noconfirm --distpath dist --workpath build
 
+      # Windows Server and LTSC images ship without Edge, and therefore without
+      # the WebView2 runtime pywebview needs to draw a window. The app can
+      # install it itself, with one click, but only if Microsoft's bootstrapper
+      # is sitting next to the .exe. It is ~1.5 MB against a 50 MB zip, so every
+      # Windows build carries it.
+      - name: bundle the WebView2 bootstrapper (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # A release must not fail because Microsoft's link was slow. The app
+        # falls back to naming the download URL when this file is absent.
+        continue-on-error: true
+        run: |
+          $out = "dist/jobscout/MicrosoftEdgeWebView2Setup.exe"
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $out -UseBasicParsing
+          if (Test-Path $out) {
+            Get-Item $out | Format-List Name, Length
+          } else {
+            Write-Warning "bootstrapper not downloaded; the app will name the URL instead"
+          }
+
       # Package by hand: an artifact-service zip does not preserve the symlinks
       # inside a macOS .app, and macOS then reports the app as "damaged". ditto
       # keeps the bundle intact. (It also preserves the extended attributes the

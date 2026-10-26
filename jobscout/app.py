@@ -9,6 +9,7 @@ touch holds `dbm.LOCK` (see the note above LOCK in db.py).
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -665,6 +666,80 @@ class JsApi:
 WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 
 
+def _app_dir() -> Path:
+    """The folder the running app lives in.
+
+    Frozen, that is next to the .exe; from source it is the package directory.
+    Anything the bundle carries has to be looked up this way, never from the
+    working directory: a user who double-clicks the app has no working directory
+    we control.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def _webview2_bootstrapper() -> Path | None:
+    """The Evergreen Bootstrapper shipped inside this build, when there is one."""
+    for name in ("MicrosoftEdgeWebView2Setup.exe",
+                 "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"):
+        candidate = _app_dir() / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _ask_windows(question: str) -> bool:
+    """A Yes/No box with no GUI toolkit and no console.
+
+    A windowed build has no terminal, so printing a URL is the same as saying
+    nothing at all. ctypes is part of Python on Windows and needs no dependency.
+    """
+    try:
+        import ctypes                                        # noqa: PLC0415
+        mb_yesno, mb_iconwarning, id_yes = 0x4, 0x30, 6
+        win = ctypes.windll.user32                            # type: ignore[attr-defined]
+        return win.MessageBoxW(None, question, "jobscout",
+                               mb_yesno | mb_iconwarning) == id_yes
+    except Exception:
+        return False
+
+
+def _tell_windows(message: str) -> None:
+    """Show a failure in a box, for builds that have nowhere to print."""
+    try:
+        import ctypes                                        # noqa: PLC0415
+        mb_ok, mb_iconerror = 0x0, 0x10
+        ctypes.windll.user32.MessageBoxW(                     # type: ignore[attr-defined]
+            None, message, "jobscout", mb_ok | mb_iconerror)
+    except Exception:
+        pass
+
+
+def _install_webview2(bootstrapper: Path) -> bool:
+    """Offer to install the runtime, then re-check.
+
+    The bootstrapper is Microsoft's own, redistributed with the app for exactly
+    this case: a Windows Server or LTSC image, where Edge (and therefore
+    WebView2) is not part of the OS. One click here beats sending a
+    non-technical user to a developer page to pick the right download.
+    """
+    if not _ask_windows(
+            "jobscout needs the Microsoft Edge WebView2 runtime to draw its "
+            "window.\n\n"
+            "This Windows edition does not include it, but this copy of "
+            "jobscout brought the installer with it.\n\n"
+            "Install it now? It takes about a minute and needs an internet "
+            "connection."):
+        return False
+    try:
+        subprocess.run([str(bootstrapper), "/silent", "/install"],
+                       check=False, timeout=900)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return _has_webview2()
+
+
 def _check_backend() -> None:
     """Fail with a fixable message when the OS renderer is missing.
 
@@ -692,13 +767,21 @@ def _check_backend() -> None:
         # WebView2 ships with Windows 11 and 10 1803+, but NOT with Windows
         # Server or LTSC images, where the user has to install it once.
         if not _has_webview2():
-            raise SystemExit(
-                "jobscout-app needs the Microsoft Edge WebView2 runtime, which "
-                "is not installed on this machine.\n"
-                "It is a one-time install (it is already present on Windows 11 "
-                "and on Windows 10 1803+):\n"
-                f"    {WEBVIEW2_URL}\n"
-                "Choose the Evergreen Bootstrapper, then start jobscout again.")
+            bootstrapper = _webview2_bootstrapper()
+            if bootstrapper is not None and _install_webview2(bootstrapper):
+                return
+            message = (
+                "jobscout needs the Microsoft Edge WebView2 runtime, which is "
+                "not installed on this machine.\n\n"
+                "It is a one-time install, and it is already present on "
+                "Windows 11 and Windows 10 1803+.\n\n"
+                f"Download it from {WEBVIEW2_URL} (choose the Evergreen "
+                "Bootstrapper), then start jobscout again.")
+            if bootstrapper is not None:
+                message += (f"\n\nOr run the copy in this folder: "
+                            f"{bootstrapper}")
+            _tell_windows(message)
+            raise SystemExit(message)
 
 
 def _has_webview2() -> bool:
