@@ -197,7 +197,11 @@ if sys.platform.startswith("linux"):
     for _soname in ("libminizip.so.1", "libopus.so.0"):
         _path = _find_shared_library(_soname)
         if _path and Path(_path).is_file():
-            binaries.append((_path, "."))
+            # Next to libQt6WebEngineCore, which is what NEEDs them: DT_RUNPATH
+            # belongs to the object that declares it and is not inherited, so the
+            # bundle root would never be searched for a dependency of Qt's own
+            # library. Resolved, because ldconfig reports the symlink.
+            binaries.append((str(Path(_path).resolve()), "PyQt6/Qt6/lib"))
         else:
             print(f"warning: {_soname} not found on this build host; the "
                   f"bundle will rely on the system copy", file=sys.stderr)

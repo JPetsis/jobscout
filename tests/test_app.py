@@ -28,14 +28,20 @@ def test_webview2_check_is_a_noop_off_windows(monkeypatch):
 
 
 def test_windows_without_webview2_fails_with_a_fixable_message(monkeypatch):
+    """The dialog is mocked: on Windows the real MessageBoxW blocks the runner
+    forever, which is exactly how this test hung the 0.6.0 build."""
+    shown = []
     monkeypatch.setattr(appmod.sys, "platform", "win32")
     monkeypatch.setattr(appmod, "_has_webview2", lambda: False)
+    monkeypatch.setattr(appmod, "_webview2_bootstrapper", lambda: None)
+    monkeypatch.setattr(appmod, "_tell_windows", shown.append)
     with pytest.raises(SystemExit) as e:
         appmod._check_backend()
     msg = str(e.value)
     assert "WebView2" in msg
     assert appmod.WEBVIEW2_URL in msg              # the user is told where to go
     assert "Evergreen" in msg
+    assert shown == [msg], "a windowed build has no console; the box must say it"
 
 
 def test_windows_with_webview2_passes(monkeypatch):
@@ -45,15 +51,26 @@ def test_windows_with_webview2_passes(monkeypatch):
 
 
 def test_linux_without_a_backend_fails_with_the_pip_extra(monkeypatch):
+    """Hiding the modules is deterministic on every platform.
+
+    The old version patched `builtins.__import__`, which `importlib` does not
+    use, so on the Linux runner it read the real Qt (present, but missing libEGL
+    there) and asserted a message about a different problem.
+    """
     monkeypatch.setattr(appmod.sys, "platform", "linux")
-    real_import = __import__
+    monkeypatch.setitem(sys.modules, "qtpy", None)
+    monkeypatch.setitem(sys.modules, "gi", None)
+    with pytest.raises(SystemExit) as e:
+        appmod._check_backend()
+    assert "pywebview[qt]" in str(e.value)
 
-    def fake_import(name, *a, **k):
-        if name in ("qtpy", "gi"):
-            raise ImportError(name)
-        return real_import(name, *a, **k)
 
-    monkeypatch.setattr("builtins.__import__", fake_import)
+def test_the_root_warning_does_not_crash_where_geteuid_is_missing(monkeypatch):
+    """Windows has no os.geteuid, and the tests fake the Linux branch there."""
+    monkeypatch.setattr(appmod.sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "qtpy", None)
+    monkeypatch.setitem(sys.modules, "gi", None)
+    monkeypatch.delattr(appmod.os, "geteuid", raising=False)
     with pytest.raises(SystemExit) as e:
         appmod._check_backend()
     assert "pywebview[qt]" in str(e.value)
