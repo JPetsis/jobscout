@@ -222,7 +222,7 @@ goal never matches unknown pay, because no number is not the same as enough.
 
 ## Location: countries, not cities
 
-`country_allow: [de]` is the location gate. It answers "which country is
+`country_allow` (a list holding `de`) is the location gate. It answers "which country is
 this?" instead of "does the location string contain one of the words I typed
 down", because a country is not a term. Germany has ~11,000 municipalities and
 no finite list of names is a country; a hand-written list of 60 cities

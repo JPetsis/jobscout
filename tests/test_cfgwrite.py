@@ -149,11 +149,14 @@ def test_empty_path_raises(tmp_path):
 
 # --- lists -----------------------------------------------------------------
 
-def test_inline_flow_list_is_replaced_inline(tmp_path):
+def test_an_inline_flow_list_becomes_one_item_per_line(tmp_path):
+    """A flow list is unreadable to edit: counting commas to cut one element
+    is not something anyone should do in a file meant to be opened by hand."""
     p = _w(tmp_path)
     cfgwrite.edit(p, "list", "preferences.country_allow", ["de", "at"])
     out = p.read_text(encoding="utf-8")
-    assert "country_allow: [de, at]" in out
+    assert "country_allow:\n    - de\n    - at\n" in out
+    assert "[de, at]" not in out
     assert _comments(out) == _comments(SAMPLE)         # comments kept
 
 
@@ -180,7 +183,7 @@ def test_list_inside_nested_block(tmp_path):
     p = _w(tmp_path)
     cfgwrite.edit(p, "list", "sources.enabled", ["xing"])
     out = p.read_text(encoding="utf-8")
-    assert "enabled: [xing]" in out
+    assert "  enabled:\n    - xing\n" in out
     assert "preferences:" in out
 
 
@@ -348,23 +351,19 @@ def test_writing_a_wrapped_flow_list_leaves_no_dangling_lines():
     assert out.count("enabled:") == 1
 
 
-def test_the_wrapped_shape_is_preserved_for_a_long_list():
-    """A 200-character single line is valid YAML and a readability regression,
-    so the original wrapping style comes back."""
+def test_a_long_list_is_one_line_per_item():
     long_list = [f"board{i:02d}" for i in range(30)]
     out = cfgwrite.set_list(WRAPPED, "sources.enabled", long_list)
     import yaml
     assert yaml.safe_load(out)["sources"]["enabled"] == long_list
     body = [l for l in out.splitlines() if "board" in l]
-    assert len(body) > 1, "should still be wrapped"
-    # continuation lines align just after the '['
-    assert body[1].startswith(" " * 12)
+    assert len(body) == 30
+    assert all(l.startswith("    - board") for l in body)
 
 
-def test_a_short_list_collapses_back_to_one_line():
+def test_a_short_list_is_also_one_line_per_item():
     out = cfgwrite.set_list(WRAPPED, "sources.enabled", ["xing", "hn"])
-    line = next(l for l in out.splitlines() if "enabled:" in l)
-    assert line.strip() == "enabled: [xing, hn]"
+    assert "  enabled:\n    - xing\n    - hn\n" in out
 
 
 def test_wrapped_flow_round_trip_is_byte_identical():
@@ -372,10 +371,11 @@ def test_wrapped_flow_round_trip_is_byte_identical():
     assert cfgwrite.set_list(WRAPPED, "sources.enabled", current) == WRAPPED
 
 
-def test_a_single_line_flow_list_still_works():
+def test_a_single_line_flow_list_is_read_and_rewritten_as_items():
     text = "sources:\n  enabled: [a, b]\n"
     assert cfgwrite.get_value(text, "sources.enabled") == ["a", "b"]
-    assert cfgwrite.set_list(text, "sources.enabled", ["c"]) == "sources:\n  enabled: [c]\n"
+    assert cfgwrite.set_list(text, "sources.enabled", ["c"]) == (
+        "sources:\n  enabled:\n    - c\n")
 
 
 def test_a_wrapped_flow_is_not_confused_by_a_comment():

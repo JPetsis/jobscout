@@ -135,18 +135,54 @@ preferences:
   # the matched phrase stays in the score breakdown. These are the German,
   # Austrian ("fix", "Planstelle"), Swiss and English words for it, seeded from
   # jobscout/contract.py and kept in step with it by a test.
-  permanent_terms: [unbefristet, festanstellung, feste anstellung, feste stelle, dauerstelle, fixe anstellung, fixe stelle, planstelle, permanent, open-ended, open ended, indefinite]
+  permanent_terms:
+    - unbefristet
+    - festanstellung
+    - feste anstellung
+    - feste stelle
+    - dauerstelle
+    - fixe anstellung
+    - fixe stelle
+    - planstelle
+    - permanent
+    - open-ended
+    - open ended
+    - indefinite
   permanent_boost: 4
   permanent_cap: 4
   # The inverse marker (0 points): no permanence word, but the text says
   # fixed-term -> a "fixed-term" chip. "befristet" never fires on
   # "unbefristet" (the elif against a real perm hit guards it).
-  temporary_terms: [befristet, zeitvertrag, vertrag auf zeit, elternzeitvertretung, karenzvertretung, urlaubsvertretung, temporary, fixed-term, fixed term, maternity cover, parental leave cover, temporär]
+  temporary_terms:
+    - befristet
+    - zeitvertrag
+    - vertrag auf zeit
+    - elternzeitvertretung
+    - karenzvertretung
+    - urlaubsvertretung
+    - temporary
+    - fixed-term
+    - fixed term
+    - maternity cover
+    - parental leave cover
+    - temporär
   # Academic-rank titles are filtered before scoring. Boundary-FRIENDLY
   # matching on purpose, so compounds hit ("Universitätsprofessur" ->
   # "professur"). Empty list switches it off.
-  academic_deny: [professur, professorship, professor, postdoc, postdoktorand,
-                  doktorand, doktorat, phd, w1, w2, w3, tenure, universitätsassistent]
+  academic_deny:
+    - professur
+    - professorship
+    - professor
+    - postdoc
+    - postdoktorand
+    - doktorand
+    - doktorat
+    - phd
+    - w1
+    - w2
+    - w3
+    - tenure
+    - universitätsassistent
   # Seconds between two requests to the SAME host, for sources that do not ask
   # for their own pace (the scraper sources keep theirs). This is the scan's real
   # cost: lever and teamtailor walk one request per company, so 150 companies at
@@ -173,7 +209,10 @@ preferences:
   deadline_probe_per_scan: 25
 
   # --- ANYWHERE keywords (title + company + location + description) ---
-  keywords: [agile, scrum, kanban]
+  keywords:
+    - agile
+    - scrum
+    - kanban
   keyword_weight: 1
   keyword_cap: 8
   # whole-word, anywhere -> filtered out of digests (stored, with reason)
@@ -250,12 +289,46 @@ preferences:
 
 sources:
   # sources run in this order; remove entries to disable them
-  enabled: [linkedin, stepstone, xing, stellenanzeigen, karriere_at, jobs_ch,
-            arbeitnow, berlinstartupjobs, ams, eures, jobsat, hn, remotive, wwr, remoteok,
-            larajobs, workingnomads, nodesk, himalayas, greenhouse, ashby, recruitee,
-            themuse, germantechjobs, swissdevjobs, jobup, jobscout24, jobware, talent,
-            englishjobs, governmentjobs, jobicy, wordpressjobs, pythonjobs, fossjobs,
-            academics, wissenschaftskarriere, euraxess, myscience]
+  enabled:
+    - linkedin
+    - stepstone
+    - xing
+    - stellenanzeigen
+    - karriere_at
+    - jobs_ch
+    - arbeitnow
+    - berlinstartupjobs
+    - ams
+    - eures
+    - jobsat
+    - hn
+    - remotive
+    - wwr
+    - remoteok
+    - larajobs
+    - workingnomads
+    - nodesk
+    - himalayas
+    - greenhouse
+    - ashby
+    - recruitee
+    - themuse
+    - germantechjobs
+    - swissdevjobs
+    - jobup
+    - jobscout24
+    - jobware
+    - talent
+    - englishjobs
+    - governmentjobs
+    - jobicy
+    - wordpressjobs
+    - pythonjobs
+    - fossjobs
+    - academics
+    - wissenschaftskarriere
+    - euraxess
+    - myscience
 
   linkedin:
     # LinkedIn's public guest search (no login). Keep the budget small or
@@ -328,7 +401,8 @@ sources:
     search: ""
 
   wwr:
-    categories: [remote-programming-jobs]
+    categories:
+      - remote-programming-jobs
 
   himalayas:
     # 20 jobs per page, hard rate limit (HTTP 429): keep the budget small.
@@ -349,7 +423,8 @@ sources:
     # `locations` narrows one (/jobs/role/software-engineer/new-york).
     # This is the "added recently" list, not the archive: Work at a Startup's
     # full search sits behind a login.
-    roles: [software-engineer]
+    roles:
+      - software-engineer
     locations: []
     max_jobs: 120
 
@@ -358,7 +433,8 @@ sources:
     # about 41 roles a page — 1,899 software-engineer roles over 46 pages when
     # measured in October 2026. Cards carry a salary band; job pages have the
     # schema.org JobPosting the detail probe reads.
-    roles: [software-engineer]
+    roles:
+      - software-engineer
     max_pages: 3
 
   dice:
@@ -435,7 +511,8 @@ sources:
 
   englishjobs:
     # English-speaking jobs in Germany. Category pages, not keyword search.
-    categories: [remote]     # e.g. remote, visa-sponsorship, part-time
+    categories:              # e.g. remote, visa-sponsorship, part-time
+      - remote
     pages: 2
 
   governmentjobs:
@@ -482,10 +559,17 @@ sources:
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>
-    tokens: [getyourguide, celonis, trivago, sumup]
+    tokens:
+      - getyourguide
+      - celonis
+      - trivago
+      - sumup
   ashby:
     # board tokens from https://jobs.ashbyhq.com/<token>
-    tokens: [n8n, langfuse, supabase]
+    tokens:
+      - n8n
+      - langfuse
+      - supabase
   lever:
     # board tokens from https://jobs.lever.co/<token>
     tokens: []

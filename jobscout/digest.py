@@ -7,6 +7,7 @@ from pathlib import Path
 
 from . import db as dbm
 from . import salary as salmod
+from .sources import label_for
 from .config import Config
 from .textutil import snippet
 
@@ -19,7 +20,9 @@ def _line(r, why: bool = True) -> str:
     sal = salmod.fmt_row(r)
     if sal:
         edge.append(f"**{sal}**")
-    edge.append(r["source"])
+    # where it came from, in words: "via LinkedIn" answers the question that
+    # "linkedin" only poses
+    edge.append(f"via {label_for(r['source'])}")
     if r["posted_at"]:
         edge.append(f"posted {r['posted_at'][:10]}")
     if r["status"] and r["status"] != "new":
@@ -100,7 +103,8 @@ def write_digest(cfg: Config, conn, run_id: int | None = None, top: int | None =
     if dups:
         md += [f"## 🔁 Duplicates ({len(dups)})", ""]
         for r in dups[:5]:
-            md.append(f"- {r['title']} — {r['company'] or '?'} — {r['source']} (duplicate of #{r['dup_of']})")
+            md.append(f"- {r['title']} — {r['company'] or '?'} — "
+                      f"{label_for(r['source'])} (duplicate of #{r['dup_of']})")
         md.append("")
     md += ["---", ""]
     sources = stats.get("sources") or {}

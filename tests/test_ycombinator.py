@@ -111,3 +111,35 @@ def test_the_detail_probe_gets_the_full_advert():
 
     text = ycombinator.fetch_detail(card, F())
     assert text and len(text) > 2000
+
+
+# --- the payload, which is where the posting's own date lives ----------------
+
+def _payload_cards():
+    return ycombinator.parse_cards(
+        (FIX / "ycombinator_payload.html").read_text(encoding="utf-8"))
+
+
+def test_the_payload_dates_the_posting_not_the_listing():
+    """The bug this guards: the markup's "(about 2 hours ago)" is the feed's
+    activity, so a role created in 2020 looked brand new and sailed past
+    max_age_days."""
+    from datetime import date, timedelta
+
+    old, new = _payload_cards()
+    assert old.title == "Staff Full Stack Engineer"
+    assert old.company == "Sully (S21)"
+    assert old.location == "Mountain View, CA, US"
+    assert old.compensation == "$180K - $240K"
+    assert old.url == ("https://www.ycombinator.com/companies/sully/jobs/"
+                       "abc123-staff-full-stack-engineer")
+    assert old.external_id == "abc123"
+    assert old.posted_at == (date.today() - timedelta(days=90)).isoformat(), \
+        "3 months old, even though the listing was touched two hours ago"
+    assert new.posted_at == date.today().isoformat()
+
+
+def test_the_markup_alone_claims_no_date():
+    """Without the payload the only date in the page is the feed's activity, so
+    the fallback stores none rather than passing it off as the posting date."""
+    assert all(card.posted_at == "" for card in _cards())

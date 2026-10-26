@@ -28,12 +28,15 @@ LIST = BASE + "/jobs/role/{role}"
 _CARD_START = '<li class="my-2'
 _JOB = re.compile(r'<a href="(/companies/[^"]+/jobs/[^"]+)"[^>]*>(.*?)</a>', re.S)
 _COMPANY = re.compile(r'<span class="block font-bold[^"]*">(.*?)</span>', re.S)
-_AGO = re.compile(r"\(\s*(?:about\s+)?(\d+|a|an)\s+(hour|day|week|month)s?\s+ago\s*\)", re.I)
+_AGO = re.compile(r"(?:about\s+)?(\d+|a|an)\s+(hour|day|week|month|year)s?", re.I)
 _LD = re.compile(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', re.S)
+# The page ships its own data: an Inertia payload with one object per card, and
+# it carries the field the markup does not -- `createdAt`, the age of the JOB.
+_PAGE = re.compile(r'data-page="([^"]+)"')
 _BULLET = "\u2022"
 _SALARY = re.compile(r"[$€£]\s?\d")
 _EMPLOYMENT = {"full-time", "part-time", "contract", "internship", "temporary"}
-_DAYS = {"hour": 1 / 24, "day": 1, "week": 7, "month": 30}
+_DAYS = {"hour": 1 / 24, "day": 1, "week": 7, "month": 30, "year": 365}
 
 
 def _text(fragment: str) -> str:
@@ -48,11 +51,61 @@ def _lines(fragment: str) -> list[str]:
 
 
 def _posted_at(text: str) -> str:
-    m = _AGO.search(text)
+    """'3 days' / 'about 21 hours' / 'a month' / 'about 4 years' -> an ISO date."""
+    m = _AGO.search(text or "")
     if not m:
         return ""
     n = 1 if m.group(1).lower() in ("a", "an") else int(m.group(1))
     return (date.today() - timedelta(days=_DAYS[m.group(2).lower()] * n)).isoformat()
+
+
+def _listing_rows(html: str) -> list[dict]:
+    """The Inertia payload: every card's own data, dates included.
+
+    Found by reading the page rather than by guessing: each object carries
+    `createdAt` (how old the JOB is: "3 months", "about 4 years") and
+    `lastActive` (how recently it was touched). The visible "(about 21 hours
+    ago)" is lastActive, which is why a role posted in 2020 could look new.
+    """
+    match = _PAGE.search(html or "")
+    if not match:
+        return []
+    try:
+        data = json.loads(htmllib.unescape(match.group(1)))
+    except ValueError:
+        return []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if {"title", "companyName", "createdAt"} <= set(node):
+                yield node
+                return
+            for value in node.values():
+                yield from walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from walk(value)
+
+    return list(walk(data))
+
+
+def _from_row(row: dict) -> Posting | None:
+    title = str(row.get("title") or "").strip()
+    url = str(row.get("url") or "").strip()
+    if not title or not url:
+        return None
+    if url.startswith("/"):
+        url = BASE + url
+    return Posting(
+        source=NAME,
+        title=title,
+        company=str(row.get("companyName") or "").strip(),
+        location=str(row.get("location") or "").strip(),
+        url=url,
+        external_id=str(row.get("id") or "") or url.rsplit("/", 1)[-1].split("-", 1)[0],
+        compensation=str(row.get("salaryRange") or "").strip(),
+        posted_at=_posted_at(str(row.get("createdAt") or "")),
+    )
 
 
 def _cards(html: str) -> list[str]:
@@ -93,12 +146,23 @@ def _card(chunk: str) -> Posting | None:
         url=BASE + job.group(1),
         external_id=job.group(1).rsplit("/", 1)[-1].split("-", 1)[0],
         compensation=salary,
-        posted_at=_posted_at(_text(chunk)),
+        posted_at="",   # the markup's age is the feed's activity, not the posting
     )
 
 
 def parse_cards(html: str) -> list[Posting]:
-    """The job cards on one role page, in page order."""
+    """The job cards on one role page, in page order.
+
+    The payload is preferred because it dates the posting. The markup fallback
+    keeps the board working if that payload changes, but it deliberately leaves
+    `posted_at` empty: the only date in the markup is the feed's activity, and
+    claiming a role posted in 2020 is fresh is exactly the bug this avoided.
+    """
+    rows = _listing_rows(html)
+    if rows:
+        out = [p for p in (_from_row(row) for row in rows) if p is not None]
+        if out:
+            return out
     out = []
     for chunk in _cards(html):
         p = _card(chunk)

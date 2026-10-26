@@ -210,50 +210,6 @@ def _join_flow(lines: list[str], idx: int, end: int) -> str:
     return joined.split(":", 1)[1].strip()
 
 
-def _interior_comments(lines: list[str], idx: int, end: int) -> list[str]:
-    """Comment text sitting INSIDE a wrapped flow value.
-
-    A comment between the brackets cannot be kept where it is (the value is
-    rewritten wholesale), so it is lifted out and re-emitted above the key
-    rather than dropped: config comments are documentation, and losing one
-    silently is the exact failure this module exists to prevent.
-    """
-    out = []
-    for j in range(idx, end + 1):
-        _body, comment = _split_trailing_comment(lines[j].rstrip("\n"))
-        if comment and comment.strip("# ").strip():
-            out.append(comment.strip())
-    return out
-
-
-def _wrap_flow(values, lead: str, key: str, width: int = 90) -> list[str]:
-    """Render a flow list, wrapped the way the config already wraps it.
-
-    The live config wraps `enabled:` across three lines, aligned just after the
-    `[`. Emitting one 200-character line would be valid YAML and a readability
-    regression, so the original shape is reproduced.
-    """
-    items = [_emit_scalar(v) for v in values]
-    one = "[" + ", ".join(items) + "]"
-    if len(lead) + len(key) + 2 + len(one) <= width:
-        return [f"{lead}{key}: {one}"]
-
-    pad = " " * (len(lead) + len(key) + 3)       # aligns just after the "["
-    lines: list[str] = []
-    cur = "["
-    for i, item in enumerate(items):
-        piece = item + ("," if i < len(items) - 1 else "]")
-        if cur == "[":
-            cur += piece
-        elif len(pad) + len(cur) + 1 + len(piece) <= width:
-            cur += " " + piece
-        else:
-            lines.append(cur)
-            cur = piece
-    lines.append(cur)
-    return [f"{lead}{key}: {lines[0]}"] + [pad + ln for ln in lines[1:]]
-
-
 def _emit_scalar(value) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -263,10 +219,6 @@ def _emit_scalar(value) -> str:
     if s == "" or any(c in s for c in ":#[]{}\"'\n") or s.strip() != s:
         return '"' + s.replace('"', '\\"') + '"'
     return s
-
-
-def _emit_inline_list(values) -> str:
-    return "[" + ", ".join(_emit_scalar(v) for v in values) + "]"
 
 
 # ---------------------------------------------------------------- reading
@@ -340,11 +292,13 @@ def set_scalar(text: str, dotted: str, value) -> str:
 
 
 def set_list(text: str, dotted: str, values) -> str:
-    """Set a list, whichever style it already uses.
+    """Set a list as one element per line, whatever style the file had.
 
-    An inline `key: [a, b]` stays inline (a settings screen should not reformat
-    a file it was only asked to change one value in). A block list stays block.
-    Both keep any inline trailing comment on the key line.
+    Flow lists (`key: [a, b, c]`) are rewritten as items and never written back
+    inline. A single line cannot be edited without counting commas, and this
+    file is meant to be opened by hand and cut down: deleting a line is the
+    operation that has to be obvious. The key's trailing comment stays on the
+    key line; comments inside the old block are kept below the new items.
     """
     lines = text.splitlines(keepends=True)
     idx, span_end, indent, _pind = _locate(lines, dotted)
@@ -355,33 +309,31 @@ def set_list(text: str, dotted: str, values) -> str:
     body = raw.rstrip("\n")
     old_val, comment = _split_trailing_comment(body)
 
+    # Two notions of "end" meet here: `span_end` is exclusive (the line after
+    # the block), while `flow_end` is the index OF the closing bracket line.
+    # Mixing them deletes one extra line, which is how a list swallowed the key
+    # that followed it.
     flow_end = _flow_span(lines, idx)
-    if flow_end is not None or old_val.strip().startswith("["):   # flow list
-        end = flow_end if flow_end is not None else idx
+    if flow_end is not None:
+        end, resume = flow_end, flow_end + 1
         # a wrapped flow list carries its comment on the closing line
-        if flow_end is not None:
-            _body, close_comment = _split_trailing_comment(
-                lines[end].rstrip("\n"))
-            comment = comment or close_comment
-        if get_value(text, dotted) == list(values):               # true no-op
-            return text
-        rendered = _wrap_flow(list(values), lead, key)
-        lifted = [f"{lead}# {c.lstrip('# ').strip()}{nl}"
-                  for c in _interior_comments(lines, idx, end)]
-        block = lifted + [f"{rendered[0]}{comment}{nl}"]
-        block += [f"{r}{nl}" for r in rendered[1:]]
-        return "".join(lines[:idx] + block + lines[end + 1:])
+        _body, close_comment = _split_trailing_comment(lines[end].rstrip("\n"))
+        comment = comment or close_comment
+    else:
+        end, resume = span_end, span_end
+    if get_value(text, dotted) == list(values):                  # true no-op
+        return text
 
-    block = [f"{lead}  - {_emit_scalar(v)}\n" for v in values]
+    block = [f"{lead}  - {_emit_scalar(v)}{nl}" for v in values]
     if not block:
-        block = [f"{lead}  []\n"]
+        block = [f"{lead}  []{nl}"]
     head = f"{lead}{key}:"
     if comment:
         head += " " + comment.lstrip()
     head += nl
     # keep comments that sat under the old items
-    tail = [ln for ln in lines[idx + 1:span_end] if _is_blank_or_comment(ln)]
-    return "".join(lines[:idx] + [head] + block + tail + lines[span_end:])
+    tail = [ln for ln in lines[idx + 1:end] if _is_blank_or_comment(ln)]
+    return "".join(lines[:idx] + [head] + block + tail + lines[resume:])
 
 
 def set_mapping(text: str, dotted: str, mapping: dict) -> str:

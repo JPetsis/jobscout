@@ -29,6 +29,17 @@ SOURCE_NAMES = [
 REGISTRY = {name: import_module(f".{name}", __package__) for name in SOURCE_NAMES}
 
 
+def label_for(name: str) -> str:
+    """The board's human name, for anything a person reads.
+
+    The database keeps ids ("ycombinator", "jobs_ch"); a digest that prints
+    those asks the reader to translate. Unknown ids fall back to themselves
+    rather than raising: a removed source must not break an old report.
+    """
+    module = REGISTRY.get(name)
+    return str(getattr(module, "LABEL", name)) if module is not None else name
+
+
 # Which market each board serves, so the window can group them. This lives here
 # rather than as a GROUP constant in 47 modules because a grouping is a
 # RELATIONSHIP between boards: one table is reviewable at a glance, and
