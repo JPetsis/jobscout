@@ -411,8 +411,7 @@ function card(r, strongTh) {
   if (r.application) {
     const stage = appStageLabel(r.application.stage || 'applied');
     const out = r.application.outcome ? appOutcomeLabel(r.application.outcome) : '';
-    const chip = el('span', 'chip apply',
-      '✓ ' + (out ? stage + ' · ' + out : stage));
+    const chip = el('span', 'chip apply', out ? stage + ' · ' + out : stage);
     chip.title = 'You applied on ' + shortDate(r.application.applied_at) +
       (out ? ' · outcome: ' + out : '');
     top.appendChild(chip);
@@ -2139,7 +2138,6 @@ function relDay(iso) {
  * across the room. */
 function appBand(app) {
   const band = el('div', 'app-now');
-  band.appendChild(el('span', 'app-now-mark', '✓'));
   const col = el('div', 'app-now-text');
   col.appendChild(el('span', 'app-now-title',
     'Applied ' + (relDay(app.applied_at) || 'on an unrecorded date')));
@@ -2190,17 +2188,19 @@ async function applicationBlock(d) {
   }
   const has = !!(app && app.id);
   const head = el('div', 'app-head');
-  head.appendChild(el('h3', 'app-h3', has ? 'Application' : 'Not applied yet'));
+  // "Not applied yet" describes the person; "No application logged" describes
+  // the record, which is the only thing this window can actually know.
+  head.appendChild(el('h3', 'app-h3', has ? 'Application' : 'No application logged'));
   wrap.appendChild(head);
 
   if (!has) {
     wrap.appendChild(el('p', 'field-help',
       'Logs today’s date and the salary the advert stated, so the advert can ' +
       'change or vanish and your record still holds.'));
-    const btn = el('button', 'app-cta');
+    // The label says what the button DOES. "I applied" asserted something
+    // about the person before they had done it.
+    const btn = el('button', 'app-cta', 'Log an application');
     btn.type = 'button';
-    btn.appendChild(el('span', 'app-cta-mark', '✓'));
-    btn.appendChild(el('span', 'app-cta-text', 'I applied to this job'));
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
@@ -2421,7 +2421,7 @@ async function renderApps() {
 
   if (!rows.length) {
     body.appendChild(el('p', 'set-lead',
-      'Nothing logged yet. Open a posting you applied to and press “I applied” — ' +
+      'Nothing logged yet. Open a posting you applied to and press “Log an application” — ' +
       'the date, the advertised salary and every stage after it stay here.'));
     return;
   }

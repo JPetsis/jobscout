@@ -349,7 +349,7 @@ not in `sources.enabled` yet.
 ## The job logger
 
 The board tells you what is out there; the logger remembers what YOU did. Open a
-posting, press **I applied**, and jobscout keeps the date, the salary the advert
+posting, press **Log an application**, and jobscout keeps the date, the salary the advert
 stated, how you sent it, who the contact is, a follow-up date and every stage
 after that — in the same file, under the same profile, without an account
 anywhere. Where you *found* the advert and where you actually *applied* are two
