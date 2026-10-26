@@ -2162,6 +2162,7 @@ async function applicationBlock(d) {
           salary_advertised: (d.salary && (d.salary.text || d.salary.raw)) || '',
         });
         await refreshAppBlock(d);
+        await reload();              // the card's chip must appear now, not later
         loadAppsCount();
       } catch (e) {
         wrap.appendChild(el('p', 's-err', 'Could not save: ' + String(e)));
@@ -2176,7 +2177,7 @@ async function applicationBlock(d) {
   const grid = el('div', 'app-grid');
   const save = (fields) => pywebview.api.save_application(d.id, fields)
     .then(() => refreshAppBlock(d))
-    .then(() => loadAppsCount());
+    .then(() => { reload(); loadAppsCount(); });
 
   const field = (label, control) => {
     const box = el('label', 'app-field');
@@ -2272,12 +2273,19 @@ async function applicationBlock(d) {
   }
   if (events.length) wrap.appendChild(timeline);
 
+  // Reversible on purpose: a tracker you are afraid to touch is a tracker you
+  // never use. This removes the log AND puts the posting back to New, so a
+  // test on a real role leaves nothing behind.
   const kill = el('button', 'ghost small danger', 'Delete this log');
   kill.type = 'button';
+  kill.title = 'Removes the application and its history, and puts the posting ' +
+    'back to New. The posting itself stays in your board.';
   kill.addEventListener('click', async () => {
-    if (!confirm('Delete the application log for this posting? The posting stays in your board.')) return;
+    if (!confirm('Delete this application log?\n\nThe posting stays in your board ' +
+                 'and goes back to New, exactly as before you applied.')) return;
     await pywebview.api.delete_application(d.id);
     await refreshAppBlock(d);
+    await reload();
     loadAppsCount();
   });
   wrap.appendChild(kill);
