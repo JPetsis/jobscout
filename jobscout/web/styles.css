@@ -759,7 +759,36 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
 }
 .app-cta:hover { filter: brightness(1.07); }
 .app-cta:active { transform: translateY(1px); }
-.app-cta:disabled { opacity: .6; cursor: default; transform: none; }
+.app-cta:disabled {
+  /* a dimmed green still reads as "press me"; before a choice is made the
+     button must look inert */
+  background: var(--line); color: var(--muted); box-shadow: none;
+  cursor: default; transform: none;
+}
+
+/* The logging strip. It exists because the first version wrote the record on
+   the first click, with a channel nobody chose. Here nothing is written until
+   Save, and the two questions are the two facts you still know in the moment. */
+.app-log { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.app-log-row {
+  display: grid; grid-template-columns: 180px minmax(0, 1fr);
+  gap: 6px 18px; align-items: start;
+}
+.app-log-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.app-log-chip {
+  font: inherit; font-size: 12.5px; line-height: 1; padding: 8px 11px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.app-log-chip:hover { border-color: var(--cta); color: var(--cta); }
+.app-log-chip[aria-pressed="true"] {
+  background: var(--cta); border-color: transparent; color: var(--on-cta);
+  font-weight: 600;
+}
+.app-log-note { margin: 0; font-size: 12px; color: var(--muted); }
+.app-log-actions { display: flex; align-items: center; gap: 10px; }
+.app-log-actions .app-cta { margin: 0; }
+@media (max-width: 620px) { .app-log-row { grid-template-columns: 1fr; } }
 
 /* Once applied, the state is a band, not a 11px chip: the date in words, how
    it was sent, the follow-up, and the stage at the right end. */

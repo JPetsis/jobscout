@@ -349,12 +349,16 @@ not in `sources.enabled` yet.
 ## The job logger
 
 The board tells you what is out there; the logger remembers what YOU did. Open a
-posting, press **Log an application**, and jobscout keeps the date, the salary the advert
-stated, how you sent it, who the contact is, a follow-up date and every stage
-after that — in the same file, under the same profile, without an account
-anywhere. Where you *found* the advert and where you actually *applied* are two
-different facts and both are kept: most adverts end on the employer's own
-careers page, so that is what "Applied via" defaults to, not the board.
+posting, press **Log an application**, say how you sent it, and jobscout keeps
+the date, the salary the advert stated, who the contact is, a follow-up date and
+every stage after that — in the same file, under the same profile, without an
+account anywhere. Nothing is written until you press Save: the first version
+guessed the channel and recorded it, which is the one thing a log must never do.
+
+Where you *found* the advert and where you actually *applied* are two different
+facts and both are kept. "Found on" is filled from the posting itself; "how you
+sent it" is asked once per application, with the last answer pre-selected and
+visible, and "Not recorded" is a real answer if you would rather not say.
 
 An application has a **stage** (applied, screening, interview, task, offer) and
 an **outcome** (still running, offer accepted, offer declined, rejected,

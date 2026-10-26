@@ -69,9 +69,23 @@ def test_the_board_and_the_application_place_are_different_facts():
     """
     js = _text("jobscout", "web", "app.js")
     assert "APP_CHANNELS" in js
-    assert "channel: 'employer'" in js, "the common case is the employer's own site"
+    assert "channel: chosen" in js, "the channel is what the person picked, not a guess"
+    assert "channel: 'employer'" not in js, "no silent default on the first click"
     assert "field('Applied via', channel)" in js
     assert "put('Found on', d.source)" in js
+    assert "['', 'Not recorded']" in js, "an unknown channel must say so"
+
+
+def test_logging_asks_before_it_writes():
+    """The first version wrote a record the moment you clicked, with a guessed
+    channel. Nothing may be stored until the person chooses and saves."""
+    js = _text("jobscout", "web", "app.js")
+    assert "function logForm(" in js
+    assert "app-log-chip" in js
+    assert "save.disabled = !chosen" in js, "no choice, no save"
+    assert "jobscout.lastChannel" in js, "the last choice is remembered, visibly"
+    assert "pywebview.api.save_application(d.id" in js.split("function logForm(")[1], \
+        "the strip is the only thing that writes from the empty state"
 
 
 def test_applied_roles_stay_on_the_board():

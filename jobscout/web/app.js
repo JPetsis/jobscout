@@ -2133,6 +2133,100 @@ function relDay(iso) {
   return days + ' days ago';
 }
 
+/* Nothing is written until this is saved. The old flow created the record on
+ * the first click with a guessed channel, which is the one thing a log must not
+ * do: a wrong fact you did not choose is worse than an empty one.
+ *
+ * Two questions, both answerable in the second you applied: the date, and how
+ * you sent it. The last channel used is pre-selected but VISIBLE, so the common
+ * case is one click and the choice is never a surprise. */
+function logForm(d) {
+  const box = el('div', 'app-log');
+
+  const row = el('div', 'app-log-row');
+
+  const dateField = el('label', 'app-field');
+  dateField.appendChild(el('span', 'app-label', 'Applied on'));
+  const date = document.createElement('input');
+  date.type = 'date';
+  date.value = todayISO();
+  dateField.appendChild(date);
+  row.appendChild(dateField);
+
+  const howField = el('div', 'app-field');
+  howField.appendChild(el('span', 'app-label', 'How did you send it?'));
+  const chips = el('div', 'app-log-chips');
+  let chosen = '';
+  try {
+    chosen = localStorage.getItem('jobscout.lastChannel') || '';
+  } catch (e) {
+    chosen = '';
+  }
+  const buttons = [];
+  for (const [value, label] of APP_CHANNELS) {
+    const c = el('button', 'app-log-chip', label);
+    c.type = 'button';
+    c.setAttribute('aria-pressed', String(value === chosen));
+    c.addEventListener('click', () => {
+      chosen = value;
+      for (const b of buttons) b.setAttribute('aria-pressed', String(b === c));
+      hint.hidden = true;
+      save.disabled = false;
+    });
+    buttons.push(c);
+    chips.appendChild(c);
+  }
+  howField.appendChild(chips);
+  row.appendChild(howField);
+  box.appendChild(row);
+
+  const salary = (d.salary && (d.salary.text || d.salary.raw)) || '';
+  if (salary) {
+    box.appendChild(el('p', 'app-log-note',
+      'The advert’s own salary, ' + salary + ', is saved with the record.'));
+  }
+
+  const hint = el('p', 'field-help', chosen
+    ? 'Nothing is recorded until you save.'
+    : 'Pick how you sent it; nothing is recorded until you save.');
+  box.appendChild(hint);
+
+  const actions = el('div', 'app-log-actions');
+  // The label says what the button DOES. "I applied" asserted something
+  // about the person before they had done it.
+  const save = el('button', 'app-cta', 'Save application');
+  save.type = 'button';
+  save.disabled = !chosen;
+  const cancel = el('button', 'ghost', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => refreshAppBlock(d));
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      await pywebview.api.save_application(d.id, {
+        applied_at: date.value || todayISO(),
+        channel: chosen,
+        salary_advertised: salary,
+      });
+      try {
+        localStorage.setItem('jobscout.lastChannel', chosen);
+      } catch (e) {
+        // a read-only webview store is not a reason to lose the record
+      }
+      await refreshAppBlock(d);
+      await reload();              // the card's chip must appear now, not later
+      loadAppsCount();
+    } catch (e) {
+      save.disabled = false;
+      box.appendChild(el('p', 's-err', 'Could not save: ' + String(e)));
+    }
+  });
+  actions.appendChild(save);
+  actions.appendChild(cancel);
+  box.appendChild(actions);
+  return box;
+}
+
 /* The state of an application, stated once and large. Everything here is also
  * in the fields below; this is the sentence you should be able to read from
  * across the room. */
@@ -2155,7 +2249,7 @@ function appBand(app) {
 
   const bits = [];
   if (app.applied_at) bits.push(shortDate(app.applied_at));
-  bits.push('via ' + appChannelLabel(app.channel || 'employer'));
+  bits.push('via ' + (app.channel ? appChannelLabel(app.channel) : 'not recorded'));
   if (app.follow_up_at) bits.push('follow-up ' + shortDate(app.follow_up_at));
   col.appendChild(el('span', 'app-now-sub', bits.join(' · ')));
   band.appendChild(col);
@@ -2199,32 +2293,17 @@ async function applicationBlock(d) {
 
   if (!has) {
     wrap.appendChild(el('p', 'field-help',
-      'Logging an application records today’s date and the salary the advert ' +
+      'Logging an application keeps today’s date and the salary the advert ' +
       'stated, so the advert can change or vanish and your record still holds.'));
     // The label says what the button DOES. "I applied" asserted something
     // about the person before they had done it.
-    const btn = el('button', 'app-cta', 'Log an application');
-    btn.type = 'button';
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        await pywebview.api.save_application(d.id, {
-          applied_at: todayISO(),
-          // The employer's own site is what most applications are, whatever
-          // board the advert was found on. The board is recorded separately.
-          channel: 'employer',
-          salary_advertised: (d.salary && (d.salary.text || d.salary.raw)) || '',
-        });
-        await refreshAppBlock(d);
-        await reload();              // the card's chip must appear now, not later
-        loadAppsCount();
-      } catch (e) {
-        wrap.appendChild(el('p', 's-err', 'Could not save: ' + String(e)));
-      } finally {
-        btn.disabled = false;
-      }
+    const start = el('button', 'app-cta', 'Log an application');
+    start.type = 'button';
+    start.addEventListener('click', () => {
+      start.remove();
+      wrap.appendChild(logForm(d));
     });
-    wrap.appendChild(btn);
+    wrap.appendChild(start);
     return wrap;
   }
 
@@ -2269,14 +2348,17 @@ async function applicationBlock(d) {
   field('Outcome', outcome);
 
   const channel = document.createElement('select');
-  const options = APP_CHANNELS.slice();
+  // An empty channel is a real state, not a missing "employer": the first
+  // version defaulted the select to employer and quietly implied a fact the
+  // person never gave.
+  const options = [['', 'Not recorded']].concat(APP_CHANNELS);
   if (app.channel && !options.some(([k]) => k === app.channel)) {
     options.push([app.channel, app.channel]);      // never lose an old value
   }
   for (const [v, t] of options) {
     const o = document.createElement('option');
     o.value = v; o.textContent = t;
-    if (v === (app.channel || 'employer')) o.selected = true;
+    if (v === (app.channel || '')) o.selected = true;
     channel.appendChild(o);
   }
   channel.addEventListener('change', () => save({ channel: channel.value }));
