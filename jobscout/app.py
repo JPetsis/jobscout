@@ -293,6 +293,33 @@ class JsApi:
             return api.show_posting(self.conn, self.cfg, int(pid),
                                     refresh=bool(refresh)) or {}
 
+    # ------------------------------------------------------- job logger
+
+    def application(self, pid: int) -> dict:
+        """The application for one posting, its history included."""
+        with dbm.LOCK:
+            return api.get_application(self.conn, int(pid)) or {}
+
+    def save_application(self, pid: int, fields: dict) -> dict:
+        with dbm.LOCK:
+            return api.save_application(self.conn, int(pid), dict(fields or {}))
+
+    def add_application_note(self, pid: int, text: str) -> dict:
+        with dbm.LOCK:
+            return api.add_application_note(self.conn, int(pid), str(text or "")) or {}
+
+    def delete_application(self, pid: int) -> dict:
+        with dbm.LOCK:
+            return api.delete_application(self.conn, int(pid))
+
+    def applications(self, open_only: bool = False) -> list[dict]:
+        with dbm.LOCK:
+            return api.list_applications(self.conn, open_only=bool(open_only))
+
+    def application_stats(self) -> dict:
+        with dbm.LOCK:
+            return api.application_stats(self.conn)
+
     def settings(self) -> list[dict]:
         return api.read_settings(self.cfg.path)
 

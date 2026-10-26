@@ -108,6 +108,47 @@ CREATE TABLE IF NOT EXISTS runs (
   finished_at TEXT,
   stats TEXT NOT NULL DEFAULT '{}'
 );
+
+-- What YOU did about a posting, kept apart from what the boards said.
+--
+-- A posting row is the advert: it can expire, be re-published under a new id,
+-- or be deduplicated into another row. An application is a fact about the
+-- person and must survive all of that, so it has its own row keyed by
+-- posting_id (one application per posting; applying twice to the same advert
+-- is the same relationship, and a second round is a stage change).
+--
+-- `stage` is where it is now; `outcome` is how it ended, and is empty while it
+-- is still running. Both are plain text rather than a join table: the vocabu-
+-- lary is small, fixed, and validated at the edge, and a lookup table would add
+-- a join to every read for no behaviour.
+CREATE TABLE IF NOT EXISTS applications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  posting_id INTEGER NOT NULL UNIQUE,
+  applied_at TEXT NOT NULL DEFAULT '',
+  stage TEXT NOT NULL DEFAULT 'applied',
+  outcome TEXT NOT NULL DEFAULT '',
+  channel TEXT NOT NULL DEFAULT '',
+  salary_advertised TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL DEFAULT '',
+  follow_up_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_app_stage ON applications(stage);
+CREATE INDEX IF NOT EXISTS idx_app_applied ON applications(applied_at);
+CREATE INDEX IF NOT EXISTS idx_app_follow ON applications(follow_up_at);
+
+-- The journey, append-only: the application, every stage move, notes,
+-- follow-ups.
+-- Never rewritten, so "when did I hear back" stays answerable.
+CREATE TABLE IF NOT EXISTS application_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL,
+  at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_app_events ON application_events(application_id, at);
 """
 
 
@@ -574,3 +615,168 @@ def rescore_all(conn: sqlite3.Connection, prefs: dict) -> tuple[int, int]:
             changed += 1
     conn.commit()
     return total, changed
+
+# ------------------------------------------------------------- applications
+
+#: Where an application is in the process. Terminal states live in OUTCOMES.
+STAGES = ("applied", "screening", "interview", "task", "offer")
+#: How it ended. "" means still running.
+OUTCOMES = ("", "hired", "declined", "rejected", "withdrawn", "no_reply")
+
+
+def _stamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def get_application(conn, posting_id: int):
+    """This posting's application row, or None."""
+    with LOCK:
+        return conn.execute("SELECT * FROM applications WHERE posting_id = ?",
+                            (int(posting_id),)).fetchone()
+
+
+def application_of_many(conn, posting_ids) -> dict[int, sqlite3.Row]:
+    """{posting_id: row} for the grid, in one query rather than one per card."""
+    ids = [int(i) for i in posting_ids]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    with LOCK:
+        rows = conn.execute(
+            f"SELECT * FROM applications WHERE posting_id IN ({marks})", ids).fetchall()
+    return {r["posting_id"]: r for r in rows}
+
+
+def application_timeline(conn, application_id: int) -> list[sqlite3.Row]:
+    with LOCK:
+        return conn.execute(
+            "SELECT * FROM application_events WHERE application_id = ? ORDER BY at, id",
+            (int(application_id),)).fetchall()
+
+
+def _add_event(conn, application_id: int, kind: str, detail: str = "", at: str = "") -> None:
+    conn.execute(
+        "INSERT INTO application_events(application_id, at, kind, detail) VALUES (?,?,?,?)",
+        (int(application_id), at or _stamp(), kind, detail))
+
+
+def save_application(conn, posting_id: int, fields: dict) -> sqlite3.Row:
+    """Create or update the application for a posting, and log what changed.
+
+    Only real changes are logged: saving the same form twice must not fill the
+    history with noise, or the one line that matters ("offer") gets lost in it.
+    """
+    with LOCK:
+        row = conn.execute("SELECT * FROM applications WHERE posting_id = ?",
+                           (int(posting_id),)).fetchone()
+        now = _stamp()
+        if row is None:
+            values = {
+                "posting_id": int(posting_id),
+                "applied_at": str(fields.get("applied_at") or now[:10]),
+                "stage": str(fields.get("stage") or "applied"),
+                "outcome": str(fields.get("outcome") or ""),
+                "channel": str(fields.get("channel") or ""),
+                "salary_advertised": str(fields.get("salary_advertised") or ""),
+                "contact": str(fields.get("contact") or ""),
+                "follow_up_at": str(fields.get("follow_up_at") or ""),
+                "created_at": now,
+                "updated_at": now,
+            }
+            cur = conn.execute(
+                "INSERT INTO applications(posting_id, applied_at, stage, outcome, channel,"
+                " salary_advertised, contact, follow_up_at, created_at, updated_at)"
+                " VALUES (:posting_id, :applied_at, :stage, :outcome, :channel,"
+                " :salary_advertised, :contact, :follow_up_at, :created_at, :updated_at)",
+                values)
+            # One opening event, carrying HOW it was sent. The starting stage
+            # is already a column, so repeating it here would make the history
+            # say "applied" and "screening" for the same moment.
+            _add_event(conn, cur.lastrowid, "applied", values["channel"])
+            conn.commit()
+            return conn.execute("SELECT * FROM applications WHERE id = ?",
+                                (cur.lastrowid,)).fetchone()
+
+        changes = {}
+        for key in ("applied_at", "stage", "outcome", "channel", "salary_advertised",
+                    "contact", "follow_up_at"):
+            if key not in fields:
+                continue
+            value = str(fields.get(key) or "")
+            if value != str(row[key] or ""):
+                changes[key] = value
+        if not changes:
+            return row
+        changes["updated_at"] = now
+        sets = ", ".join(f"{k} = ?" for k in changes)
+        conn.execute(f"UPDATE applications SET {sets} WHERE id = ?",
+                     (*changes.values(), row["id"]))
+        if "stage" in changes:
+            _add_event(conn, row["id"], "stage", changes["stage"])
+        if "outcome" in changes:
+            _add_event(conn, row["id"], "outcome", changes["outcome"] or "open again")
+        if "follow_up_at" in changes and changes["follow_up_at"]:
+            _add_event(conn, row["id"], "follow_up", changes["follow_up_at"])
+        conn.commit()
+        return conn.execute("SELECT * FROM applications WHERE id = ?",
+                            (row["id"],)).fetchone()
+
+
+def add_application_note(conn, posting_id: int, text: str) -> None:
+    """A dated line in the history: what was said, who said it, what happens next."""
+    text = (text or "").strip()
+    if not text:
+        return
+    with LOCK:
+        row = conn.execute("SELECT id FROM applications WHERE posting_id = ?",
+                           (int(posting_id),)).fetchone()
+        if row is None:
+            return
+        _add_event(conn, row["id"], "note", text[:2000])
+        conn.execute("UPDATE applications SET updated_at = ? WHERE id = ?",
+                     (_stamp(), row["id"]))
+        conn.commit()
+
+
+def delete_application(conn, posting_id: int) -> bool:
+    """Remove an application and its history (the posting stays)."""
+    with LOCK:
+        row = conn.execute("SELECT id FROM applications WHERE posting_id = ?",
+                           (int(posting_id),)).fetchone()
+        if row is None:
+            return False
+        conn.execute("DELETE FROM application_events WHERE application_id = ?", (row["id"],))
+        conn.execute("DELETE FROM applications WHERE id = ?", (row["id"],))
+        conn.commit()
+        return True
+
+
+def list_applications(conn, *, open_only: bool = False, limit: int = 1000):
+    """Applications joined with the advert they were sent to, newest first."""
+    where = ["1 = 1"]
+    if open_only:
+        where.append("a.outcome = ''")
+    with LOCK:
+        return conn.execute(
+            "SELECT a.*, p.title, p.company, p.location, p.url, p.source AS posting_source,"
+            " p.score, p.salary_min, p.salary_max, p.salary_currency, p.salary_period,"
+            " p.salary_raw, p.compensation, p.status AS posting_status"
+            " FROM applications a JOIN postings p ON p.id = a.posting_id"
+            f" WHERE {' AND '.join(where)}"
+            " ORDER BY a.applied_at DESC, a.id DESC LIMIT ?", (int(limit),)).fetchall()
+
+
+def application_counts(conn) -> dict:
+    """Numbers for the header: how many, how many still running, how many replied."""
+    with LOCK:
+        row = conn.execute(
+            "SELECT count(*) AS total,"
+            " sum(CASE WHEN outcome = '' THEN 1 ELSE 0 END) AS open,"
+            " sum(CASE WHEN outcome IN ('hired','declined') THEN 1 ELSE 0 END) AS offers,"
+            " sum(CASE WHEN outcome = 'rejected' THEN 1 ELSE 0 END) AS rejected,"
+            " sum(CASE WHEN outcome IN ('withdrawn','no_reply') THEN 1 ELSE 0 END) AS lost,"
+            " sum(CASE WHEN outcome = '' AND follow_up_at <> '' AND follow_up_at <= date('now')"
+            "          THEN 1 ELSE 0 END) AS due,"
+            " sum(CASE WHEN stage <> 'applied' OR outcome <> '' THEN 1 ELSE 0 END) AS replied"
+            " FROM applications").fetchone()
+    return {k: int(row[k] or 0) for k in row.keys()}

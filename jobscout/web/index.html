@@ -49,6 +49,7 @@ document.documentElement.dataset.theme =
       <button data-v="light" title="Light" aria-label="Light">☀</button>
       <button data-v="dark" title="Dark" aria-label="Dark">☾</button>
     </div>
+    <button id="apps-btn" class="ghost" title="Every application you logged, and what came of it">Applications</button>
     <button id="pay-btn" class="ghost" title="What the postings in your board advertise, per year">Pay</button>
     <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
     <button id="settings-btn" class="ghost" title="Edit your profile: titles, skills, locations, strictness">Settings</button>
@@ -84,6 +85,7 @@ stored, not just the ones on screen.">
   </div>
   <select id="source" aria-label="Source"><option value="all">All sources</option></select>
   <select id="status" aria-label="Status">
+    <option value="active" selected>Active (new, saved, applied)</option>
     <option value="new">New</option>
     <option value="saved">Saved</option>
     <option value="applied">Applied</option>
@@ -166,6 +168,17 @@ any other board.">
   <div class="pane-foot">
     <span class="muted" id="settings-note">Changes save to config.yaml as you make them. Your comments in that file are kept.</span>
   </div>
+</aside>
+
+<!-- the job logger: every application, what it was sent to, what came back -->
+<aside id="apps" class="pane apps" hidden aria-labelledby="apps-title">
+  <div class="pane-head">
+    <h2 id="apps-title">Applications</h2>
+    <div class="pane-tools">
+      <button id="apps-close" class="ghost small" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="pane-body" id="apps-body"></div>
 </aside>
 
 <div id="scrim" class="scrim" hidden></div>

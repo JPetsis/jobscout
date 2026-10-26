@@ -662,3 +662,92 @@ button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
   color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer;
   text-decoration: underline;
 }
+
+/* ---- the job logger ------------------------------------------------ */
+.pane.apps { width: 760px; }
+#apps-btn.warn { color: var(--warn); border-color: var(--warn); }
+
+.apps-stats {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px;
+}
+.apps-stat {
+  flex: 1 1 90px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; background: var(--panel);
+}
+.apps-stat b { display: block; font-size: 17px; line-height: 1.1; }
+.apps-stat span { font-size: 11.5px; color: var(--muted); }
+
+.apps-list { display: flex; flex-direction: column; gap: 6px; }
+.app-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px;
+  align-items: center; padding: 9px 11px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel); cursor: pointer;
+}
+.app-row:hover { border-color: var(--blue); }
+.app-row:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.app-row-main { min-width: 0; }
+.app-row-title {
+  display: block; font-size: 13px; font-weight: 550;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-row-sub {
+  display: block; font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-row-meta {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
+  align-items: center; font-size: 11.5px; color: var(--muted);
+}
+.app-chip {
+  border-radius: 999px; padding: 2px 8px; background: var(--chip);
+  color: var(--ink); font-size: 11px; font-weight: 550;
+}
+.app-chip.out-hired { background: var(--ok); color: #fff; }
+.app-chip.out-declined, .app-chip.out-withdrawn,
+.app-chip.out-no_reply, .app-chip.out-rejected { background: var(--line); }
+.app-date, .app-sal { white-space: nowrap; }
+.app-follow { white-space: nowrap; }
+.app-follow.due { color: var(--warn); font-weight: 600; }
+
+.app-block {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 14px; margin: 0 0 16px; background: var(--panel);
+}
+.app-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.app-h3 { font-size: 13px; margin: 0; }
+.app-badge {
+  margin-left: auto; font-size: 11px; color: var(--muted);
+  background: var(--chip); border-radius: 999px; padding: 2px 9px;
+}
+.app-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px; margin: 8px 0 10px;
+}
+.app-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.app-label { font-size: 11.5px; color: var(--muted); }
+.app-field input, .app-field select {
+  font: inherit; font-size: 12.5px; padding: 5px 7px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); min-width: 0;
+}
+.app-field input:focus, .app-field select:focus {
+  outline: 2px solid var(--blue); outline-offset: -1px;
+}
+.app-addnote { display: flex; gap: 8px; margin: 6px 0 10px; }
+.app-addnote input {
+  flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 6px 8px;
+  border: 1px dashed var(--line); border-radius: 8px;
+  background: transparent; color: var(--ink);
+}
+.app-timeline { list-style: none; margin: 0 0 10px; padding: 0; }
+.app-event {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px;
+  padding: 4px 0; border-top: 1px dashed var(--line); font-size: 12.5px;
+}
+.app-event:first-child { border-top: 0; }
+.app-when { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.app-what { min-width: 0; overflow-wrap: anywhere; }
+.app-event.app-note .app-what { font-style: italic; }
+.app-event.app-outcome .app-what { font-weight: 550; }
+.ghost.danger { color: var(--warn); }
+.chip.apply { border: 1px solid var(--blue); color: var(--blue); background: transparent; }

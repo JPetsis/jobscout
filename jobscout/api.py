@@ -209,6 +209,11 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
         # one query for every republished twin on the page, not one per card
         twins = republished_map(conn, [(r["id"], r["source"]) for r in keep])
         out = [posting_dict(r, twins.get(r["id"])) for r in keep]
+        # ...and one for the applications, so a card can say "applied" without
+        # a query per row. A posting with no application gets None, not {}.
+        tracked = applications_map(conn, [r["id"] for r in keep])
+        for d in out:
+            d["application"] = tracked.get(d["id"])
         # The advert text is two thirds of this payload (measured: 0.89MB of
         # 1.33MB for 400 rows) and the card never renders it -- the detail pane
         # fetches it when a card is opened. Sending it here is what forced the
@@ -238,6 +243,127 @@ def mark_posting(conn, pid: int, status: str) -> dict:
     with dbm.LOCK:
         dbm.set_status(conn, int(pid), status)
     return {"id": int(pid), "status": status}
+
+
+# ------------------------------------------------------------- applications
+
+def _application_dict(row) -> dict:
+    out = {k: row[k] for k in row.keys()}
+    out["timeline"] = []
+    return out
+
+
+def get_application(conn, pid: int) -> dict | None:
+    """The application for one posting, with its history, or None."""
+    with dbm.LOCK:
+        row = dbm.get_application(conn, int(pid))
+        if row is None:
+            return None
+        events = dbm.application_timeline(conn, row["id"])
+        posting = dbm.get_posting(conn, int(pid))
+    data = _application_dict(row)
+    try:
+        data["salary_from_posting"] = salmod.fmt_row(posting) if posting is not None else ""
+    except Exception:                                        # noqa: BLE001
+        data["salary_from_posting"] = ""
+    data["timeline"] = [{k: e[k] for k in e.keys()} for e in events]
+    return data
+
+
+def save_application(conn, pid: int, fields: dict) -> dict:
+    """Create or update an application. A GUI can send anything, so validate.
+
+    Marking something applied is also triage: the posting's status becomes
+    "applied", so the grid, the digest and the logger cannot disagree about
+    whether this one was sent.
+    """
+    stage = str(fields.get("stage") or "applied")
+    outcome = str(fields.get("outcome") or "")
+    if stage not in dbm.STAGES:
+        raise ValueError(f"stage must be one of {dbm.STAGES!r}, got {stage!r}")
+    if outcome not in dbm.OUTCOMES:
+        raise ValueError(f"outcome must be one of {dbm.OUTCOMES!r}, got {outcome!r}")
+    with dbm.LOCK:
+        dbm.save_application(conn, int(pid), fields)
+        posting = dbm.get_posting(conn, int(pid))
+        if posting is not None and posting["status"] != "applied":
+            dbm.set_status(conn, int(pid), "applied")
+    return get_application(conn, pid) or {}
+
+
+def add_application_note(conn, pid: int, text: str) -> dict | None:
+    with dbm.LOCK:
+        if dbm.get_application(conn, int(pid)) is None:
+            return None
+        dbm.add_application_note(conn, int(pid), str(text or ""))
+    return get_application(conn, pid)
+
+
+def delete_application(conn, pid: int) -> dict:
+    with dbm.LOCK:
+        removed = dbm.delete_application(conn, int(pid))
+        if removed:
+            dbm.set_status(conn, int(pid), "new")
+    return {"ok": removed}
+
+
+def _application_row(row) -> dict:
+    out = {k: row[k] for k in row.keys()}
+    try:
+        out["salary_text"] = salmod.fmt_row(row) or (row["compensation"] or "")
+    except Exception:                                        # noqa: BLE001
+        out["salary_text"] = row["compensation"] or ""
+    out["salary_advertised"] = row["salary_advertised"] or out["salary_text"]
+    return out
+
+
+def list_applications(conn, open_only: bool = False) -> list[dict]:
+    """Every application, newest first, joined with the advert it went to."""
+    with dbm.LOCK:
+        rows = dbm.list_applications(conn, open_only=bool(open_only))
+    return [_application_row(r) for r in rows]
+
+
+def application_stats(conn) -> dict:
+    """The numbers worth knowing: how many, how many running, how many replied.
+
+    "Replied" is deliberately the weakest honest definition: any stage move or
+    outcome, or a note someone chose to write. A board auto-acknowledging an
+    application is not a reply, and this data cannot see that either way.
+    """
+    counts = dbm.application_counts(conn)
+    with dbm.LOCK:
+        rows = conn.execute(
+            "SELECT a.applied_at,"
+            " (SELECT min(e.at) FROM application_events e"
+            "   WHERE e.application_id = a.id AND e.kind IN ('stage','outcome','note')) AS first_at"
+            " FROM applications a").fetchall()
+    gaps = []
+    for r in rows:
+        if not r["first_at"]:
+            continue                    # nobody has replied to this one yet
+        try:
+            # `at` carries an offset; a bare date does not. Compare them in UTC
+            # or Python refuses to subtract one from the other.
+            first = datetime.fromisoformat(str(r["first_at"]))
+            applied = datetime.fromisoformat(str(r["applied_at"] or "")[:10] + "T00:00:00+00:00")
+        except (TypeError, ValueError):
+            continue
+        if first.tzinfo is None:
+            first = first.replace(tzinfo=timezone.utc)
+        gaps.append(max(0.0, (first - applied).total_seconds() / 86400.0))
+    gaps.sort()
+    counts["median_reply_days"] = round(gaps[len(gaps) // 2], 1) if gaps else None
+    counts["response_rate"] = (round(100.0 * counts["replied"] / counts["total"])
+                               if counts["total"] else 0)
+    return counts
+
+
+def applications_map(conn, posting_ids) -> dict[int, dict]:
+    """{posting_id: {stage, outcome, applied_at}} for the grid, one query."""
+    rows = dbm.application_of_many(conn, posting_ids)
+    return {pid: {"stage": r["stage"], "outcome": r["outcome"],
+                  "applied_at": r["applied_at"]} for pid, r in rows.items()}
 
 
 def source_counts(conn) -> list[dict]:

@@ -346,6 +346,34 @@ board behind it, validates the token against the ATS API, appends it to
 `companies.<source>.tokens` in your config, and enables the source if it was
 not in `sources.enabled` yet.
 
+## The job logger
+
+The board tells you what is out there; the logger remembers what YOU did. Open a
+posting, press **I applied**, and jobscout keeps the date, the salary the advert
+stated, how you sent it, who the contact is, a follow-up date and every stage
+after that — in the same file, under the same profile, without an account
+anywhere.
+
+An application has a **stage** (applied, screening, interview, task, offer) and
+an **outcome** (still running, offer accepted, offer declined, rejected,
+withdrew, no reply). Every change appends a line to its history, so "when did I
+hear back" stays answerable months later; notes are added to the same timeline
+rather than to a second text box. The record is deliberately separate from the
+posting: boards withdraw adverts, re-publish them under new ids and deduplicate
+them, and none of that may rewrite your history.
+
+**Applications** in the header opens the whole search as one list: how many are
+logged, how many are still running, how many offers, how many were rejected,
+what share of employers ever replied, and the median days to a first reply.
+Filter by still-running or finished, and click a row to open the posting it
+belongs to. Cards on the board carry the same state as a chip, so the grid
+answers "did I already send this?" without opening anything. Applying no longer
+hides the card either: the default filter is *Active (new, saved, applied)* and
+only dismissed roles leave the list.
+
+It is entirely local, like everything else: two tables in `~/.jobscout/jobscout.db`,
+no sync, no reminders sent anywhere.
+
 ## Looking inside what you have collected
 
 The store keeps the whole advert, not just a link, and four features read that

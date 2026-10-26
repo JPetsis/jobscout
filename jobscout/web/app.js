@@ -8,7 +8,10 @@
 
 let ALL = [];                 // every match, unfiltered
 let STATS = {};               // header numbers
-const F = { q: '', band: 'all', source: 'all', status: 'new', fresh: false,
+/* "active" is the default rather than "new": once the logger exists, marking
+ * something applied is the START of a relationship you are tracking, and a
+ * board that hides it at that moment loses the role you care most about. */
+const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
             text: false, closing: false };
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
@@ -88,6 +91,7 @@ async function boot() {
     wireFilters();
     wirePanes();
     render();
+    loadAppsCount();            // the header badge, async and never blocking
     checkForUpdates();          // async; never blocks the grid
     maybeAutoScan();            // async; the backend decides whether it is due
   } catch (e) {
@@ -103,6 +107,7 @@ function fail(e) {
 }
 
 async function reload() {
+  loadAppsCount();               // the badge, which must never block the grid
   const [matches, stats] = await Promise.all([
     pywebview.api.matches(), pywebview.api.stats(),
   ]);
@@ -290,7 +295,8 @@ function visible() {
   const minSc = Number(STATS.min_score ?? 6);
   return ALL.filter((r) => {
     if (TEXT && !TEXT.has(r.id)) return false;
-    if (F.status !== 'all' && r.status !== F.status) return false;
+    if (F.status === 'active' ? r.status === 'dismissed'
+        : F.status !== 'all' && r.status !== F.status) return false;
     if (F.source !== 'all' && r.source !== F.source) return false;
     if (F.band === 'strong' && r.score < strongTh) return false;
     if (F.band === 'match' && r.score < minSc) return false;
@@ -393,8 +399,22 @@ function card(r, strongTh) {
     top.appendChild(chip);
   }
   if (r.salary) top.appendChild(el('span', 'chip salary', r.salary));
-  if (r.status && r.status !== 'new') {
+  // The logger's chip below says "applied · interview" with the stage, which
+  // is strictly more than the bare triage status. Showing both would print
+  // "applied" twice on the same card.
+  if (r.status && r.status !== 'new' && !(r.application && r.status === 'applied')) {
     top.appendChild(el('span', 'chip st-' + r.status, r.status));
+  }
+  // The logger's own state, so the board answers "what did I already send?"
+  // without opening anything. The chip names the stage and, once it is over,
+  // the outcome.
+  if (r.application) {
+    const stage = appStageLabel(r.application.stage || 'applied');
+    const out = r.application.outcome ? appOutcomeLabel(r.application.outcome) : '';
+    const chip = el('span', 'chip apply', out ? stage + ' · ' + out : stage);
+    chip.title = 'You applied on ' + shortDate(r.application.applied_at) +
+      (out ? ' · outcome: ' + out : '');
+    top.appendChild(chip);
   }
   if ((r.verify_status || '') === 'dead') top.appendChild(el('span', 'chip', '⚠ dead'));
   // One canonical word ("permanent" / "fixed-term") for a fact that adverts
@@ -616,6 +636,8 @@ function wirePanes() {
     if (CURRENT) openDetail(CURRENT, true);
   });
   $('settings-btn').addEventListener('click', openSettings);
+  $('apps-btn').addEventListener('click', openApps);
+  $('apps-close').addEventListener('click', closePanes);
   wirePay();
   $('scan-btn').addEventListener('click', startScan);
   $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
@@ -631,6 +653,7 @@ function wirePanes() {
 function closePanes() {
   $('detail').hidden = true;
   $('settings').hidden = true;
+  $('apps').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = true;
 }
@@ -642,6 +665,7 @@ async function openDetail(r, refresh) {
   CURRENT = r;
   $('detail').hidden = false;
   $('settings').hidden = true;
+  $('apps').hidden = true;
   $('scrim').hidden = false;
   $('detail-title').textContent = r.title || '(untitled)';
 
@@ -696,7 +720,8 @@ function renderDetail(d) {
     put('Deadline', d.deadline_text +
       (d.deadline_note ? '  ·  from the advert: “' + d.deadline_note + '”' : ''));
   }
-  if (d.status) put('Status', d.status);
+  // No "Status" row here: the Application block below owns that fact now, and
+  // two places saying it is how they end up disagreeing after a save.
   body.appendChild(dl);
 
   const why = el('div', 'd-why');
@@ -704,6 +729,12 @@ function renderDetail(d) {
     why.appendChild(el('span', null, label + ' +' + pts));
   }
   if (why.childNodes.length) body.appendChild(why);
+
+  // Where you stand with this one, above the advert: the logger answers
+  // "did I send this, and what came of it"; the description is the reference.
+  const appSlot = el('div', 'app-slot');
+  body.appendChild(appSlot);
+  applicationBlock(d).then((node) => appSlot.replaceWith(node));
 
   if (d.description) {
     body.appendChild(renderDescription(d.description));
@@ -982,6 +1013,7 @@ function setNote(text, bad) {
 async function openSettings() {
   $('settings').hidden = false;
   $('detail').hidden = true;
+  $('apps').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = false;
   setNote('');
@@ -2029,3 +2061,358 @@ document.addEventListener('keydown', (e) => {
   const status = key === 's' ? 'saved' : key === 'a' ? 'applied' : 'dismissed';
   setStatus(target, status, document.querySelector('.card[data-id="' + target.id + '"]'));
 });
+
+/* ---------- the job logger ---------- */
+
+/* An application is a fact about the person, not about the advert: the board
+ * can withdraw the posting, re-publish it under a new id, or deduplicate it,
+ * and the record of "I applied on the 12th, they replied on the 20th, it ended
+ * in an offer" has to survive all of that. The backend keeps it in its own
+ * tables; this file only draws it.
+ *
+ * Two places show it: a block at the bottom of the detail pane (where you log
+ * one), and the Applications pane (where you read the whole search as a list).
+ */
+
+const APP_STAGES = [
+  ['applied', 'Applied'],
+  ['screening', 'Screening'],
+  ['interview', 'Interview'],
+  ['task', 'Task / case study'],
+  ['offer', 'Offer'],
+];
+const APP_OUTCOMES = [
+  ['', 'Still running'],
+  ['hired', 'Offer accepted'],
+  ['declined', 'Offer declined'],
+  ['rejected', 'Rejected'],
+  ['withdrawn', 'Withdrew'],
+  ['no_reply', 'No reply'],
+];
+
+const appStageLabel = (v) => (APP_STAGES.find(([k]) => k === v) || [v, v])[1];
+const appOutcomeLabel = (v) => (APP_OUTCOMES.find(([k]) => k === v) || [v, v])[1];
+
+function todayISO() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function shortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d)) return String(iso).slice(0, 10);
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function appBadge(app) {
+  const stage = appStageLabel(app.stage || 'applied');
+  const out = app.outcome ? appOutcomeLabel(app.outcome) : '';
+  return out ? stage + ' · ' + out : stage;
+}
+
+function textInput(value, placeholder, aria) {
+  const i = document.createElement('input');
+  i.type = 'text';
+  i.value = value || '';
+  if (placeholder) i.placeholder = placeholder;
+  if (aria) i.setAttribute('aria-label', aria);
+  return i;
+}
+
+async function refreshAppBlock(d) {
+  const old = document.getElementById('app-block');
+  if (!old) return;
+  const fresh = await applicationBlock(d);
+  old.replaceWith(fresh);
+}
+
+/* The block in the detail pane. Everything saves on change: a logger with a
+ * Save button loses the note you typed when you close the pane. */
+async function applicationBlock(d) {
+  const wrap = el('section', 'app-block');
+  wrap.id = 'app-block';
+  let app = {};
+  try {
+    app = (await pywebview.api.application(d.id)) || {};
+  } catch (e) {
+    wrap.appendChild(el('p', 's-err', 'Could not read the application log: ' + String(e)));
+    return wrap;
+  }
+  const has = !!(app && app.id);
+  const head = el('div', 'app-head');
+  head.appendChild(el('h3', 'app-h3', has ? 'Application' : 'Not applied yet'));
+  if (has) head.appendChild(el('span', 'app-badge', appBadge(app)));
+  wrap.appendChild(head);
+
+  if (!has) {
+    wrap.appendChild(el('p', 'field-help',
+      'Log it here and jobscout keeps the date, the salary the advert stated, ' +
+      'every stage it moved through and what came back — instead of spreadsheets ' +
+      'and reminder apps.'));
+    const btn = el('button', 'primary small', 'I applied');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await pywebview.api.save_application(d.id, {
+          applied_at: todayISO(),
+          channel: d.source || '',
+          salary_advertised: (d.salary && (d.salary.text || d.salary.raw)) || '',
+        });
+        await refreshAppBlock(d);
+        loadAppsCount();
+      } catch (e) {
+        wrap.appendChild(el('p', 's-err', 'Could not save: ' + String(e)));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  const grid = el('div', 'app-grid');
+  const save = (fields) => pywebview.api.save_application(d.id, fields)
+    .then(() => refreshAppBlock(d))
+    .then(() => loadAppsCount());
+
+  const field = (label, control) => {
+    const box = el('label', 'app-field');
+    box.appendChild(el('span', 'app-label', label));
+    box.appendChild(control);
+    grid.appendChild(box);
+  };
+
+  const applied = document.createElement('input');
+  applied.type = 'date';
+  applied.value = app.applied_at || '';
+  applied.addEventListener('change', () => save({ applied_at: applied.value }));
+  field('Applied on', applied);
+
+  const stage = document.createElement('select');
+  for (const [v, t] of APP_STAGES) {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = t;
+    if (v === (app.stage || 'applied')) o.selected = true;
+    stage.appendChild(o);
+  }
+  stage.addEventListener('change', () => save({ stage: stage.value }));
+  field('Stage', stage);
+
+  const outcome = document.createElement('select');
+  for (const [v, t] of APP_OUTCOMES) {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = t;
+    if (v === (app.outcome || '')) o.selected = true;
+    outcome.appendChild(o);
+  }
+  outcome.addEventListener('change', () => save({ outcome: outcome.value }));
+  field('Outcome', outcome);
+
+  const channel = textInput(app.channel, 'linkedin, referral, direct…', 'How you applied');
+  channel.addEventListener('change', () => save({ channel: channel.value }));
+  field('How', channel);
+
+  const salary = textInput(app.salary_advertised || app.salary_from_posting,
+                           'as the advert stated it', 'Salary advertised');
+  salary.addEventListener('change', () => save({ salary_advertised: salary.value }));
+  field('Advertised salary', salary);
+
+  const contact = textInput(app.contact, 'recruiter, name, email…', 'Contact');
+  contact.addEventListener('change', () => save({ contact: contact.value }));
+  field('Contact', contact);
+
+  const follow = document.createElement('input');
+  follow.type = 'date';
+  follow.value = app.follow_up_at || '';
+  follow.addEventListener('change', () => save({ follow_up_at: follow.value }));
+  field('Follow up on', follow);
+
+  wrap.appendChild(grid);
+
+  const noteBox = el('div', 'app-addnote');
+  const noteInput = textInput('', 'What was said, who said it, what happens next…',
+                              'Add a note');
+  const noteBtn = el('button', 'ghost small', 'Add note');
+  noteBtn.type = 'button';
+  const addNote = async () => {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    noteBtn.disabled = true;
+    try {
+      await pywebview.api.add_application_note(d.id, text);
+      noteInput.value = '';
+      await refreshAppBlock(d);
+    } finally {
+      noteBtn.disabled = false;
+    }
+  };
+  noteBtn.addEventListener('click', addNote);
+  noteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addNote(); }
+  });
+  noteBox.append(noteInput, noteBtn);
+  wrap.appendChild(noteBox);
+
+  const timeline = el('ol', 'app-timeline');
+  const events = (app.timeline || []).slice().reverse();   // newest first
+  for (const e of events) {
+    const li = el('li', 'app-event app-' + e.kind);
+    li.appendChild(el('span', 'app-when', shortDate(e.at)));
+    let text = e.detail || '';
+    if (e.kind === 'stage') text = 'Moved to ' + appStageLabel(e.detail);
+    else if (e.kind === 'outcome') text = 'Outcome: ' + appOutcomeLabel(e.detail);
+    else if (e.kind === 'applied') {
+      text = 'Applied' + (e.detail ? ' · via ' + e.detail : '');
+    } else if (e.kind === 'follow_up') text = 'Follow-up set for ' + shortDate(e.detail);
+    li.appendChild(el('span', 'app-what', text));
+    timeline.appendChild(li);
+  }
+  if (events.length) wrap.appendChild(timeline);
+
+  const kill = el('button', 'ghost small danger', 'Delete this log');
+  kill.type = 'button';
+  kill.addEventListener('click', async () => {
+    if (!confirm('Delete the application log for this posting? The posting stays in your board.')) return;
+    await pywebview.api.delete_application(d.id);
+    await refreshAppBlock(d);
+    loadAppsCount();
+  });
+  wrap.appendChild(kill);
+  return wrap;
+}
+
+/* ---------- the Applications pane ---------- */
+
+let APPS_FILTER = 'open';
+
+async function loadAppsCount() {
+  try {
+    const stats = await pywebview.api.application_stats();
+    const btn = $('apps-btn');
+    if (btn) {
+      const n = (stats && stats.total) || 0;
+      btn.textContent = n ? 'Applications ' + n : 'Applications';
+      btn.classList.toggle('warn', !!(stats && stats.due));
+      btn.title = n
+        ? n + ' logged · ' + stats.open + ' still running' +
+          (stats.due ? ' · ' + stats.due + ' follow-up' + (stats.due === 1 ? '' : 's') + ' due' : '')
+        : 'Every application you logged, and what came of it';
+    }
+  } catch (e) { /* a count must never break the window */ }
+}
+
+async function openApps() {
+  $('apps').hidden = false;
+  $('detail').hidden = true;
+  $('settings').hidden = true;
+  $('pay').hidden = true;
+  $('scrim').hidden = false;
+  renderApps();
+}
+
+async function renderApps() {
+  const body = $('apps-body');
+  body.textContent = '';
+  body.appendChild(el('p', 'loading', 'Loading…'));
+  let rows = [];
+  let stats = {};
+  try {
+    [rows, stats] = await Promise.all([
+      pywebview.api.applications(false),
+      pywebview.api.application_stats(),
+    ]);
+  } catch (e) {
+    body.textContent = '';
+    body.appendChild(el('p', 's-err', 'Could not read the application log: ' + String(e)));
+    return;
+  }
+  body.textContent = '';
+
+  const strip = el('div', 'apps-stats');
+  const stat = (n, label, cls) => {
+    const s = el('div', 'apps-stat' + (cls ? ' ' + cls : ''));
+    s.appendChild(el('b', null, String(n)));
+    s.appendChild(el('span', null, label));
+    strip.appendChild(s);
+  };
+  stat(stats.total || 0, 'logged');
+  stat(stats.open || 0, 'still running');
+  stat(stats.offers || 0, 'offers');
+  stat(stats.rejected || 0, 'rejected');
+  stat((stats.response_rate || 0) + '%', 'ever replied');
+  if (stats.median_reply_days != null) stat(stats.median_reply_days + 'd', 'median reply');
+  body.appendChild(strip);
+
+  if (!rows.length) {
+    body.appendChild(el('p', 'set-lead',
+      'Nothing logged yet. Open a posting you applied to and press “I applied” — ' +
+      'the date, the advertised salary and every stage after it stay here.'));
+    return;
+  }
+
+  const tabs = el('div', 'set-markets');
+  const counts = {
+    all: rows.length,
+    open: rows.filter((r) => !r.outcome).length,
+    closed: rows.filter((r) => !!r.outcome).length,
+  };
+  for (const [id, label] of [['open', 'Still running'], ['closed', 'Finished'], ['all', 'All']]) {
+    const b = el('button', 'set-market' + (APPS_FILTER === id ? ' on' : ''));
+    b.type = 'button';
+    b.appendChild(el('span', null, label));
+    b.appendChild(el('span', 'set-market-count', String(counts[id])));
+    b.addEventListener('click', () => { APPS_FILTER = id; renderApps(); });
+    tabs.appendChild(b);
+  }
+  body.appendChild(tabs);
+
+  const list = el('div', 'apps-list');
+  const shown = rows.filter((r) => (APPS_FILTER === 'all' ? true
+    : APPS_FILTER === 'open' ? !r.outcome : !!r.outcome));
+  for (const r of shown) list.appendChild(appRow(r));
+  body.appendChild(list);
+  if (!shown.length) body.appendChild(el('p', 'set-lead', 'Nothing in this filter.'));
+}
+
+function appRow(r) {
+  const row = el('div', 'app-row');
+  row.tabIndex = 0;
+  row.setAttribute('role', 'button');
+
+  const main = el('div', 'app-row-main');
+  main.appendChild(el('b', 'app-row-title', r.title || '(untitled)'));
+  const sub = el('span', 'app-row-sub',
+    (r.company || '—') + (r.location ? ' · ' + r.location : ''));
+  main.appendChild(sub);
+  row.appendChild(main);
+
+  const meta = el('div', 'app-row-meta');
+  const stage = el('span', 'app-chip st-' + (r.stage || 'applied'), appStageLabel(r.stage));
+  meta.appendChild(stage);
+  if (r.outcome) {
+    meta.appendChild(el('span', 'app-chip out-' + r.outcome, appOutcomeLabel(r.outcome)));
+  }
+  meta.appendChild(el('span', 'app-date', 'applied ' + shortDate(r.applied_at)));
+  if (r.salary_advertised) {
+    const s = el('span', 'app-sal', r.salary_advertised);
+    s.title = 'What the advert stated when you logged it';
+    meta.appendChild(s);
+  }
+  if (r.follow_up_at && !r.outcome) {
+    const due = r.follow_up_at <= todayISO();
+    const f = el('span', 'app-follow' + (due ? ' due' : ''),
+                 'follow up ' + shortDate(r.follow_up_at));
+    meta.appendChild(f);
+  }
+  row.appendChild(meta);
+
+  const open = () => openDetail({ id: r.posting_id, title: r.title });
+  row.addEventListener('click', open);
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  });
+  return row;
+}
