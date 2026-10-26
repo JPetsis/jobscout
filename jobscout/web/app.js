@@ -411,7 +411,8 @@ function card(r, strongTh) {
   if (r.application) {
     const stage = appStageLabel(r.application.stage || 'applied');
     const out = r.application.outcome ? appOutcomeLabel(r.application.outcome) : '';
-    const chip = el('span', 'chip apply', out ? stage + ' · ' + out : stage);
+    const chip = el('span', 'chip apply',
+      '✓ ' + (out ? stage + ' · ' + out : stage));
     chip.title = 'You applied on ' + shortDate(r.application.applied_at) +
       (out ? ' · outcome: ' + out : '');
     top.appendChild(chip);
@@ -2122,10 +2123,41 @@ function shortDate(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function appBadge(app) {
-  const stage = appStageLabel(app.stage || 'applied');
-  const out = app.outcome ? appOutcomeLabel(app.outcome) : '';
-  return out ? stage + ' · ' + out : stage;
+function relDay(iso) {
+  if (!iso) return '';
+  const then = new Date(String(iso).slice(0, 10) + 'T00:00:00');
+  if (isNaN(then)) return '';
+  const days = Math.round((new Date(todayISO() + 'T00:00:00') - then) / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 0) return 'in ' + (-days) + ' days';
+  return days + ' days ago';
+}
+
+/* The state of an application, stated once and large. Everything here is also
+ * in the fields below; this is the sentence you should be able to read from
+ * across the room. */
+function appBand(app) {
+  const band = el('div', 'app-now');
+  band.appendChild(el('span', 'app-now-mark', '✓'));
+  const col = el('div', 'app-now-text');
+  col.appendChild(el('span', 'app-now-title',
+    'Applied ' + (relDay(app.applied_at) || 'on an unrecorded date')));
+  const bits = [];
+  if (app.applied_at) bits.push(shortDate(app.applied_at));
+  bits.push('via ' + appChannelLabel(app.channel || 'employer'));
+  if (app.follow_up_at) bits.push('follow-up ' + shortDate(app.follow_up_at));
+  col.appendChild(el('span', 'app-now-sub', bits.join(' · ')));
+  band.appendChild(col);
+  const pills = el('div', 'app-now-pills');
+  pills.appendChild(el('span', 'app-stage-pill s-' + (app.stage || 'applied'),
+    appStageLabel(app.stage || 'applied')));
+  if (app.outcome) {
+    pills.appendChild(el('span', 'app-stage-pill o-' + app.outcome,
+      appOutcomeLabel(app.outcome)));
+  }
+  band.appendChild(pills);
+  return band;
 }
 
 function textInput(value, placeholder, aria) {
@@ -2159,16 +2191,16 @@ async function applicationBlock(d) {
   const has = !!(app && app.id);
   const head = el('div', 'app-head');
   head.appendChild(el('h3', 'app-h3', has ? 'Application' : 'Not applied yet'));
-  if (has) head.appendChild(el('span', 'app-badge', appBadge(app)));
   wrap.appendChild(head);
 
   if (!has) {
     wrap.appendChild(el('p', 'field-help',
-      'Log it here and jobscout keeps the date, the salary the advert stated, ' +
-      'every stage it moved through and what came back — instead of spreadsheets ' +
-      'and reminder apps.'));
-    const btn = el('button', 'primary small', 'I applied');
+      'Logs today’s date and the salary the advert stated, so the advert can ' +
+      'change or vanish and your record still holds.'));
+    const btn = el('button', 'app-cta');
     btn.type = 'button';
+    btn.appendChild(el('span', 'app-cta-mark', '✓'));
+    btn.appendChild(el('span', 'app-cta-text', 'I applied to this job'));
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
@@ -2191,6 +2223,8 @@ async function applicationBlock(d) {
     wrap.appendChild(btn);
     return wrap;
   }
+
+  wrap.appendChild(appBand(app));
 
   const grid = el('div', 'app-grid');
   const save = (fields) => pywebview.api.save_application(d.id, fields)

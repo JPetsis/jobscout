@@ -15,6 +15,7 @@
   --chip: #eef3ff;
   --ok: #1a7f37;
   --warn: #9a6700;
+  --on-accent: #ffffff;
   --radius: 10px;
   color-scheme: light;
 }
@@ -30,6 +31,7 @@
   --chip: #232a3d;
   --ok: #3fb950;
   --warn: #d29922;
+  --on-accent: #10131a;
   color-scheme: dark;
 }
 
@@ -621,9 +623,9 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 
 /* the quit step is the primary action, so it should look like one */
 button.ghost.primary {
-  background: var(--blue); border-color: var(--blue); color: #fff;
+  background: var(--blue); border-color: var(--blue); color: var(--on-accent);
 }
-button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
+button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); }
 
 /* ---- overlays: a scrim with a centred floating card ----
    The profile picker and the posting detail are the same shape, so they share
@@ -731,9 +733,63 @@ button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
 }
 .app-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .app-h3 { font-size: 13px; margin: 0; }
-.app-badge {
-  margin-left: auto; font-size: 11px; color: var(--muted);
-  background: var(--chip); border-radius: 999px; padding: 2px 9px;
+
+/* The one thing you do in an advert is apply, so it gets a full-width button
+   rather than a small ghost one lost under a paragraph. */
+.app-cta {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  /* the width of its own words, not the width of the pane: a full-width bar
+     reads as a banner in a desktop dialog */
+  width: max-content; max-width: 100%;
+  margin: 10px 0 2px; padding: 12px 22px;
+  font: inherit; font-size: 14.5px; font-weight: 600;
+  color: var(--on-accent); background: var(--blue);
+  border: 0; border-radius: 11px; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
+}
+.app-cta:hover { filter: brightness(1.07); }
+.app-cta:active { transform: translateY(1px); }
+.app-cta:disabled { opacity: .6; cursor: default; transform: none; }
+.app-cta-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: rgba(255, 255, 255, .22); font-size: 12px; line-height: 1;
+}
+
+/* Once applied, the state is a band, not a 11px chip: the date in words, how
+   it was sent, the follow-up, and the stage at the right end. */
+.app-now {
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  margin: 2px 0 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--blue);
+  border-radius: 10px; background: var(--bg);
+}
+.app-now-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: 0 0 auto; border-radius: 50%;
+  background: var(--blue); color: var(--on-accent); font-size: 13px; line-height: 1;
+}
+.app-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-now-title { font-size: 14px; font-weight: 650; }
+.app-now-sub { font-size: 12px; color: var(--muted); }
+.app-stage-pill {
+  display: inline-flex; align-items: center; line-height: 1;
+  padding: 6px 11px; border-radius: 999px;
+  font-size: 12px; font-weight: 650;
+  background: var(--chip); color: var(--blue);
+}
+.app-now-pills { display: flex; gap: 6px; margin-left: auto; }
+.app-stage-pill.s-screening, .app-stage-pill.s-task {
+  background: rgba(154, 103, 0, .13); color: var(--warn);
+}
+.app-stage-pill.s-offer, .app-stage-pill.o-hired {
+  background: rgba(26, 127, 55, .13); color: var(--ok);
+}
+.app-stage-pill.o-declined, .app-stage-pill.o-rejected {
+  background: rgba(179, 38, 30, .11); color: #b3261e;
+}
+.app-stage-pill.o-withdrawn, .app-stage-pill.o-no_reply {
+  background: var(--chip); color: var(--muted);
 }
 .app-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -766,4 +822,7 @@ button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
 .app-event.app-note .app-what { font-style: italic; }
 .app-event.app-outcome .app-what { font-weight: 550; }
 .ghost.danger { color: var(--warn); }
-.chip.apply { border: 1px solid var(--blue); color: var(--blue); background: transparent; }
+.chip.apply {
+  border: 1px solid transparent; background: var(--blue); color: var(--on-accent);
+  font-weight: 650; padding: 4px 9px;
+}

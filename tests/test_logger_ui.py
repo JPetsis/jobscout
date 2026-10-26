@@ -37,6 +37,28 @@ def test_the_detail_pane_asks_for_the_application():
     assert "pywebview.api.add_application_note(d.id" in js
 
 
+def test_the_apply_action_is_a_primary_button():
+    """Applying is the one action in an advert, so it must not be a ghost link."""
+    js = _text("jobscout", "web", "app.js")
+    css = _text("jobscout", "web", "styles.css")
+    assert "el('button', 'app-cta')" in js
+    assert "I applied to this job" in js
+    block = css[css.index(".app-cta {"):]
+    block = block[:block.index("}")]
+    assert "background: var(--blue)" in block
+    assert "color: var(--on-accent)" in block, "white on #7aa2ff in dark mode is 2:1"
+    assert "width: max-content" in block, "full width reads as a banner, not a button"
+
+
+def test_the_logged_state_is_a_band_not_a_chip():
+    js = _text("jobscout", "web", "app.js")
+    css = _text("jobscout", "web", "styles.css")
+    assert "function appBand(" in js
+    assert "app-now-title" in js and "app-now-sub" in js
+    assert "app-now-pills" in js
+    assert ".app-now {" in css and ".app-now-pills {" in css
+
+
 def test_the_board_and_the_application_place_are_different_facts():
     """Found on XING is where the advert was SEEN; applied via is where it went.
 
