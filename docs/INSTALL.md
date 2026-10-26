@@ -97,12 +97,17 @@ not. If jobscout refuses to start it names the missing library and its package;
 on Debian/Ubuntu the ones seen in practice are:
 
 ```bash
-sudo apt install libegl1 libgl1 libxcb-cursor0 fontconfig libminizip1t64 libopus0
+sudo apt install libegl1 libgl1 fontconfig \
+                 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+                 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xkb1 \
+                 libxkbcommon-x11-0 libsm6 libice6
 ```
 
-The last two are only needed by builds older than 0.5.1: newer ones carry them.
-On Ubuntu 22.04 the name is `libminizip1`; on Fedora, install `mesa-libEGL
-mesa-libGL xcb-util-cursor fontconfig minizip-compat opus`.
+Everything above is part of any desktop install; the list is what a bare
+container or a minimal window manager was missing when tested. The two libraries
+Qt WebEngine links, `libminizip` and `libopus`, are inside the tarball from 0.6.1
+on and need no package: on 0.6.0 add `libminizip1t64 libopus0` (Ubuntu 22.04
+calls it `libminizip1`).
 
 The two builds are made on different Ubuntu versions, so their floors differ:
 the x86_64 tarball runs on Ubuntu 22.04 and newer, the arm64 one is built on
