@@ -816,6 +816,14 @@ def _check_backend() -> None:
     guarantee. Finding out at launch with a real message beats a blank window.
     """
     if sys.platform.startswith("linux"):
+        # Chromium's sandbox refuses to start as root, with an error that names
+        # --no-sandbox and nothing else. WSL sessions and containers are often
+        # root, so say the useful thing before the crash says the cryptic one.
+        if os.geteuid() == 0 and not os.environ.get("QTWEBENGINE_DISABLE_SANDBOX"):
+            print("jobscout: running as root. Chromium's sandbox will refuse to "
+                  "start; run as a normal user, or set "
+                  "QTWEBENGINE_DISABLE_SANDBOX=1 if you accept that.",
+                  file=sys.stderr)
         # pywebview has NO default Linux backend. GTK is only an option for a
         # source install; the bundle carries Qt, so that is the path to explain.
         try:

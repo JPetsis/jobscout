@@ -97,11 +97,12 @@ not. If jobscout refuses to start it names the missing library and its package;
 on Debian/Ubuntu the ones seen in practice are:
 
 ```bash
-sudo apt install libegl1 libgl1 libminizip1t64 libopus0
+sudo apt install libegl1 libgl1 libxcb-cursor0 fontconfig libminizip1t64 libopus0
 ```
 
-On Ubuntu 22.04 the third is called `libminizip1`; on Fedora, install
-`mesa-libEGL mesa-libGL minizip-compat opus`.
+The last two are only needed by builds older than 0.5.1: newer ones carry them.
+On Ubuntu 22.04 the name is `libminizip1`; on Fedora, install `mesa-libEGL
+mesa-libGL xcb-util-cursor fontconfig minizip-compat opus`.
 
 The two builds are made on different Ubuntu versions, so their floors differ:
 the x86_64 tarball runs on Ubuntu 22.04 and newer, the arm64 one is built on
@@ -124,6 +125,25 @@ No signing step and no warning — Linux does not gate unsigned binaries.
 If it refuses to start, read the message: since 0.5.x it names the exact
 library that is missing and the package that provides it, rather than telling
 you to install Qt (which the build already contains).
+
+### Ubuntu on WSL2 (Windows)
+
+WSL2 can show Linux windows through WSLg, which ships with WSL on Windows 11 and
+with the Store version of WSL on Windows 10 21H2+. Check it with `echo $DISPLAY`
+(it should not be empty), then install the same libraries as a bare system:
+
+```bash
+sudo apt install libegl1 libgl1 libxcb-cursor0 fontconfig libminizip1t64 libopus0
+```
+
+Keep jobscout in the Linux home (`~/jobscout`), not under `/mnt/c`: files there
+are slow to read and arrive without the executable bit, so the app either crawls
+or refuses to run.
+
+Do not start it as root (`wsl -u root` or a root shell): Chromium's sandbox
+refuses to run as root and the window never appears. The normal Ubuntu user WSL
+creates for you is fine. If you genuinely need root, prefix the command with
+`QTWEBENGINE_DISABLE_SANDBOX=1`, which trades that sandbox away.
 
 ---
 
