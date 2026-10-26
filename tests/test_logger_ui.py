@@ -112,8 +112,13 @@ class TestTheBridge:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            conn = sqlite3.connect(Path(tmp) / "x.db")
-            conn.executescript(dbm.SCHEMA)
-            names = {r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
+            conn = sqlite3.connect(str(Path(tmp) / "x.db"))
+            try:
+                conn.executescript(dbm.SCHEMA)
+                names = {r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+            finally:
+                # Windows will not delete a file that still has an open handle,
+                # so the temporary directory's cleanup fails without this.
+                conn.close()
         assert {"applications", "application_events"} <= names
