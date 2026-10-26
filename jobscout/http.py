@@ -19,6 +19,34 @@ DEFAULT_UA = (
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
 
+_CONTEXT: ssl.SSLContext | None = None
+_CONTEXT_TRIED = False
+
+
+def default_ssl_context() -> ssl.SSLContext | None:
+    """The TLS context every request uses when a caller does not pass one.
+
+    It is built from certifi, not from OpenSSL's default store, because a
+    PyInstaller bundle ships its own OpenSSL with NO certificate store: every
+    HTTPS request then dies with CERTIFICATE_VERIFY_FAILED, which is exactly
+    how the packaged app's scans returned 0 postings for days while the CLI
+    (which already passed a certifi context) worked.
+
+    Pick the roots HERE rather than at each call site: one caller forgetting the
+    context is the whole bug, and it fails silently. None means "certifi is not
+    installed, fall back to the system store" -- the CLI prints a warning.
+    """
+    global _CONTEXT, _CONTEXT_TRIED
+    if _CONTEXT_TRIED:
+        return _CONTEXT
+    _CONTEXT_TRIED = True
+    try:
+        import certifi
+        _CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    except Exception:                                            # noqa: BLE001
+        _CONTEXT = None
+    return _CONTEXT
+
 
 class FetchError(Exception):
     def __init__(self, url: str, message: str):
@@ -34,9 +62,9 @@ class Fetcher:
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent
-        # europa.eu serves a GlobalSign chain that the macOS trust store lacks;
-        # pass a certifi-built context there instead of disabling verification.
-        self.ssl_context = ssl_context
+        # One context for everything, certifi by default: see
+        # default_ssl_context() for the bundled-app failure this prevents.
+        self.ssl_context = ssl_context if ssl_context is not None else default_ssl_context()
         self.requests = 0
         self.errors: list[str] = []
         self._last: dict[str, float] = {}

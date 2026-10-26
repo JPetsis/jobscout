@@ -587,6 +587,9 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
   .set-panes { padding: 14px 14px 22px; }
 }
 
+.scanbar.scan-failed { border-color: var(--warn); }
+.scanbar.scan-failed .scan-label { color: var(--warn); }
+
 /* ---- update notice ---- */
 .updatebar {
   display: flex; align-items: center; gap: 12px;

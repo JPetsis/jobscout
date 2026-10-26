@@ -1965,12 +1965,28 @@ async function pollScan() {
   if (!p.running) {
     clearInterval(POLL);
     const s = p.summary;
+    const failures = (s && s.errors) || [];
+    if (s && s.fetched === 0 && failures.length) {
+      // Not "no new postings": a scan that could not read a single page. It
+      // must not look like a quiet day, and it must not disappear after six
+      // seconds -- this is how the app lost five days of scans to a TLS bug
+      // that the summary reported as "0 new".
+      $('scan-fill').style.width = '100%';
+      $('scan-bar').classList.add('scan-failed');
+      $('scan-label').textContent =
+        'scan failed \u2014 no board could be read (' + failures.length +
+        (failures.length === 1 ? ' error' : ' errors') + '). First: ' + failures[0];
+      $('scan-btn').disabled = false;
+      await reload();
+      return;
+    }
     if (s) {
       $('scan-fill').style.width = '100%';
       $('scan-label').textContent =
         s.new + ' new · ' + s.matches + ' matches this run' +
         (((s.skipped_fresh || []).length)
           ? ' · ' + s.skipped_fresh.length + ' sources were fresh' : '') +
+        (failures.length ? ' · ' + failures.length + ' sources failed' : '') +
         (s.cancelled ? '  (cancelled early)' : '');
     }
     $('scan-btn').disabled = false;

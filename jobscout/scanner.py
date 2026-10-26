@@ -371,8 +371,10 @@ def scan(cfg, conn, fetcher, *,
         "SELECT COUNT(*) n FROM postings WHERE status='new' AND filtered=0 "
         "AND dup_of IS NULL AND score >= ?", (min_score,)).fetchone()["n"]
 
+    fetched_total = sum(int(s.get("fetched", 0) or 0) for s in stats["sources"].values())
     summary = {
-        "run_id": run_id, "new": total_new, "matches": len(matches),
+        "run_id": run_id, "new": total_new, "fetched": fetched_total,
+        "matches": len(matches),
         "total_matches": m_all, "strong": s_all, "min_score": min_score,
         "strong_threshold": strong_th, "matches_top": matches,
         "errors": list(fetcher.errors), "requests": fetcher.requests,

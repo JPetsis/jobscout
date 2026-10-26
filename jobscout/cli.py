@@ -29,7 +29,7 @@ from . import ui
 from . import backup as backupmod
 from . import scanner
 from .config import home, init_workspace, load_config
-from .http import FetchError, Fetcher
+from .http import FetchError, Fetcher, default_ssl_context
 from .models import Posting
 
 from .sources import REGISTRY
@@ -756,11 +756,12 @@ def _flag(value) -> bool:
 
 
 def _fetcher(cfg=None) -> Fetcher:
-    """Fetcher with certifi's CA bundle when available.
+    """The CLI's fetcher: one setting for pace, and the shared TLS context.
 
-    europa.eu (EURES) serves a GlobalSign chain that the macOS trust store does
-    not carry, so the default context refuses the connection. Prefer adding the
-    root over disabling verification; every other host works unchanged.
+    The certificate roots are chosen in `http.default_ssl_context()` so that no
+    caller -- CLI, window or probe -- can forget them. That forgot-the-context
+    case is not hypothetical: the packaged app built its own Fetcher without a
+    context, and every HTTPS request failed verification while the CLI worked.
 
     `host_delay` is read here so one setting governs the feeds and APIs that do
     not ask for their own pace; the scrapers keep theirs, because a search page
@@ -771,16 +772,11 @@ def _fetcher(cfg=None) -> Fetcher:
         delay = float((cfg or load_config()).prefs.get("host_delay", 0.6) or 0)
     except Exception:                                         # noqa: BLE001
         pass
-    try:
-        import certifi
-        import ssl
-        return Fetcher(host_delay=delay,
-                       ssl_context=ssl.create_default_context(cafile=certifi.where()))
-    except ImportError as e:
-        # Do not fail silently: hosts like europa.eu will then error per request.
-        print(f"(certifi unavailable, TLS verification falls back to the system "
-              f"store: {e})", file=sys.stderr)
-        return Fetcher(host_delay=delay)
+    if default_ssl_context() is None:
+        # Do not fail silently: without certifi the bundle has no roots at all.
+        print("(certifi unavailable, TLS verification falls back to the system "
+              "store)", file=sys.stderr)
+    return Fetcher(host_delay=delay)
 
 
 def _row_expires(row) -> str:
