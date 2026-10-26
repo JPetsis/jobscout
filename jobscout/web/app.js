@@ -2139,22 +2139,26 @@ function relDay(iso) {
 function appBand(app) {
   const band = el('div', 'app-now');
   const col = el('div', 'app-now-text');
-  col.appendChild(el('span', 'app-now-title',
+
+  // The stage belongs to the sentence, not to a separate column: floating to
+  // the far edge of a 850px band read as an unrelated badge.
+  const row = el('div', 'app-now-row');
+  row.appendChild(el('span', 'app-now-title',
     'Applied ' + (relDay(app.applied_at) || 'on an unrecorded date')));
+  row.appendChild(el('span', 'app-stage-pill s-' + (app.stage || 'applied'),
+    appStageLabel(app.stage || 'applied')));
+  if (app.outcome) {
+    row.appendChild(el('span', 'app-stage-pill o-' + app.outcome,
+      appOutcomeLabel(app.outcome)));
+  }
+  col.appendChild(row);
+
   const bits = [];
   if (app.applied_at) bits.push(shortDate(app.applied_at));
   bits.push('via ' + appChannelLabel(app.channel || 'employer'));
   if (app.follow_up_at) bits.push('follow-up ' + shortDate(app.follow_up_at));
   col.appendChild(el('span', 'app-now-sub', bits.join(' · ')));
   band.appendChild(col);
-  const pills = el('div', 'app-now-pills');
-  pills.appendChild(el('span', 'app-stage-pill s-' + (app.stage || 'applied'),
-    appStageLabel(app.stage || 'applied')));
-  if (app.outcome) {
-    pills.appendChild(el('span', 'app-stage-pill o-' + app.outcome,
-      appOutcomeLabel(app.outcome)));
-  }
-  band.appendChild(pills);
   return band;
 }
 
@@ -2195,8 +2199,8 @@ async function applicationBlock(d) {
 
   if (!has) {
     wrap.appendChild(el('p', 'field-help',
-      'Logs today’s date and the salary the advert stated, so the advert can ' +
-      'change or vanish and your record still holds.'));
+      'Logging an application records today’s date and the salary the advert ' +
+      'stated, so the advert can change or vanish and your record still holds.'));
     // The label says what the button DOES. "I applied" asserted something
     // about the person before they had done it.
     const btn = el('button', 'app-cta', 'Log an application');

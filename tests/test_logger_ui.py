@@ -48,7 +48,7 @@ def test_the_apply_action_is_a_primary_button():
     block = block[:block.index("}")]
     assert "background: var(--cta)" in block, "blue is the app's information colour"
     assert "color: var(--on-cta)" in block, "white on #7aa2ff in dark mode is 2:1"
-    assert "margin: 10px auto 2px" in block, "centred in the block"
+    assert "margin: 16px 0 2px" in block, "flush with the block text, not centred"
     assert "width: max-content" in block, "full width reads as a banner, not a button"
 
 
@@ -57,8 +57,7 @@ def test_the_logged_state_is_a_band_not_a_chip():
     css = _text("jobscout", "web", "styles.css")
     assert "function appBand(" in js
     assert "app-now-title" in js and "app-now-sub" in js
-    assert "app-now-pills" in js
-    assert ".app-now {" in css and ".app-now-pills {" in css
+    assert "app-now-row" in js and ".app-now-row {" in css
     assert "app-now-mark" not in js and "app-now-mark" not in css
 
 

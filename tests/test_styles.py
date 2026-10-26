@@ -31,7 +31,10 @@ def test_the_label_pill_centres_its_text():
     assert "display: inline-flex" in block
     assert "align-items: center" in block
     assert "line-height: 1" in block
-    assert "padding: 3px 8px" in block, "asymmetric padding is what looked 'aligned right'"
+    # 3/3 was the "aligned right" bug (a later rule won). 2/4 is deliberate:
+    # the descender takes room the eye does not count, so equal padding leaves
+    # the x-height sitting low in the pill.
+    assert "padding: 2px 8px 4px" in block
 
 
 def test_the_settings_list_editor_is_scoped():

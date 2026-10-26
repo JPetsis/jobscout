@@ -190,7 +190,7 @@ body {
   line-height: 1;
   font-weight: 700;
   font-size: 12.5px;
-  padding: 3px 8px;
+  padding: 2px 8px 4px;
   border-radius: 6px;
   background: var(--chip);
   color: var(--blue);
@@ -199,14 +199,16 @@ body {
 
 .chip {
   font-size: 11px;
-  /* inline-flex + line-height 1, not inline: an inline box aligns its text on
-     the baseline of a line-height inherited from the card, so equal padding
-     still LOOKS lopsided -- the label sat high in every pill. */
+  /* inline-flex, not inline: an inline box aligns its text on the baseline of
+     a line-height inherited from the card, so equal padding still looks
+     lopsided. line-height 1 makes the line box hug the font, and the padding
+     is 2/4 rather than 3/3 because the descender of a "p" takes room the eye
+     does not count: equal padding left the x-height sitting low. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  padding: 3px 8px;
+  padding: 2px 8px 4px;
   border-radius: 6px;
   border: 1px solid var(--line);
   color: var(--muted);
@@ -725,7 +727,7 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
 }
 .app-chip {
   display: inline-flex; align-items: center; justify-content: center;
-  line-height: 1; border-radius: 999px; padding: 3px 9px;
+  line-height: 1; border-radius: 999px; padding: 2px 9px 4px;
   background: var(--chip); color: var(--ink); font-size: 11px; font-weight: 550;
 }
 .app-chip.out-hired { background: var(--ok); color: #fff; }
@@ -746,11 +748,11 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
    rather than a small ghost one lost under a paragraph. */
 .app-cta {
   display: flex; align-items: center; justify-content: center;
-  /* the width of its own words, not the width of the pane, and centred in the
-     block: a full-bleed bar reads as a banner in a desktop dialog */
+  /* the width of its own words, flush with the block's text: a full-bleed bar
+     reads as a banner, and a centred one floats away from the sentence above */
   width: max-content; max-width: 100%;
-  margin: 10px auto 2px; padding: 12px 24px;
-  font: inherit; font-size: 14.5px; font-weight: 600;
+  margin: 16px 0 2px; padding: 10px 20px;    /* 40px tall: still a tap target */
+  font: inherit; font-size: 14px; font-weight: 600;
   color: var(--on-cta); background: var(--cta);
   border: 0; border-radius: 11px; cursor: pointer;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .14);
@@ -762,21 +764,21 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
 /* Once applied, the state is a band, not a 11px chip: the date in words, how
    it was sent, the follow-up, and the stage at the right end. */
 .app-now {
-  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
-  margin: 2px 0 12px; padding: 10px 12px;
+  display: flex; align-items: center; column-gap: 18px; row-gap: 8px;
+  flex-wrap: wrap; margin: 2px 0 12px; padding: 9px 12px;
   border: 1px solid var(--line); border-left: 3px solid var(--blue);
   border-radius: 10px; background: var(--bg);
 }
 .app-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-now-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .app-now-title { font-size: 14px; font-weight: 650; }
 .app-now-sub { font-size: 12px; color: var(--muted); }
 .app-stage-pill {
   display: inline-flex; align-items: center; line-height: 1;
-  padding: 6px 11px; border-radius: 999px;
-  font-size: 12px; font-weight: 650;
+  padding: 3px 10px 5px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 650;
   background: var(--chip); color: var(--blue);
 }
-.app-now-pills { display: flex; gap: 6px; margin-left: auto; }
 .app-stage-pill.s-screening, .app-stage-pill.s-task {
   background: rgba(154, 103, 0, .13); color: var(--warn);
 }
