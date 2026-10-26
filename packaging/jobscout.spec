@@ -45,6 +45,7 @@ and must never be baked into a distributable.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -171,11 +172,41 @@ if not any(Path(src).name == "cacert.pem" for src, _ in _certifi_files):
         "context from it and the packaged app cannot reach GitHub without it")
 datas += _certifi_files
 
+# --- the system libraries Qt WebEngine needs and PyInstaller misses ----------
+# Qt's WebEngine links libminizip and libopus. PyInstaller collects Qt as data
+# files, so it never walks those dependencies, and a minimal distribution has
+# neither: `import qtpy.QtWebEngineWidgets` then dies with "cannot open shared
+# object file", which pywebview reports as "install QT or GTK". Copying the two
+# in leaves the GL libraries as the only system requirement.
+binaries = []
+
+
+def _find_shared_library(soname: str) -> str | None:
+    try:
+        listing = subprocess.run(["ldconfig", "-p"], capture_output=True,
+                                 text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in listing.splitlines():
+        if soname in line and "=>" in line:
+            return line.split("=>")[-1].strip()
+    return None
+
+
+if sys.platform.startswith("linux"):
+    for _soname in ("libminizip.so.1", "libopus.so.0"):
+        _path = _find_shared_library(_soname)
+        if _path and Path(_path).is_file():
+            binaries.append((_path, "."))
+        else:
+            print(f"warning: {_soname} not found on this build host; the "
+                  f"bundle will rely on the system copy", file=sys.stderr)
+
 # --- build ------------------------------------------------------------------
 a = Analysis(                                              # noqa: F821
     [str(ENTRY)],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

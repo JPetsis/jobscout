@@ -8,7 +8,9 @@ touch holds `dbm.LOCK` (see the note above LOCK in db.py).
 """
 from __future__ import annotations
 
+import importlib
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -740,6 +742,73 @@ def _install_webview2(bootstrapper: Path) -> bool:
     return _has_webview2()
 
 
+#: System library -> the package that provides it. Only the libraries seen in
+#: practice, because a table of guesses is worse than naming the file.
+_LINUX_SO_PACKAGES = {
+    "libegl.so.1": ("libegl1", "mesa-libEGL"),
+    "libgl.so.1": ("libgl1", "mesa-libGL"),
+    "libgbm.so.1": ("libgbm1", "mesa-libgbm"),
+    "libminizip.so.1": ("libminizip1", "minizip-compat"),
+    "libopus.so.0": ("libopus0", "opus"),
+    "libnss3.so": ("libnss3", "nss"),
+    "libxkbcommon.so.0": ("libxkbcommon0", "libxkbcommon"),
+    "libxcb-cursor.so.0": ("libxcb-cursor0", "xcb-util-cursor"),
+    "libfontconfig.so.1": ("libfontconfig1", "fontconfig"),
+}
+
+
+def _missing_shared_library(exc: BaseException) -> str:
+    """The .so named by an ImportError, or '' when the error is not about one."""
+    match = re.search(r"(lib[\w.+\-]+\.so(?:\.\d+)*)", str(exc))
+    return match.group(1) if match else ""
+
+
+def _missing_library_message(lib: str) -> str:
+    deb, rpm = _LINUX_SO_PACKAGES.get(lib.lower(), ("", ""))
+    hint = ""
+    if deb:
+        hint = ("\n\nInstall it and start jobscout again:\n"
+                f"    Debian/Ubuntu:  sudo apt install {deb}\n"
+                f"    Fedora:         sudo dnf install {rpm or deb}")
+    return (f"jobscout could not load its bundled Qt, because this system "
+            f"library is missing:\n    {lib}\n"
+            f"Qt itself is included in this build; {lib} belongs to your "
+            f"distribution.{hint}\n\n"
+            "A normal desktop has this already. A minimal or container "
+            "install usually does not.")
+
+
+def _linux_backend_problem() -> str | None:
+    """Why the Qt backend will not load, phrased as something to do.
+
+    Checking the package name is not enough: PyQt6 can be present and still
+    fail to import because one of its SYSTEM libraries is absent, and pywebview
+    then reports "install QT or GTK" -- sending the user to install the one
+    thing the bundle definitely carries. Importing QtWebEngine, which is what
+    pywebview itself does, names the missing file.
+    """
+    try:
+        importlib.import_module("qtpy")
+    except ImportError as exc:
+        lib = _missing_shared_library(exc)
+        if lib:
+            return _missing_library_message(lib)
+        return ('jobscout needs a GUI backend on Linux:\n'
+                '    pip install "pywebview[qt]"\n'
+                "A packaged build already carries Qt; this only applies to a "
+                "source install.")
+    try:
+        importlib.import_module("qtpy.QtWebEngineWidgets")
+    except ImportError as exc:
+        lib = _missing_shared_library(exc)
+        if lib:
+            return _missing_library_message(lib)
+        return ("jobscout could not load Qt WebEngine, which this build "
+                "carries. Run it from a terminal to see the underlying "
+                "ImportError, and report it with that exact message.")
+    return None
+
+
 def _check_backend() -> None:
     """Fail with a fixable message when the OS renderer is missing.
 
@@ -747,21 +816,14 @@ def _check_backend() -> None:
     guarantee. Finding out at launch with a real message beats a blank window.
     """
     if sys.platform.startswith("linux"):
-        # pywebview has NO default Linux backend.
-        ok = False
-        for mod in ("qtpy", "gi"):
-            try:
-                __import__(mod)
-                ok = True
-                break
-            except ImportError:
-                continue
-        if not ok:
-            raise SystemExit(
-                "jobscout-app needs a GUI backend on Linux:\n"
-                '    pip install "pywebview[qt]"\n'
-                "(GTK also works but PyGObject must be compiled against system "
-                "GTK headers.)")
+        # pywebview has NO default Linux backend. GTK is only an option for a
+        # source install; the bundle carries Qt, so that is the path to explain.
+        try:
+            importlib.import_module("gi")
+        except ImportError:
+            problem = _linux_backend_problem()
+            if problem:
+                raise SystemExit(problem)
 
     if sys.platform == "win32":
         # WebView2 ships with Windows 11 and 10 1803+, but NOT with Windows

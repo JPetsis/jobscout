@@ -54,3 +54,26 @@ class TestInstalling:
         monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: None)
         monkeypatch.setattr(app, "_has_webview2", lambda: False)
         assert app._install_webview2(installer) is False
+
+
+class TestTheLinuxBackendMessage:
+    """A missing system library must not be reported as a missing Qt."""
+
+    def test_the_soname_is_read_out_of_the_error(self):
+        exc = ImportError("libEGL.so.1: cannot open shared object file: "
+                          "No such file or directory")
+        assert app._missing_shared_library(exc) == "libEGL.so.1"
+
+    def test_an_unrelated_import_error_names_no_library(self):
+        assert app._missing_shared_library(ImportError("No module named 'qtpy'")) == ""
+
+    def test_the_message_names_the_package_and_clears_qt(self):
+        text = app._missing_library_message("libEGL.so.1")
+        assert "libEGL.so.1" in text
+        assert "sudo apt install libegl1" in text
+        assert "Qt itself is included" in text
+
+    def test_an_unknown_library_still_names_the_file(self):
+        text = app._missing_library_message("libweird.so.9")
+        assert "libweird.so.9" in text
+        assert "apt install" not in text

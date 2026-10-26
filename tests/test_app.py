@@ -60,13 +60,29 @@ def test_linux_without_a_backend_fails_with_the_pip_extra(monkeypatch):
 
 
 def test_linux_with_qt_passes(monkeypatch):
-    """A backend that imports cleanly must satisfy the check."""
+    """A backend that imports cleanly must satisfy the check.
+
+    QtWebEngine is part of the check because it is the import pywebview itself
+    performs: a Qt without it can import and still not draw a window.
+    """
     import types
 
     monkeypatch.setattr(appmod.sys, "platform", "linux")
-    fake = types.ModuleType("qtpy")
-    monkeypatch.setitem(sys.modules, "qtpy", fake)
+    monkeypatch.setitem(sys.modules, "qtpy", types.ModuleType("qtpy"))
+    monkeypatch.setitem(sys.modules, "qtpy.QtWebEngineWidgets",
+                        types.ModuleType("qtpy.QtWebEngineWidgets"))
     appmod._check_backend()                        # must not raise
+
+
+def test_linux_without_qtwebengine_names_it(monkeypatch):
+    """A fake Qt that lacks WebEngine must not pass silently."""
+    import types
+
+    monkeypatch.setattr(appmod.sys, "platform", "linux")
+    monkeypatch.setitem(sys.modules, "qtpy", types.ModuleType("qtpy"))
+    with pytest.raises(SystemExit) as e:
+        appmod._check_backend()
+    assert "Qt WebEngine" in str(e.value)
 
 
 # --- the scan job ----------------------------------------------------------
