@@ -529,17 +529,20 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .switch input:checked + .switch-track::after { transform: translateX(16px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--blue); outline-offset: 2px; }
 
+/* Scoped on purpose: `.chip` is the card's label pill, and an unscoped rule
+   here silently restyled every one of them (10px left padding, 4px right, so
+   the text sat shoved to the right). The editor's tokens are their own thing. */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.chip {
+.chips .chip {
   display: inline-flex; align-items: center; gap: 4px; background: var(--chip);
   border-radius: 999px; padding: 3px 4px 3px 10px; font-size: 12.5px; max-width: 100%;
 }
-.chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip-x {
+.chips .chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips .chip-x, .skill .chip-x {
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
   font: inherit; font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 50%;
 }
-.chip-x:hover { background: var(--line); color: var(--ink); }
+.chips .chip-x:hover, .skill .chip-x:hover { background: var(--line); color: var(--ink); }
 .chip-input {
   flex: 1; min-width: 140px; font: inherit; font-size: 12.5px; padding: 5px 8px;
   border: 1px dashed var(--line); border-radius: 8px;
