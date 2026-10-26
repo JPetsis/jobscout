@@ -697,7 +697,7 @@ function renderDetail(d) {
   put('Company', d.company);
   put('Location', d.location);
   put('Score', d.score != null ? Math.round(d.score) : null);
-  put('Source', d.source);
+  put('Found on', d.source);
   put('Posted', (d.posted_at || '').slice(0, 10));
   // Where the vacancy comes from, and whether the head start is still there.
   // The card shows the short version; here it can be said in words.
@@ -2090,8 +2090,24 @@ const APP_OUTCOMES = [
   ['no_reply', 'No reply'],
 ];
 
+/* Where the application actually went. Deliberately NOT the board jobscout
+ * found it on: most adverts end at the employer's own careers page, and logging
+ * "linkedin" because that is where the advert was seen was simply wrong. The
+ * board stays visible as "Found on". */
+const APP_CHANNELS = [
+  ['employer', "Employer\u2019s own site"],
+  ['linkedin', 'LinkedIn'],
+  ['xing', 'XING'],
+  ['stepstone', 'StepStone'],
+  ['email', 'Email'],
+  ['referral', 'Referral'],
+  ['recruiter', 'Recruiter'],
+  ['other', 'Other'],
+];
+
 const appStageLabel = (v) => (APP_STAGES.find(([k]) => k === v) || [v, v])[1];
 const appOutcomeLabel = (v) => (APP_OUTCOMES.find(([k]) => k === v) || [v, v])[1];
+const appChannelLabel = (v) => (APP_CHANNELS.find(([k]) => k === v) || [v, v])[1];
 
 function todayISO() {
   const d = new Date();
@@ -2158,7 +2174,9 @@ async function applicationBlock(d) {
       try {
         await pywebview.api.save_application(d.id, {
           applied_at: todayISO(),
-          channel: d.source || '',
+          // The employer's own site is what most applications are, whatever
+          // board the advert was found on. The board is recorded separately.
+          channel: 'employer',
           salary_advertised: (d.salary && (d.salary.text || d.salary.raw)) || '',
         });
         await refreshAppBlock(d);
@@ -2212,9 +2230,19 @@ async function applicationBlock(d) {
   outcome.addEventListener('change', () => save({ outcome: outcome.value }));
   field('Outcome', outcome);
 
-  const channel = textInput(app.channel, 'linkedin, referral, direct…', 'How you applied');
+  const channel = document.createElement('select');
+  const options = APP_CHANNELS.slice();
+  if (app.channel && !options.some(([k]) => k === app.channel)) {
+    options.push([app.channel, app.channel]);      // never lose an old value
+  }
+  for (const [v, t] of options) {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = t;
+    if (v === (app.channel || 'employer')) o.selected = true;
+    channel.appendChild(o);
+  }
   channel.addEventListener('change', () => save({ channel: channel.value }));
-  field('How', channel);
+  field('Applied via', channel);
 
   const salary = textInput(app.salary_advertised || app.salary_from_posting,
                            'as the advert stated it', 'Salary advertised');
@@ -2232,6 +2260,9 @@ async function applicationBlock(d) {
   field('Follow up on', follow);
 
   wrap.appendChild(grid);
+  wrap.appendChild(el('p', 'field-help',
+    'Found on ' + (d.source || 'an unknown board') +
+    ' — that is where jobscout saw it. “Applied via” is where you actually sent it.'));
 
   const noteBox = el('div', 'app-addnote');
   const noteInput = textInput('', 'What was said, who said it, what happens next…',
@@ -2266,7 +2297,7 @@ async function applicationBlock(d) {
     if (e.kind === 'stage') text = 'Moved to ' + appStageLabel(e.detail);
     else if (e.kind === 'outcome') text = 'Outcome: ' + appOutcomeLabel(e.detail);
     else if (e.kind === 'applied') {
-      text = 'Applied' + (e.detail ? ' · via ' + e.detail : '');
+      text = 'Applied' + (e.detail ? ' · via ' + appChannelLabel(e.detail) : '');
     } else if (e.kind === 'follow_up') text = 'Follow-up set for ' + shortDate(e.detail);
     li.appendChild(el('span', 'app-what', text));
     timeline.appendChild(li);
@@ -2393,7 +2424,8 @@ function appRow(r) {
   const main = el('div', 'app-row-main');
   main.appendChild(el('b', 'app-row-title', r.title || '(untitled)'));
   const sub = el('span', 'app-row-sub',
-    (r.company || '—') + (r.location ? ' · ' + r.location : ''));
+    (r.company || '—') + (r.location ? ' · ' + r.location : '') +
+    (r.channel ? ' · via ' + appChannelLabel(r.channel) : ''));
   main.appendChild(sub);
   row.appendChild(main);
 

@@ -352,7 +352,9 @@ The board tells you what is out there; the logger remembers what YOU did. Open a
 posting, press **I applied**, and jobscout keeps the date, the salary the advert
 stated, how you sent it, who the contact is, a follow-up date and every stage
 after that — in the same file, under the same profile, without an account
-anywhere.
+anywhere. Where you *found* the advert and where you actually *applied* are two
+different facts and both are kept: most adverts end on the employer's own
+careers page, so that is what "Applied via" defaults to, not the board.
 
 An application has a **stage** (applied, screening, interview, task, offer) and
 an **outcome** (still running, offer accepted, offer declined, rejected,

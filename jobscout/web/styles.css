@@ -174,9 +174,13 @@ body {
 .top > .score { flex: 0 0 auto; white-space: nowrap; }
 
 .score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   font-weight: 700;
   font-size: 12.5px;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
   background: var(--chip);
   color: var(--blue);
@@ -185,7 +189,14 @@ body {
 
 .chip {
   font-size: 11px;
-  padding: 2px 7px;
+  /* inline-flex + line-height 1, not inline: an inline box aligns its text on
+     the baseline of a line-height inherited from the card, so equal padding
+     still LOOKS lopsided -- the label sat high in every pill. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 3px 8px;
   border-radius: 6px;
   border: 1px solid var(--line);
   color: var(--muted);
@@ -546,8 +557,9 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 /* boards */
 .set-markets { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
 .set-market {
-  display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px;
-  padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-size: 12.5px; line-height: 1;
+  padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px;
   background: var(--panel); color: var(--ink); cursor: pointer;
 }
 .set-market.on { border-color: var(--blue); color: var(--blue); background: var(--chip); }
@@ -699,8 +711,9 @@ button.ghost.primary:hover { filter: brightness(1.08); color: #fff; }
   align-items: center; font-size: 11.5px; color: var(--muted);
 }
 .app-chip {
-  border-radius: 999px; padding: 2px 8px; background: var(--chip);
-  color: var(--ink); font-size: 11px; font-weight: 550;
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1; border-radius: 999px; padding: 3px 9px;
+  background: var(--chip); color: var(--ink); font-size: 11px; font-weight: 550;
 }
 .app-chip.out-hired { background: var(--ok); color: #fff; }
 .app-chip.out-declined, .app-chip.out-withdrawn,

@@ -37,6 +37,19 @@ def test_the_detail_pane_asks_for_the_application():
     assert "pywebview.api.add_application_note(d.id" in js
 
 
+def test_the_board_and_the_application_place_are_different_facts():
+    """Found on XING is where the advert was SEEN; applied via is where it went.
+
+    The first version pre-filled "linkedin" because that was the source, which
+    logged the wrong fact on every application sent through a company site.
+    """
+    js = _text("jobscout", "web", "app.js")
+    assert "APP_CHANNELS" in js
+    assert "channel: 'employer'" in js, "the common case is the employer's own site"
+    assert "field('Applied via', channel)" in js
+    assert "put('Found on', d.source)" in js
+
+
 def test_applied_roles_stay_on_the_board():
     """The default filter must not hide what the logger just created."""
     js = _text("jobscout", "web", "app.js")
