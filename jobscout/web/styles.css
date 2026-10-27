@@ -5,12 +5,18 @@
    every dark token twice, and the two would drift.
    color-scheme makes native parts (scrollbars, form controls) follow too. */
 :root {
-  --bg: #f6f6f7;
-  --panel: #ffffff;
-  --line: #e3e3e6;
-  --ink: #1d1d1f;
-  --muted: #6e6e73;
-  --gold: #b58900;
+  /* Warm paper rather than cool grey: the app is a desk you sit at, not a
+     dashboard. Every neutral here is tinted toward clay, which is what makes
+     the blue information accents read as cool by contrast instead of the whole
+     window feeling like a spreadsheet. */
+  --bg: #f7f3ee;
+  --panel: #fffdfa;
+  --line: #e6dbcf;
+  --ink: #26201a;
+  --muted: #746a60;
+  /* Darker than the mark's gold on purpose: this is also the colour of the
+     reason words and the strong-score number, and #b58900 on cream is 3:1. */
+  --gold: #8a6400;
   --blue: #2b5cd9;
   --chip: #eef3ff;
   --ok: #1a7f37;
@@ -19,22 +25,28 @@
   --on-ok: #ffffff;
   --ok-tint: rgba(26, 127, 55, .12);
   --warn-tint: rgba(154, 103, 0, .14);
-  /* The action colour is deliberately not the blue: blue is what the app uses
-     for information (scores, sources, reasons), so a blue button reads as one
-     more label. Green is "go", and stays clear of the gold the mark uses for
-     the posting that matched. */
-  --cta: #17724a;
-  --on-cta: #ffffff;
+  /* The action colour is deliberately not blue and not green: blue is what the
+     app uses for information (scores, sources, reasons), and green already
+     means saved, salary and "fresh from the source". What is left that still
+     feels like a hand picking something up is clay. */
+  --cta: #a8492b;
+  --on-cta: #fff8f4;
+  --perm-bg: #93402a;
+  --perm-fg: #fff4ee;
+  --tmp-bg: #f0e4ea;
+  --tmp-fg: #7d3b5e;
   --radius: 10px;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #16171a;
-  --panel: #1e1f23;
-  --line: #32343a;
-  --ink: #ececf0;
-  --muted: #9a9aa2;
+  /* Lamp light, not moonlight: brown-black ground, warm panel, the same clay
+     accent pulled lighter so it carries on a dark surface. */
+  --bg: #191614;
+  --panel: #221e1b;
+  --line: #453c35;
+  --ink: #f0e9e2;
+  --muted: #b5a79b;
   --gold: #e3b341;
   --blue: #7aa2ff;
   --chip: #232a3d;
@@ -44,8 +56,12 @@
   --on-ok: #08130d;
   --ok-tint: rgba(63, 185, 80, .16);
   --warn-tint: rgba(210, 153, 34, .18);
-  --cta: #3ecf8e;
-  --on-cta: #08130d;
+  --cta: #d3896a;
+  --on-cta: #1c0d06;
+  --perm-bg: #cf8567;
+  --perm-fg: #1c0d06;
+  --tmp-bg: #3a2431;
+  --tmp-fg: #e0b3c8;
   color-scheme: dark;
 }
 
@@ -225,11 +241,11 @@ body {
    is filled rather than tinted: a permanent role reads as permanent at a
    glance, and a fixed-term one stays quiet enough not to compete. */
 .chip.perm {
-  background: var(--ok); border-color: transparent; color: var(--on-ok);
+  background: var(--perm-bg); border-color: transparent; color: var(--perm-fg);
   font-weight: 650;
 }
 .chip.tmp {
-  background: var(--warn-tint); border-color: transparent; color: var(--warn);
+  background: var(--tmp-bg); border-color: transparent; color: var(--tmp-fg);
   font-weight: 600;
 }
 .chip.st-applied { color: var(--blue); border-color: transparent; background: var(--chip); }
