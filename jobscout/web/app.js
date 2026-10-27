@@ -420,7 +420,10 @@ function card(r, strongTh) {
   // One canonical word ("permanent" / "fixed-term") for a fact that adverts
   // say five different ways; api.posting_dict decides it in Python, and the
   // phrase that matched stays in the reasons, visible in the "why" list.
-  if (r.contract) top.appendChild(el('span', 'chip', r.contract));
+  if (r.contract) {
+    top.appendChild(el('span', 'chip ' + (r.contract === 'permanent' ? 'perm' : 'tmp'),
+      r.contract));
+  }
   c.appendChild(top);
 
   c.appendChild(el('div', 'title', r.title || '(untitled)'));

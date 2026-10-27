@@ -16,6 +16,9 @@
   --ok: #1a7f37;
   --warn: #9a6700;
   --on-accent: #ffffff;
+  --on-ok: #ffffff;
+  --ok-tint: rgba(26, 127, 55, .12);
+  --warn-tint: rgba(154, 103, 0, .14);
   /* The action colour is deliberately not the blue: blue is what the app uses
      for information (scores, sources, reasons), so a blue button reads as one
      more label. Green is "go", and stays clear of the gold the mark uses for
@@ -38,6 +41,9 @@
   --ok: #3fb950;
   --warn: #d29922;
   --on-accent: #10131a;
+  --on-ok: #08130d;
+  --ok-tint: rgba(63, 185, 80, .16);
+  --warn-tint: rgba(210, 153, 34, .18);
   --cta: #3ecf8e;
   --on-cta: #08130d;
   color-scheme: dark;
@@ -213,8 +219,19 @@ body {
   border: 1px solid var(--line);
   color: var(--muted);
 }
-.chip.salary { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.10); }
-.chip.st-saved { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.12); }
+.chip.salary { color: var(--ok); border-color: transparent; background: var(--ok-tint); }
+.chip.st-saved { color: var(--ok); border-color: transparent; background: var(--ok-tint); }
+/* Contract type is the one thing on a card that changes what the job IS, so it
+   is filled rather than tinted: a permanent role reads as permanent at a
+   glance, and a fixed-term one stays quiet enough not to compete. */
+.chip.perm {
+  background: var(--ok); border-color: transparent; color: var(--on-ok);
+  font-weight: 650;
+}
+.chip.tmp {
+  background: var(--warn-tint); border-color: transparent; color: var(--warn);
+  font-weight: 600;
+}
 .chip.st-applied { color: var(--blue); border-color: transparent; background: var(--chip); }
 .chip.st-dismissed { color: var(--muted); }
 /* "direct" means the employer publishes here themselves. The fresh variant is
