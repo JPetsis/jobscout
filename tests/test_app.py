@@ -735,6 +735,38 @@ def api(tmp_path, monkeypatch):
     return appmod.JsApi()
 
 
+def test_the_window_can_rescore_without_a_scan(ws):
+    """Editing a title term changes nothing until something re-runs the scorer,
+    and waiting for the next scan is the only other way to get there."""
+    import time
+
+    from jobscout import db as dbm
+    from jobscout.config import load_config
+    from jobscout.models import Posting
+    from jobscout.score import score_posting
+
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    run = dbm.start_run(conn)
+    for i in range(3):
+        p = Posting(source="hn", title=f"Backend Engineer {i}", company="X",
+                    url=f"https://x/{i}", external_id=str(i))
+        dbm.upsert(conn, p, score_posting(cfg.prefs, p), run, "t")
+    conn.close()
+
+    api_obj = appmod.JsApi()
+    assert api_obj.rescore_start()["started"] is True
+    deadline = time.time() + 20
+    status = api_obj.rescore_status()
+    while status["running"] and time.time() < deadline:
+        time.sleep(0.05)
+        status = api_obj.rescore_status()
+    assert status["running"] is False
+    assert status["error"] is None
+    assert status["result"] == {"total": 3, "changed": 0}, \
+        "the default profile already scored these; the count is the answer"
+
+
 def test_launch_asks_when_there_is_a_choice(api):
     out = api.launch()
     assert out["ask"] is True

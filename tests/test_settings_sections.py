@@ -86,6 +86,19 @@ def test_the_window_renders_a_rail_and_board_cards():
     assert "s-boardgroup" not in text, "the old wall of checkboxes came back"
 
 
+def test_the_settings_rail_can_re_score_the_store():
+    """Saving a setting changes the file, not the stored scores. The only other
+    trigger is a scan, and waiting for one is not an answer."""
+    root = Path(__file__).resolve().parents[1] / "jobscout" / "web"
+    js = (root / "app.js").read_text(encoding="utf-8")
+    css = (root / "styles.css").read_text(encoding="utf-8")
+    for marker in ("rescore-btn", "rescore_start", "rescore_status",
+                   "markScoresStale", "SET_SCORING_SECTIONS", "runRescore"):
+        assert marker in js, marker
+    assert ".set-rescore" in css
+    assert ".set-rescore.stale" in css, "the button must show that scores are out of date"
+
+
 def test_market_group_names_are_spelled_out():
     names = [
         sources.GROUP_DACH, sources.GROUP_US, sources.GROUP_EU,

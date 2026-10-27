@@ -475,6 +475,23 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .set-badge { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .set-badge.warn { color: var(--warn); }
 .set-rail-foot { margin-top: auto; padding: 12px 9px 2px; font-size: 11.5px; color: var(--muted); }
+.set-rescore {
+  display: block; width: 100%; margin: 0 0 7px; padding: 8px 10px;
+  font: inherit; font-size: 12.5px; font-weight: 550; line-height: 1.2;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.set-rescore:hover { border-color: var(--cta); color: var(--cta); }
+.set-rescore.stale {
+  background: var(--cta); border-color: transparent; color: var(--on-cta);
+}
+.set-rescore:disabled { opacity: .55; cursor: default; }
+.set-rescore-note {
+  display: block; margin: 0 0 10px; font-size: 11px; line-height: 1.35;
+  color: var(--muted);
+}
+.set-rescore-note.warn { color: var(--warn); }
+.set-version { display: block; opacity: .75; }
 
 .set-panes { padding: 18px 22px 40px; min-width: 0; height: 100%; overflow-y: auto; }
 .set-h3 { font-size: 13px; margin: 0 0 6px; }

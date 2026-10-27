@@ -243,6 +243,72 @@ class ScanJob:
                     "summary": self.summary, "error": self.error}
 
 
+class RescoreJob:
+    """Re-applies the settings to every stored posting, on a worker thread.
+
+    A plain js_api call would work, but 38,000 postings take about 25 seconds
+    and the window would have nothing to show for the wait. Same shape as
+    ScanJob: start, then poll, and the poll carries the count so far.
+    """
+
+    def __init__(self, cfg) -> None:
+        self.cfg = cfg
+        self.lock = threading.Lock()
+        self.running = False
+        self.done = 0
+        self.total = 0
+        self.changed = 0
+        self.error: str | None = None
+        self.result: dict | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> dict:
+        with self.lock:
+            if self.running:
+                return {"started": False, "reason": "a re-score is already running"}
+            self.running = True
+            self.done = self.total = self.changed = 0
+            self.error = None
+            self.result = None
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="jobscout-rescore")
+        self._thread.start()
+        return {"started": True}
+
+    def _progress(self, done: int, total: int, changed: int) -> None:
+        with self.lock:
+            self.done, self.total, self.changed = done, total, changed
+
+    def _run(self) -> None:
+        conn = None
+        try:
+            # Its own connection: the window keeps reading while this writes,
+            # and SQLite's busy timeout is what makes the two wait for each
+            # other instead of erroring.
+            conn = dbm.connect(self.cfg.root / "jobscout.db")
+            conn.execute("PRAGMA busy_timeout = 30000")
+            total, changed = dbm.rescore_all(conn, self.cfg.prefs,
+                                             progress=self._progress)
+            with self.lock:
+                self.done = self.total = total
+                self.changed = changed
+                self.result = {"total": total, "changed": changed}
+        except Exception as e:                                   # noqa: BLE001
+            with self.lock:
+                self.error = f"{type(e).__name__}: {e}"
+        finally:
+            if conn is not None:
+                conn.close()
+            with self.lock:
+                self.running = False
+
+    def status(self) -> dict:
+        with self.lock:
+            return {"running": self.running, "done": self.done,
+                    "total": self.total, "changed": self.changed,
+                    "error": self.error, "result": self.result}
+
+
 SCAN: ScanJob | None = None
 
 
@@ -325,6 +391,26 @@ class JsApi:
 
     def settings(self) -> list[dict]:
         return api.read_settings(self.cfg.path)
+
+    def rescore_start(self) -> dict:
+        """Re-apply the current settings to every stored posting.
+
+        Editing what counts does not change a single stored score until
+        something re-runs the scorer, and the only other trigger is a scan.
+        This is that trigger, without waiting for one.
+        """
+        running = getattr(self, "_rescore", None)
+        if running is not None and running.running:
+            return {"started": False, "reason": "a re-score is already running"}
+        self._rescore = RescoreJob(self.cfg)
+        return self._rescore.start()
+
+    def rescore_status(self) -> dict:
+        running = getattr(self, "_rescore", None)
+        if running is None:
+            return {"running": False, "done": 0, "total": 0, "changed": 0,
+                    "error": None, "result": None}
+        return running.status()
 
     def save_setting(self, key: str, value) -> dict:
         """Write one setting, then reload so scoring/filters see it at once."""

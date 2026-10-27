@@ -121,6 +121,22 @@ def test_rescore_all(tmp_path):
     assert changed2 == 0
 
 
+def test_rescore_all_reports_how_far_it_has_got(tmp_path):
+    """The window shows a count while a 38,000-posting store is worked through,
+    so the callback is part of the contract, not a debugging aid."""
+    conn = _conn(tmp_path)
+    run = dbm.start_run(conn)
+    for i in range(3):
+        p = _p(external_id=str(i), url=f"https://x/{i}")
+        dbm.upsert(conn, p, score_posting(PREFS, p), run, "t")
+    seen = []
+    total, changed = dbm.rescore_all(
+        conn, {}, progress=lambda done, count, ch: seen.append((done, count, ch)))
+    assert total == 3
+    assert seen, "the callback must fire"
+    assert seen[-1] == (3, 3, 3), "it ends on the last row, not one short"
+
+
 def test_list_only_filtered(tmp_path):
     conn = _conn(tmp_path)
     run = dbm.start_run(conn)

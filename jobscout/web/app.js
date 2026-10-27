@@ -1067,14 +1067,96 @@ function renderSettings() {
 
   paintRail(rail);
 
+  // Always visible, whichever section is open: the one thing settings cannot do
+  // by themselves is apply themselves to postings that are already stored.
   const foot = el('div', 'set-rail-foot');
-  foot.appendChild(el('span', null, 'jobscout ' + ((SET.info && SET.info.version) || '')));
+  const rescore = el('button', 'set-rescore', 'Re-score postings');
+  rescore.type = 'button';
+  rescore.id = 'rescore-btn';
+  rescore.title = 'Apply these settings to every stored posting';
+  rescore.addEventListener('click', runRescore);
+  const rescoreNote = el('span', 'set-rescore-note',
+    'Scores use the settings in this file.');
+  rescoreNote.id = 'rescore-note';
+  foot.append(rescore, rescoreNote);
+  foot.appendChild(el('span', 'set-version',
+    'jobscout ' + ((SET.info && SET.info.version) || '')));
   rail.appendChild(foot);
 
   const panes = el('div', 'set-panes');
   shell.append(rail, panes);
   body.appendChild(shell);
   paintPanes(panes, rail);
+}
+
+//: Which panes change stored scores. Editing the update interval does not; a
+//: title term, a country or a threshold does, and the button says so.
+const SET_SCORING_SECTIONS = new Set(['wanted', 'where', 'matching']);
+let RESCORE_STALE = false;
+
+function markScoresStale() {
+  RESCORE_STALE = true;
+  const btn = $('rescore-btn');
+  const note = $('rescore-note');
+  if (!btn || !note) return;
+  btn.classList.add('stale');
+  note.textContent = 'Settings changed. Re-score to apply them.';
+  note.classList.add('warn');
+}
+
+async function runRescore() {
+  const btn = $('rescore-btn');
+  const note = $('rescore-note');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  if (note) {
+    note.classList.remove('warn');
+    note.textContent = 'Re-scoring…';
+  }
+  try {
+    const started = await pywebview.api.rescore_start();
+    if (!started || !started.started) {
+      if (note) {
+        note.textContent = (started && started.reason) || 'Could not start.';
+        note.classList.add('warn');
+      }
+      return;
+    }
+    let st = { running: true };
+    while (st.running) {
+      await new Promise((r) => setTimeout(r, 400));
+      st = await pywebview.api.rescore_status();
+      if (st.running && note) {
+        note.textContent = 'Re-scoring ' + (st.done || 0).toLocaleString() +
+          (st.total ? ' of ' + st.total.toLocaleString() : '') + '…';
+      }
+    }
+    if (st.error) {
+      if (note) {
+        note.textContent = 'Re-score failed: ' + st.error;
+        note.classList.add('warn');
+      }
+      return;
+    }
+    const res = st.result || { total: 0, changed: 0 };
+    if (note) {
+      note.textContent = 'Re-scored ' + res.total.toLocaleString() +
+        ' postings · ' + res.changed.toLocaleString() + ' changed';
+    }
+    RESCORE_STALE = false;
+    btn.classList.remove('stale');
+    await reload();
+    STATS = await pywebview.api.stats();
+    renderStats();
+    loadAppsCount();
+  } catch (e) {
+    if (note) {
+      note.textContent = 'Re-score failed: ' + String(e);
+      note.classList.add('warn');
+    }
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function paintRail(rail) {
@@ -1610,6 +1692,7 @@ async function commitRow(r, value, err) {
     r.value = value;
     setNote(res && res.changed ? 'Saved' : '');
     if (res && res.changed) setTimeout(() => setNote(''), 1400);
+    if (res && res.changed && SET_SCORING_SECTIONS.has(r.section)) markScoresStale();
     // strictness changes rescore the list on next scan; the header must agree
     STATS = await pywebview.api.stats();
     renderStats();

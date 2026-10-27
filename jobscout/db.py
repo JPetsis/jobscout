@@ -598,21 +598,28 @@ def postings_to_verify(conn: sqlite3.Connection, statuses=("saved", "applied"),
     ).fetchall()
 
 
-def rescore_all(conn: sqlite3.Connection, prefs: dict) -> tuple[int, int]:
+def rescore_all(conn: sqlite3.Connection, prefs: dict, progress=None) -> tuple[int, int]:
     """Re-apply the current preferences to every stored posting.
 
-    Returns (total, changed). Used by `jobscout rescore` and automatically by
-    `jobscout scan` when it detects the preferences changed.
+    Returns (total, changed). Used by `jobscout rescore`, by `jobscout scan` when
+    it detects the preferences changed, and by the window's re-score button.
+
+    `progress(done, total, changed)` is called every few hundred rows: a real
+    store of 38,000 postings takes about 25 seconds, so a caller with a window
+    has to be able to say how far it has got.
     """
-    total = changed = 0
-    for row in all_postings(conn):
-        total += 1
+    rows = all_postings(conn)
+    total = len(rows)
+    changed = 0
+    for i, row in enumerate(rows, 1):
         sc = score_posting(prefs, row_to_posting(row))
         if (sc.score != row["score"] or json.dumps(sc.reasons) != (row["reasons"] or "[]")
                 or bool(sc.filtered) != bool(row["filtered"])
                 or sc.reason != (row["filtered_reason"] or "")):
             set_score(conn, row["id"], sc)
             changed += 1
+        if progress is not None and (i % 250 == 0 or i == total):
+            progress(i, total, changed)
     conn.commit()
     return total, changed
 
