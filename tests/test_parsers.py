@@ -2,6 +2,7 @@ import json
 import re
 from datetime import date
 
+from jobscout.models import Posting
 from jobscout.sources import (REGISTRY, SOURCE_NAMES, ams, arbeitnow, ashby,
                               berlinstartupjobs, eures, greenhouse, himalayas, hn,
                               jobs_ch, jobsat, karriere_at, larajobs, lever, linkedin,
@@ -668,6 +669,62 @@ def test_themuse_reads_structured_locations_and_levels(fixture_json):
 
 
 # --- Workday (per-company ATS, no key) --------------------------------------
+
+def test_smartrecruiters_detail_uses_the_url_when_extra_is_gone():
+    """The reported bug: BayWa's "AI Engineer - Generative AI" opened blank.
+
+    `extra` exists only on a freshly fetched posting; the window and `jobscout
+    show` read a row back from the store, where it is gone. The detail then
+    returned None and the generic probe fetched the board page -- a JavaScript
+    app whose HTML carries a browser-support banner and no advert text -- so the
+    pane said the page loaded and showed nothing. The token is in the URL.
+    """
+    seen = []
+
+    class F:
+        def get_json(self, url, **kw):
+            seen.append(url)
+            return {"jobAd": {"sections": {
+                "companyDescription": {"text": "<p>Handelsunternehmen</p>"},
+                "jobDescription": {"text": "<p>Gestalte mit uns die nächste Generation</p>"},
+                "qualifications": {"text": "<p>Python und/oder TypeScript</p>"},
+                "additionalInformation": {"text": "<p>Flexible Arbeitszeiten</p>"},
+            }}}
+
+    fresh = smartrecruiters.parse(
+        {"content": [{"id": "744000158725628",
+                      "name": "AI Engineer - Generative AI m/w/d",
+                      "company": {"name": "BayWa AG"},
+                      "location": {"fullLocation": "München"}}]}, "BayWaAG")[0]
+    stored = Posting(source=fresh.source, title=fresh.title, company=fresh.company,
+                     location=fresh.location, url=fresh.url,
+                     external_id=fresh.external_id)          # no extra: as stored
+    text = smartrecruiters.fetch_detail(stored, F())
+    assert seen == ["https://api.smartrecruiters.com/v1/companies/BayWaAG"
+                    "/postings/744000158725628"]
+    assert text and "nächste Generation" in text
+    assert "Python" in text and "Flexible" in text
+
+
+def test_workday_detail_keeps_the_tenant_on_its_own_host():
+    """`extra` never carried `wd`, and the old default sent wd5 tenants to wd1."""
+    seen = []
+
+    class F:
+        def get_json(self, url, **kw):
+            seen.append(url)
+            return {"jobPostingInfo": {"jobDescription": "<p>Build GPUs</p>"}}
+
+    stored = Posting(
+        source="workday", title="Senior Engineer", company="nvidia",
+        url=("https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite"
+             "/job/US-CA-Santa-Clara/Senior-Engineer_JR1"),
+        external_id="JR1")
+    text = workday.fetch_detail(stored, F())
+    assert seen == ["https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia"
+                    "/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-Engineer_JR1"]
+    assert text == "Build GPUs"
+
 
 def test_workday_token_accepts_both_forms():
     assert workday.parse_token("nvidia:wd5:NVIDIAExternalCareerSite") == (

@@ -1,6 +1,8 @@
 """SmartRecruiters company boards — public postings API (+ detail for descriptions)."""
 from __future__ import annotations
 
+import re
+
 from ..http import Fetcher
 from ..models import Posting
 from ..textutil import clean_html, date_part
@@ -10,6 +12,10 @@ LABEL = "SmartRecruiters"
 API = "https://api.smartrecruiters.com/v1/companies/{token}/postings?limit=100"
 PAGE = "https://jobs.smartrecruiters.com/{token}/{id}"
 DETAIL = "https://api.smartrecruiters.com/v1/companies/{token}/postings/{id}"
+# The board URL carries the same two halves as the API path, which matters
+# because `extra` is in-memory only and does not survive a round trip through
+# the store.
+_PAGE = re.compile(r"jobs\.smartrecruiters\.com/([^/?#]+)/([0-9A-Za-z]+)")
 
 
 def parse(data: dict, token: str = "") -> list[Posting]:
@@ -44,11 +50,28 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
 
 
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
+    """The full advert, from the posting API rather than the rendered page.
+
+    The page at jobs.smartrecruiters.com is a JavaScript app: its HTML carries a
+    browser-support banner and no advert text, so a generic HTML probe "loads
+    the page" and finds nothing. The API has all four sections.
+
+    `extra` is only set on a fresh posting; the window and `jobscout show` read
+    a row back from the store, where it is gone. Falling back to the URL is what
+    makes the detail work there -- without it this returned None and every
+    SmartRecruiters advert opened blank.
+    """
     token = (p.extra or {}).get("token")
-    if not (token and p.external_id):
+    pid = p.external_id
+    if not (token and pid):
+        m = _PAGE.search(p.url or "")
+        if m:
+            token = token or m.group(1)
+            pid = pid or m.group(2)
+    if not (token and pid):
         return None
     try:
-        data = fetcher.get_json(DETAIL.format(token=token, id=p.external_id))
+        data = fetcher.get_json(DETAIL.format(token=token, id=pid))
     except Exception:
         return None
     sections = (data.get("jobAd") or {}).get("sections") or {}

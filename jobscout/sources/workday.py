@@ -138,15 +138,23 @@ def fetch_detail(posting: Posting, fetcher: Fetcher) -> str | None:
     Present so `jobscout show` can expand a Workday posting; the list endpoint
     does not include the body.
     """
-    tenant = (posting.extra or {}).get("tenant")
-    site = (posting.extra or {}).get("site")
+    # The stored URL carries tenant, wd and site; `extra` does not survive a
+    # round trip through the store, and it never carried `wd` at all, so the
+    # old default of wd1 sent every wd5/wd12 tenant to the wrong host.
+    parsed = parse_token(posting.url or "")
+    if parsed:
+        tenant, wd, site = parsed
+    else:
+        tenant = (posting.extra or {}).get("tenant")
+        site = (posting.extra or {}).get("site")
+        wd = "wd1"
     if not tenant or not site or not posting.url:
         return None
     # externalPath is the tail of the posting URL
     path = posting.url.split(f"/{site}", 1)[-1]
     if not path.startswith("/"):
         return None
-    detail_url = (f"https://{tenant}.wd1.myworkdayjobs.com"
+    detail_url = (f"https://{tenant}.{wd}.myworkdayjobs.com"
                   f"/wday/cxs/{tenant}/{site}{path}")
     try:
         data = fetcher.get_json(detail_url)
