@@ -5,6 +5,7 @@ no longer blocks board B. Without the pool this test deadlocks on the barrier an
 the failure shows up as two source errors.
 """
 import threading
+import time
 import types
 
 from jobscout import db as dbm
@@ -32,6 +33,34 @@ def test_sources_scan_in_parallel_when_configured(tmp_path, monkeypatch):
     out = scanner.scan(cfg, conn, Fetcher())
     assert out["errors"] == [], "with one worker the barrier times out"
     assert sorted(out["sources"]) == ["a", "b"]
+
+
+def test_progress_counts_finished_sources_not_their_position(tmp_path, monkeypatch):
+    """The bar walked backwards because it was drawn from `index/of`, and with
+    the pool the board at index 6 answers before the one at index 2: 6/40 then
+    3/40 reads as a rewind. A count of finished sources only ever goes up."""
+    conn = dbm.connect(tmp_path / "db.sqlite")
+    cfg = types.SimpleNamespace(
+        prefs={"min_score": 6, "scan_workers": 2, "title_terms": []},
+        enabled=set(), root=tmp_path)
+
+    def make(name):
+        def fetch(settings, fetcher):
+            if name == "a":
+                time.sleep(0.15)      # first in the list, last to answer
+            return []
+        return types.SimpleNamespace(fetch=fetch)
+
+    monkeypatch.setattr(scanner, "iter_sources",
+                        lambda enabled: [("a", make("a")), ("b", make("b"))])
+    monkeypatch.setattr(scanner, "source_settings", lambda cfg, name: {})
+
+    events = []
+    scanner.scan(cfg, conn, Fetcher(), on_event=events.append)
+    fetched = [e for e in events if e["kind"] == "source_fetched"]
+    assert [e["done"] for e in fetched] == [1, 2], "finish order, not list order"
+    assert [e["name"] for e in fetched] == ["b", "a"]
+    assert all(e["of"] == 2 for e in fetched)
 
 
 def test_a_source_scanned_inside_the_window_is_not_fetched_again(tmp_path, monkeypatch):

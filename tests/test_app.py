@@ -735,6 +735,17 @@ def api(tmp_path, monkeypatch):
     return appmod.JsApi()
 
 
+def test_the_scan_bar_only_ever_moves_forward():
+    """Reported: the bar went back and forth. It was drawn from a source's
+    position in the list, and parallel boards finish out of order."""
+    js = (Path(__file__).resolve().parents[1] / "jobscout" / "web" / "app.js"
+          ).read_text(encoding="utf-8")
+    assert "source_fetched" in js
+    assert "e.index / e.of" not in js, "position is not progress"
+    assert "Math.max(SCAN_PROGRESS.width" in js, "the width must never shrink"
+    assert "SCAN_PROGRESS.stored += 1" in js
+
+
 def test_the_window_can_rescore_without_a_scan(ws):
     """Editing a title term changes nothing until something re-runs the scorer,
     and waiting for the next scan is the only other way to get there."""

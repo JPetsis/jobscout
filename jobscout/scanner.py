@@ -315,6 +315,11 @@ def scan(cfg, conn, fetcher, *,
             items.append(_fetch_source(cfg, adapters[name], name, index=index,
                                        of=len(names), fetcher=fetcher,
                                        emit=safe_emit))
+            # Progress is a COUNT of finished sources, not their position in
+            # the list: the window draws a bar from it, and a position can go
+            # backwards.
+            safe_emit({"kind": "source_fetched", "name": name,
+                       "done": index + 1, "of": len(names)})
     else:
         # Sources are separate hosts, so fetching them together is still polite:
         # the fetcher keeps its 0.6s wait per host. Storage stays serial, because
@@ -326,13 +331,19 @@ def scan(cfg, conn, fetcher, *,
                             emit=safe_emit): name
                 for i, name in enumerate(names)
             }
-            for fut in as_completed(futures):
+            for done, fut in enumerate(as_completed(futures), 1):
                 name = futures[fut]
                 try:
                     items.append(fut.result())
                 except Exception as e:  # one source must never kill the run
                     fetcher.errors.append(
                         f"{name}: scan crashed: {type(e).__name__}: {e}")
+                # Counted on the thread that collects results, so `done` is
+                # 1..N in completion order. Using the source's index here is
+                # what made the bar jump back and forth: board 6 can answer
+                # before board 2, and 6/40 followed by 3/40 is a rewind.
+                safe_emit({"kind": "source_fetched", "name": name,
+                           "done": done, "of": len(names)})
 
     for item in items:
         if cancelled():

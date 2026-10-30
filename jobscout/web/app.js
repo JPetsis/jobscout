@@ -2041,6 +2041,7 @@ async function startScan() {
   $('scan-bar').hidden = false;
   $('scan-label').textContent = 'starting…';
   $('scan-fill').style.width = '0';
+  SCAN_PROGRESS = { fetched: 0, stored: 0, of: 0, width: 0 };
 
   // Scan only what you are looking at: with a source selected, refresh just
   // that one instead of all 25. Cleared filter means scan everything.
@@ -2113,14 +2114,41 @@ async function pollScan() {
   }
 }
 
+/* The bar counts work FINISHED, never a position in the list. With several
+ * workers the boards answer in whatever order they like, so drawing `index/of`
+ * walked the bar forward and back (6/40, then 3/40); a finished count cannot.
+ * A scan is half fetching and half storing, so each counter is worth 50% and
+ * the width takes the maximum it has ever had. */
+let SCAN_PROGRESS = { fetched: 0, stored: 0, of: 0, width: 0 };
+
+function scanWidth() {
+  const of = SCAN_PROGRESS.of || 1;
+  const part = (SCAN_PROGRESS.fetched + SCAN_PROGRESS.stored) / (2 * of);
+  const width = Math.min(100,
+    Math.max(SCAN_PROGRESS.width, Math.round(part * 100)));
+  SCAN_PROGRESS.width = width;
+  $('scan-fill').style.width = width + '%';
+}
+
 function applyScanEvent(e) {
   if (e.kind === 'start') {
+    SCAN_PROGRESS = { fetched: 0, stored: 0, of: e.count || 0, width: 0 };
+    $('scan-fill').style.width = '0';
     $('scan-label').textContent = 'run #' + e.run_id + ' · ' + e.count + ' sources';
   } else if (e.kind === 'source_start') {
-    $('scan-fill').style.width = Math.round((e.index / e.of) * 100) + '%';
-    $('scan-label').textContent = 'fetching ' + e.name + ' (' + (e.index + 1) + '/' + e.of + ')';
+    // A start is not progress: say what is being read, leave the bar alone.
+    $('scan-label').textContent = 'fetching ' + e.name +
+      (SCAN_PROGRESS.of
+        ? ' · ' + SCAN_PROGRESS.fetched + ' of ' + SCAN_PROGRESS.of + ' fetched'
+        : '');
+  } else if (e.kind === 'source_fetched') {
+    SCAN_PROGRESS.of = e.of;
+    SCAN_PROGRESS.fetched = Math.max(SCAN_PROGRESS.fetched, e.done);
+    scanWidth();
+    $('scan-label').textContent = e.done + ' of ' + e.of + ' fetched · ' + e.name;
   } else if (e.kind === 'source_done') {
-    $('scan-fill').style.width = Math.round(((e.index + 1) / e.of) * 100) + '%';
+    SCAN_PROGRESS.stored += 1;
+    scanWidth();
     $('scan-label').textContent = e.name + ': ' + e.fetched + ' fetched · ' +
       e.new + ' new · ' + e.matches + ' matches';
   } else if (e.kind === 'rescored') {
