@@ -10,6 +10,10 @@ from ..textutil import clean_html, date_part, de_rel_date, slug
 
 NAME = "xing"
 LABEL = "XING"
+# The detail page carries the badge as a marker pill OUTSIDE the advert body
+# ("Be an early applicant" / "Zu den Ersten gehören"), so `fetch_detail` reads
+# the page itself and sets the flag on the posting it was given.
+SAYS_EARLY = True
 BASE = "https://www.xing.com"
 
 _CARD_SPLIT = 'data-testid="job-search-result"'
@@ -113,4 +117,7 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
 
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
     from .. import detail as detailmod
-    return detailmod.html_detail(p.url, fetcher)
+    text, raw = detailmod.html_detail_raw(p.url, fetcher)
+    if raw and detailmod.says_early_applicant(raw):
+        p.early_applicant = True
+    return text

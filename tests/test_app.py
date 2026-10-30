@@ -746,6 +746,40 @@ def test_the_scan_bar_only_ever_moves_forward():
     assert "SCAN_PROGRESS.stored += 1" in js
 
 
+def test_opening_a_card_learns_the_badge_even_when_the_text_is_long(ws, monkeypatch):
+    """The reported XING row already had a 3,138-character description, so the
+    old "fetch only under 400 characters" rule never looked again and the pill
+    could never appear. A posting whose flag is unknown gets one look."""
+    from jobscout import api
+    from jobscout import db as dbm
+    from jobscout.config import load_config
+    from jobscout.models import Posting
+    from jobscout.score import score_posting
+    from jobscout.sources import xing as xmod
+
+    cfg = load_config()
+    conn = dbm.connect(cfg.root / "jobscout.db")
+    run = dbm.start_run(conn)
+    p = Posting(source="xing", title="Fullstack Entwickler", company="X",
+                url="https://www.xing.com/jobs/stuttgart-dev-1", external_id="1")
+    pid, _, _ = dbm.upsert(conn, p, score_posting(cfg.prefs, p), run, "t")
+    dbm.set_description(conn, pid, "Full advert text. " * 200)   # 3,800 chars
+
+    calls = []
+
+    def fake_detail(posting, fetcher):
+        calls.append(posting.url)
+        posting.early_applicant = True      # the source read the badge
+        return None
+
+    monkeypatch.setattr(xmod, "fetch_detail", fake_detail)
+    out = api.show_posting(conn, cfg, pid)
+    assert calls == ["https://www.xing.com/jobs/stuttgart-dev-1"]
+    assert out["early_applicant"] == 1
+    row = conn.execute("SELECT early_applicant FROM postings WHERE id=?", (pid,)).fetchone()
+    assert row["early_applicant"] == 1
+
+
 def test_an_early_applicant_posting_gets_a_pill():
     """Only where the board said so: XING's card highlight, LinkedIn's benefit
     line or its advert. A posting that says nothing is unknown, not "no"."""

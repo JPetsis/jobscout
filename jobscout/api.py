@@ -1042,8 +1042,14 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
 
     desc = row["description"] or ""
     note = ""
-    if refresh or len(desc) < 400:
-        mod = REGISTRY.get(row["source"])
+    mod = REGISTRY.get(row["source"])
+    # Boards that can say "early applicant" have that badge outside the advert
+    # body, so a stored description of any length cannot tell us. A posting whose
+    # flag is still unknown is worth one look when its card is opened; without
+    # this, every advert fetched before the feature existed stayed unpilled
+    # forever (the reported XING posting was fetched at 13:37 and never again).
+    wants_badge = bool(getattr(mod, "SAYS_EARLY", False)) and not row["early_applicant"]
+    if refresh or len(desc) < 400 or wants_badge:
         fetcher = Fetcher()
         posting = Posting(source=row["source"], title=row["title"],
                           company=row["company"], location=row["location"],
@@ -1076,9 +1082,13 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
                 dbm.set_description(conn, row["id"], fresh)
             desc = fresh
             note = ""
-        if fresh and detailmod.says_early_applicant(fresh):
-            # The listing did not say it and the advert does. The row is re-read
-            # so the pane this returns carries the flag it just learned.
+        # The source may have read the badge itself (it has the raw page); the
+        # extracted text is the fallback for a source that does not.
+        learned = bool(posting.early_applicant) or (
+            bool(fresh) and detailmod.says_early_applicant(fresh))
+        if learned:
+            # The row is re-read so the pane this returns carries the flag it
+            # just learned.
             with dbm.LOCK:
                 dbm.set_early(conn, row["id"])
                 refreshed = dbm.get_posting(conn, row["id"])

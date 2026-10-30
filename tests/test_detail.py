@@ -21,6 +21,12 @@ def test_the_early_applicant_sentence_is_recognised():
 
     assert says_early_applicant("Gehören Sie zu den ersten 25 Bewerber:innen.")
     assert says_early_applicant("Be among the first 25 applicants")
+    # XING's detail pill, in both locales, as it actually ships
+    assert says_early_applicant(
+        '<span class="job-details-x" data-xds="BodyCopy">Be an early applicant</span>')
+    assert says_early_applicant(
+        '<span class="job-details-x" data-xds="BodyCopy">Zu den Ersten gehören</span>')
+    assert says_early_applicant('"type":"job_highlight_early_applicant"')
     assert not says_early_applicant("Bewerben Sie sich mit Ihren Unterlagen.")
     assert not says_early_applicant("")
 

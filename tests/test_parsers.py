@@ -737,6 +737,30 @@ def test_xing_reads_the_early_applicant_highlight(fixture_text):
     assert postings[0].title.startswith("Full Stack")
 
 
+def test_xing_detail_reads_the_badge_outside_the_advert_body():
+    """The pill sits in the page header, not in the JSON-LD description, so the
+    extracted text cannot carry it. Reported on the Rockstardevelopers advert,
+    which says "Be an early applicant" while the app showed nothing."""
+    raw = ('<html><head><script type="application/ld+json">'
+           '{"@type":"JobPosting","description":"<p>Full advert</p>"}'
+           '</script></head><body>'
+           '<span class="job-details-x" data-xds="BodyCopy">Be an early applicant</span>'
+           '</body></html>')
+
+    class F:
+        def get(self, url, **kw):
+            return 200, raw
+
+    p = Posting(source="xing", title="Dev",
+                url="https://www.xing.com/jobs/stuttgart-dev-158873802")
+    assert xing.fetch_detail(p, F()) == "Full advert"
+    assert p.early_applicant is True
+
+    plain = Posting(source="xing", title="Dev", url="https://www.xing.com/jobs/x-1")
+    assert xing.fetch_detail(plain, F()) is not None   # text still comes back
+    assert plain.early_applicant is True, "the same page says it"
+
+
 def test_linkedin_reads_the_early_applicant_benefit(fixture_text):
     """The benefit line is localised, and every benefit shares its element, so
     the TEXT decides: "Bewerben Sie sich frühzeitig" and "Be an early applicant"

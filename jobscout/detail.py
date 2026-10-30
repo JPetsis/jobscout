@@ -31,22 +31,43 @@ def _walk(obj):
             yield from _walk(obj.get("@graph"))
 
 
+# Every wording the boards use, in one place. XING's detail page prints the
+# German pill "Zu den Ersten gehören" as visible text, while its search page
+# ships the same fact as `job_highlight_early_applicant` in JSON; LinkedIn has
+# "Be an early applicant" on the card and "first 25 applicants" in the advert.
 _EARLY_SAID = re.compile(
-    r"(first \d+ applicants|ersten \d+ Bewerber|early applicant)", re.I)
+    r"(first \d+ applicants|ersten \d+ Bewerber|early applicant"
+    r"|zu den ersten geh(?:ö|oe)ren|job_highlight_early_applicant)", re.I)
 
 
 def says_early_applicant(text: str) -> bool:
-    """True when an advert says you would be among the first applicants.
+    """True when a page or an advert says you would be among the first.
 
-    LinkedIn puts it in the detail page ("Be among the first 25 applicants",
-    "Gehören Sie zu den ersten 25 Bewerber:innen"); its card also carries it as
-    a benefit line, and XING as a card highlight. Silence is not a no.
+    Works on extracted text AND on raw HTML: the badge usually sits in the page
+    header, outside the advert body the extractor keeps, so a caller that has
+    the page must pass the page. Silence is not a no.
     """
     return bool(_EARLY_SAID.search(text or ""))
 
 
 def html_detail_verbose(url: str, fetcher: Fetcher) -> tuple[str, str]:
-    """The description, and when there is none, WHY.
+    desc, why, _ = html_detail_page(url, fetcher)
+    return desc, why
+
+
+def html_detail_raw(url: str, fetcher: Fetcher) -> tuple[str | None, str]:
+    """The description and the RAW page, for sources that also read a badge.
+
+    XING's detail page carries "Zu den Ersten gehören" in a marker pill outside
+    the job description, so the extracted text cannot carry it; the source needs
+    the page itself. Returning both keeps that to one request.
+    """
+    desc, _, raw = html_detail_page(url, fetcher)
+    return (desc or None), raw
+
+
+def html_detail_page(url: str, fetcher: Fetcher) -> tuple[str, str, str]:
+    """(description, why when there is none, raw HTML).
 
     The pane has to be able to say what happened. "The listing was withdrawn"
     and "this board publishes no full text" look identical to someone staring at
@@ -55,16 +76,16 @@ def html_detail_verbose(url: str, fetcher: Fetcher) -> tuple[str, str]:
     rendering nothing for a third of its rows.
     """
     if not url or not url.startswith("http"):
-        return "", "This listing has no link, so there is nothing to open."
+        return "", "This listing has no link, so there is nothing to open.", ""
     try:
         status, text = fetcher.get(url)
     except Exception as e:                                       # noqa: BLE001
-        return "", f"Could not reach the page ({type(e).__name__})."
+        return "", f"Could not reach the page ({type(e).__name__}).", ""
     if status in (404, 410):
         return "", (f"The posting is gone: the site answered HTTP {status}, "
-                    "which means it has been withdrawn.")
+                    "which means it has been withdrawn."), text or ""
     if status != 200 or not text:
-        return "", f"Could not read the page (HTTP {status})."
+        return "", f"Could not read the page (HTTP {status}).", text or ""
     for m in _LD.finditer(text):
         try:
             data = json.loads(m.group(1))
@@ -73,14 +94,14 @@ def html_detail_verbose(url: str, fetcher: Fetcher) -> tuple[str, str]:
         for posting in _walk(data):
             desc = clean_html(str(posting.get("description") or ""))
             if desc:
-                return desc, ""
+                return desc, "", text
     m = _OG.search(text)
     if m:
         desc = clean_html(m.group(1))
         if desc:
-            return desc, ""
+            return desc, "", text
     return "", ("The page loads, but it does not publish the full text of this "
-                "listing. Open it on the site to read the whole advert.")
+                "listing. Open it on the site to read the whole advert."), text
 
 
 def html_detail(url: str, fetcher: Fetcher) -> str | None:

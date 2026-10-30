@@ -15,6 +15,10 @@ from ..textutil import clean_html, date_part
 
 NAME = "linkedin"
 LABEL = "LinkedIn"
+# The advert states "Be among the first 25 applicants" (German: "Gehören Sie zu
+# den ersten 25 Bewerber:innen") above the description, so the fragment is
+# scanned whole.
+SAYS_EARLY = True
 SEARCH = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 DETAIL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{}"
 
@@ -118,6 +122,9 @@ def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
     status, text = fetcher.get(DETAIL.format(p.external_id), headers={"Accept": "text/html"})
     if status != 200:
         return None
+    from .. import detail as detailmod
+    if detailmod.says_early_applicant(text):
+        p.early_applicant = True
     m = _RE_DETAIL.search(text)
     if not m:
         return None

@@ -79,12 +79,16 @@ def _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher, budget: dict,
     if spend.get("left", 0) <= 0:
         return None
     spend["left"] -= 1
+    probe = dbm.row_to_posting(row)
     try:
-        desc = fn(dbm.row_to_posting(row), fetcher)
+        desc = fn(probe, fetcher)
     except Exception as e:              # a probe must never kill the run
         fetcher.errors.append(f"{p.source}: detail probe failed: "
                               f"{type(e).__name__}: {e}")
         return None
+    if probe.early_applicant:
+        # The source read the badge off the page it already fetched.
+        dbm.set_early(conn, pid)
     if not desc:
         return None
     # A fetch that says no more than the text already stored is a failed probe,
