@@ -726,6 +726,25 @@ def test_workday_detail_keeps_the_tenant_on_its_own_host():
     assert text == "Build GPUs"
 
 
+def test_xing_reads_the_early_applicant_highlight(fixture_text):
+    """XING ships the highlight as JSON inside the page, not as visible text.
+
+    1 of 20 live cards carried it. The German label is "Zu den Ersten gehören",
+    so the language-independent `type` is what the parser matches.
+    """
+    postings = xing.parse(fixture_text("xing_early_card.html"))
+    assert [p.early_applicant for p in postings] == [True, False]
+    assert postings[0].title.startswith("Full Stack")
+
+
+def test_linkedin_reads_the_early_applicant_benefit(fixture_text):
+    """The benefit line is localised, and every benefit shares its element, so
+    the TEXT decides: "Bewerben Sie sich frühzeitig" and "Be an early applicant"
+    are the same fact, "Health insurance" is not."""
+    postings = linkedin.parse(fixture_text("linkedin_early_card.html"))
+    assert [p.early_applicant for p in postings] == [True, False, True]
+
+
 def test_workday_token_accepts_both_forms():
     assert workday.parse_token("nvidia:wd5:NVIDIAExternalCareerSite") == (
         "nvidia", "wd5", "NVIDIAExternalCareerSite")

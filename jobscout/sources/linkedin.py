@@ -26,6 +26,14 @@ _RE_COMPANY = re.compile(r'class="base-search-card__subtitle"[^>]*>\s*<a[^>]*>\s
 _RE_LOC = re.compile(r'class="job-search-card__location"[^>]*>\s*(.*?)\s*</span>', re.S)
 _RE_TIME = re.compile(r'<time[^>]*datetime="([\d-]+)"')
 _RE_DETAIL = re.compile(r'show-more-less-html__markup[^>]*>')
+# The card's benefit line is localised by Accept-Language. The fetcher sends
+# de-DE first, so the app normally sees the German wording; the English string
+# is the same fact on any other locale. Other benefits share this element, so
+# the TEXT is what decides, never the element alone.
+_RE_BENEFIT = re.compile(r'job-posting-benefits__text[^>]*>\s*([^<]{2,80})<', re.S)
+_EARLY_WORDS = ("early applicant", "frühzeitig", "vorzeitig", "primeros candidatos",
+                "premiers candidats", "primi candidati", "eerste kandidaten",
+                "primeiros candidatos")
 
 
 def _slice_div(text: str, open_end: int) -> str:
@@ -36,6 +44,14 @@ def _slice_div(text: str, open_end: int) -> str:
         if depth == 0:
             return text[open_end : open_end + m.start()]
     return text[open_end : open_end + 40000]
+
+
+def _says_early(chunk: str) -> bool:
+    for m in _RE_BENEFIT.finditer(chunk):
+        text = clean_html(m.group(1)).lower()
+        if any(word in text for word in _EARLY_WORDS):
+            return True
+    return False
 
 
 def parse(text: str) -> list[Posting]:
@@ -59,6 +75,7 @@ def parse(text: str) -> list[Posting]:
             url=url_m.group(1) if url_m else "",
             external_id=m_id.group(1),
             posted_at=date_part(date_m.group(1)) if date_m else "",
+            early_applicant=_says_early(chunk),
         ))
     return out
 

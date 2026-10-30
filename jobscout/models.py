@@ -22,6 +22,10 @@ class Posting:
     salary_period: str = ""            # hour | day | month | year
     salary_annual_max: float | None = None
     salary_raw: str = ""               # the text the parse came from
+    # The board says you would be among the first applicants. Only ever set from
+    # a source that actually says it (XING's card highlight, LinkedIn's card
+    # benefit or its detail line); silence means unknown, not "no".
+    early_applicant: bool = False
     extra: dict = field(default_factory=dict)
 
     def is_valid(self) -> bool:

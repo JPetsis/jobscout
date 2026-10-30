@@ -1076,6 +1076,14 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
                 dbm.set_description(conn, row["id"], fresh)
             desc = fresh
             note = ""
+        if fresh and detailmod.says_early_applicant(fresh):
+            # The listing did not say it and the advert does. The row is re-read
+            # so the pane this returns carries the flag it just learned.
+            with dbm.LOCK:
+                dbm.set_early(conn, row["id"])
+                refreshed = dbm.get_posting(conn, row["id"])
+            if refreshed is not None:
+                row = refreshed
 
     out = posting_dict(row, republished_as(conn, row["id"], row["source"]))
     out["description"] = desc

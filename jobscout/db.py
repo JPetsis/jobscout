@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS postings (
   status TEXT NOT NULL DEFAULT 'new',
   deadline_at TEXT NOT NULL DEFAULT '',
   deadline_note TEXT NOT NULL DEFAULT '',
+  early_applicant INTEGER NOT NULL DEFAULT 0,
   detail_fetched_at TEXT,
   expires_at TEXT NOT NULL DEFAULT ''
 );
@@ -168,6 +169,10 @@ _NEW_COLUMNS = [
     # decided from the feed alone on sources whose HTML sits behind a bot
     # challenge (himalayas), instead of giving up on 800 unverifiable rows.
     ("expires_at", "TEXT NOT NULL DEFAULT ''"),
+    # A nudge, not a fact about the job: "be among the first applicants" is what
+    # the board said when it was read, so it can only be set, never cleared by a
+    # later listing that simply did not repeat it.
+    ("early_applicant", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -306,12 +311,14 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
             """UPDATE postings SET last_seen_at=?, last_seen_run=?, title=?, company=?, location=?,
                    url=?, posted_at=?, description=?, salary_min=?, salary_max=?, salary_currency=?,
                    salary_period=?, salary_annual_max=?, salary_raw=?, expires_at=?,
+                   early_applicant=MAX(early_applicant, ?),
                    score=?, reasons=?, filtered=?, filtered_reason=?
                WHERE id=?""",
             (now, run_id, p.title, p.company, p.location,
              p.url or row["url"], p.posted_at or row["posted_at"],
              desc, p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
              p.salary_annual_max, p.salary_raw, p.expires_at or row["expires_at"],
+             1 if p.early_applicant else 0,
              sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, row["id"]),
         )
         conn.commit()
@@ -331,13 +338,15 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         """INSERT INTO postings (fingerprint, alt_key, source, company, title, location, url,
              external_id, posted_at, first_seen_at, first_seen_run, last_seen_at, last_seen_run,
              description, compensation, salary_min, salary_max, salary_currency, salary_period,
-             salary_annual_max, salary_raw, expires_at, score, reasons, filtered, filtered_reason, dup_of, status)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             salary_annual_max, salary_raw, expires_at, early_applicant,
+             score, reasons, filtered, filtered_reason, dup_of, status)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fp, ak, p.source, p.company, p.title, p.location, p.url, p.external_id, p.posted_at,
             now, run_id, now, run_id, p.description, p.compensation,
             p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
             p.salary_annual_max, p.salary_raw, p.expires_at,
+            1 if p.early_applicant else 0,
             sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, dup_of, "new",
         ),
     )
@@ -500,6 +509,17 @@ def set_description(conn, pid: int, description: str) -> None:
     conn.commit()
 
 
+def set_early(conn, pid: int) -> None:
+    """Remember that the board called this an early-applicant posting.
+
+    Only ever sets the flag: a later listing that does not repeat the line says
+    nothing, and clearing it would turn "we were not told" into "we were told
+    it is not".
+    """
+    conn.execute("UPDATE postings SET early_applicant=1 WHERE id=?", (pid,))
+    conn.commit()
+
+
 def set_score(conn, pid: int, sc: Score) -> None:
     """Store a score. Commits, like every other setter.
 
@@ -570,6 +590,7 @@ def row_to_posting(row) -> Posting:
         location=row["location"], url=row["url"], external_id=row["external_id"],
         posted_at=row["posted_at"], description=row["description"],
         compensation=row["compensation"],
+        early_applicant=bool(row["early_applicant"]) if "early_applicant" in keys else False,
         salary_min=row["salary_min"] if "salary_min" in keys else None,
         salary_max=row["salary_max"] if "salary_max" in keys else None,
         salary_currency=(row["salary_currency"] if "salary_currency" in keys else "") or "",

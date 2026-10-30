@@ -35,6 +35,8 @@
   --perm-fg: #fff4ee;
   --tmp-bg: #f0e4ea;
   --tmp-fg: #7d3b5e;
+  --early-bg: rgba(181, 137, 0, .16);
+  --early-fg: #7a5b00;
   --radius: 10px;
   color-scheme: light;
 }
@@ -62,6 +64,8 @@
   --perm-fg: #1c0d06;
   --tmp-bg: #3a2431;
   --tmp-fg: #e0b3c8;
+  --early-bg: rgba(227, 179, 65, .18);
+  --early-fg: #e3b341;
   color-scheme: dark;
 }
 
@@ -246,6 +250,12 @@ body {
 }
 .chip.tmp {
   background: var(--tmp-bg); border-color: transparent; color: var(--tmp-fg);
+  font-weight: 600;
+}
+/* A nudge about timing, not a fact about the contract: gold, quiet, and only
+   ever shown when the board itself said it. */
+.chip.early {
+  background: var(--early-bg); border-color: transparent; color: var(--early-fg);
   font-weight: 600;
 }
 .chip.st-applied { color: var(--blue); border-color: transparent; background: var(--chip); }

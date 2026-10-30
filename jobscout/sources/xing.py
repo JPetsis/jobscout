@@ -26,6 +26,10 @@ _RE_DATE_TEXT = re.compile(r'job-teaser-list-item-styles__PublicationDate[^"]*"[
 # the store kept no figure at all.
 _RE_MARKER = re.compile(r'data-xds="Marker"[^>]*>(.*?)</span>\s*</span>', re.S)
 _RE_TAG = re.compile(r"<[^>]+>")
+# XING ships the card's highlights as JSON inside the page, not as visible text:
+# the German label is "Zu den Ersten gehören" but the TYPE is stable in every
+# locale, so match that.
+_EARLY = "job_highlight_early_applicant"
 _RE_MONEY = re.compile(r"€|\bEUR\b", re.I)
 _RE_DIGIT = re.compile(r"\d")
 
@@ -79,6 +83,7 @@ def parse(text: str) -> list[Posting]:
             external_id=href.rsplit("-", 1)[-1] if href else "",
             posted_at=posted,
             compensation=_pay(chunk),
+            early_applicant=_EARLY in chunk,
         ))
     return out
 

@@ -746,6 +746,18 @@ def test_the_scan_bar_only_ever_moves_forward():
     assert "SCAN_PROGRESS.stored += 1" in js
 
 
+def test_an_early_applicant_posting_gets_a_pill():
+    """Only where the board said so: XING's card highlight, LinkedIn's benefit
+    line or its advert. A posting that says nothing is unknown, not "no"."""
+    web = Path(__file__).resolve().parents[1] / "jobscout" / "web"
+    js = (web / "app.js").read_text(encoding="utf-8")
+    css = (web / "styles.css").read_text(encoding="utf-8")
+    assert "r.early_applicant" in js
+    assert "'chip early'" in js
+    assert ".chip.early" in css
+    assert "--early-bg" in css and "--early-fg" in css
+
+
 def test_the_window_can_rescore_without_a_scan(ws):
     """Editing a title term changes nothing until something re-runs the scorer,
     and waiting for the next scan is the only other way to get there."""

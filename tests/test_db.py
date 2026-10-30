@@ -211,7 +211,30 @@ def test_migration_adds_new_columns(tmp_path):
     raw.close()
     conn = dbm.connect(path)
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(postings)")}
-    assert {"salary_min", "salary_max", "salary_annual_max", "verify_status", "verified_at"} <= cols
+    assert {"salary_min", "salary_max", "salary_annual_max", "verify_status",
+            "verified_at", "early_applicant"} <= cols
+
+
+def test_the_early_applicant_flag_is_only_ever_set(tmp_path):
+    """A nudge, not a fact: a later listing that does not repeat the line says
+    nothing, and clearing it would turn "not told" into "told it is not"."""
+    conn = _conn(tmp_path)
+    run = dbm.start_run(conn)
+    p = _p()
+    p.early_applicant = True
+    pid, is_new, _ = dbm.upsert(conn, p, score_posting(PREFS, p), run, "t")
+    row = dbm.get_posting(conn, pid)
+    assert is_new and row is not None and row["early_applicant"] == 1
+
+    quiet = _p()                      # same role, flag not repeated
+    dbm.upsert(conn, quiet, score_posting(PREFS, quiet), run, "t")
+    row = dbm.get_posting(conn, pid)
+    assert row is not None and row["early_applicant"] == 1, "it was cleared"
+
+    fresh = _p(external_id="2", url="https://x/2")
+    pid2, _, _ = dbm.upsert(conn, fresh, score_posting(PREFS, fresh), run, "t")
+    row2 = dbm.get_posting(conn, pid2)
+    assert row2 is not None and row2["early_applicant"] == 0
 
 
 def test_upsert_stores_salary_and_verify_helpers(tmp_path):

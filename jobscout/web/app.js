@@ -424,6 +424,14 @@ function card(r, strongTh) {
     top.appendChild(el('span', 'chip ' + (r.contract === 'permanent' ? 'perm' : 'tmp'),
       r.contract));
   }
+  // Only two boards say this (XING as a card highlight, LinkedIn as a card
+  // benefit or in the advert itself), and a posting that does not say it is
+  // simply unknown -- so the pill appears only where the board said so.
+  if (r.early_applicant) {
+    const early = el('span', 'chip early', 'early applicant');
+    early.title = 'The board says you would be among the first applicants';
+    top.appendChild(early);
+  }
   c.appendChild(top);
 
   c.appendChild(el('div', 'title', r.title || '(untitled)'));

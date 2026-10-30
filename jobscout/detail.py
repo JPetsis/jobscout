@@ -31,6 +31,20 @@ def _walk(obj):
             yield from _walk(obj.get("@graph"))
 
 
+_EARLY_SAID = re.compile(
+    r"(first \d+ applicants|ersten \d+ Bewerber|early applicant)", re.I)
+
+
+def says_early_applicant(text: str) -> bool:
+    """True when an advert says you would be among the first applicants.
+
+    LinkedIn puts it in the detail page ("Be among the first 25 applicants",
+    "Gehören Sie zu den ersten 25 Bewerber:innen"); its card also carries it as
+    a benefit line, and XING as a card highlight. Silence is not a no.
+    """
+    return bool(_EARLY_SAID.search(text or ""))
+
+
 def html_detail_verbose(url: str, fetcher: Fetcher) -> tuple[str, str]:
     """The description, and when there is none, WHY.
 

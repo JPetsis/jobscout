@@ -13,6 +13,18 @@ import pytest
 from jobscout.detail import _LD, html_detail, html_detail_verbose
 
 
+def test_the_early_applicant_sentence_is_recognised():
+    """LinkedIn states it in the advert ("Be among the first 25 applicants",
+    "Gehören Sie zu den ersten 25 Bewerber:innen"); a detail fetch is where a
+    posting whose card did not mention it can still learn it."""
+    from jobscout.detail import says_early_applicant
+
+    assert says_early_applicant("Gehören Sie zu den ersten 25 Bewerber:innen.")
+    assert says_early_applicant("Be among the first 25 applicants")
+    assert not says_early_applicant("Bewerben Sie sich mit Ihren Unterlagen.")
+    assert not says_early_applicant("")
+
+
 class FakeFetcher:
     """Stands in for http.Fetcher: one canned response, no network."""
 
