@@ -780,6 +780,42 @@ def test_opening_a_card_learns_the_badge_even_when_the_text_is_long(ws, monkeypa
     assert row["early_applicant"] == 1
 
 
+def test_checking_listings_is_its_own_job_not_a_phase_of_the_scan():
+    """Scanning reads boards in seconds; checking 1,449 stored rows takes
+    minutes. Folding the second into the first would make Scan mean "wait ten
+    minutes", so it has its own button, its own thread and the same bar."""
+    root = Path(__file__).resolve().parents[1] / "jobscout" / "web"
+    js = (root / "app.js").read_text(encoding="utf-8")
+    html = (root / "index.html").read_text(encoding="utf-8")
+    assert 'id="check-btn"' in html
+    for marker in ("checkListings", "pollVerify", "maybeAutoCheck",
+                   "verify_start", "boot_verify"):
+        assert marker in js, marker
+    for name in ("verify_start", "verify_status", "boot_verify", "cancel_verify"):
+        assert hasattr(appmod.JsApi, name), name
+
+
+def test_the_check_job_reports_what_it_found(ws, monkeypatch):
+    from jobscout import verify as vmod
+
+    def fake_pass(cfg, conn, **kw):
+        kw["progress"](2, 2, {"ok": 1, "dead": 1, "unknown": 0, "batched": 0})
+        return {"total": 2, "ok": 1, "dead": 1, "unknown": 0,
+                "batched": 0, "cancelled": False}
+
+    monkeypatch.setattr(vmod, "run_pass", fake_pass)
+    api_obj = appmod.JsApi()
+    assert api_obj.verify_start()["started"] is True
+    deadline = time.time() + 10
+    status = api_obj.verify_status()
+    while status["running"] and time.time() < deadline:
+        time.sleep(0.02)
+        status = api_obj.verify_status()
+    assert status["running"] is False
+    assert status["counts"]["dead"] == 1
+    assert status["result"]["total"] == 2
+
+
 def test_an_early_applicant_posting_gets_a_pill():
     """Only where the board said so: XING's card highlight, LinkedIn's benefit
     line or its advert. A posting that says nothing is unknown, not "no"."""

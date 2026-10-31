@@ -286,6 +286,9 @@ preferences:
   verify_on_scan: true      # re-check saved/applied URLs during scans
   verify_max_age_days: 3    # only entries whose last check is older than this
   verify_per_scan: 15       # cap of checks per scan
+  verify_on_start: true     # check the board's listings when the window opens
+  verify_per_pass: 500      # rows per pass; the next pass continues where it stopped
+  verify_workers: 6         # rows probed at once (per-host delay still applies)
 
 sources:
   # sources run in this order; remove entries to disable them

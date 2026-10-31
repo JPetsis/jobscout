@@ -18,7 +18,8 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import api, backup as backupmod, db as dbm, scanner, update as updatemod
+from . import (api, backup as backupmod, db as dbm, scanner, update as updatemod,
+               verify as verifymod)
 from .config import load_config
 from .http import Fetcher
 
@@ -309,6 +310,88 @@ class RescoreJob:
                     "error": self.error, "result": self.result}
 
 
+def _flag(value) -> bool:
+    """A preferences boolean, whether YAML gave a bool or a string."""
+    return str(value).strip().lower() not in ("", "false", "0", "no", "off")
+
+
+class VerifyJob:
+    """Checks whether the postings on the board are still open, on a worker thread.
+
+    Its own job rather than a phase of the scan. Reading boards and re-checking
+    older rows are different operations with different durations -- seconds
+    versus minutes -- and folding them together would make pressing Scan mean
+    "wait ten minutes". The scan still contributes for free: every posting a
+    board returns is marked alive by db.upsert, and the pass then has less to do.
+    """
+
+    def __init__(self, cfg) -> None:
+        self.cfg = cfg
+        self.lock = threading.Lock()
+        self.running = False
+        self.done = 0
+        self.total = 0
+        self.counts = {"ok": 0, "dead": 0, "unknown": 0, "batched": 0}
+        self.error: str | None = None
+        self.result: dict | None = None
+        self._cancel = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self, limit: int | None = None) -> dict:
+        with self.lock:
+            if self.running:
+                return {"started": False, "reason": "a check is already running"}
+            self.running = True
+            self.done = self.total = 0
+            self.counts = {"ok": 0, "dead": 0, "unknown": 0, "batched": 0}
+            self.error = None
+            self.result = None
+        self._thread = threading.Thread(target=self._run, args=(limit,), daemon=True,
+                                        name="jobscout-verify")
+        self._thread.start()
+        return {"started": True}
+
+    def cancel(self) -> dict:
+        if not self.running:
+            return {"cancelled": False, "reason": "nothing running"}
+        self._cancel.set()
+        return {"cancelled": True}
+
+    def _progress(self, done: int, total: int, counts: dict) -> None:
+        with self.lock:
+            self.done, self.total = done, total
+            self.counts = dict(counts)
+
+    def _run(self, limit: int | None) -> None:
+        conn = None
+        try:
+            conn = dbm.connect(self.cfg.root / "jobscout.db")
+            conn.execute("PRAGMA busy_timeout = 30000")
+            result = verifymod.run_pass(
+                self.cfg, conn, limit=limit,
+                workers=int(self.cfg.prefs.get("verify_workers", 6) or 6),
+                progress=self._progress, cancel=self._cancel.is_set)
+            with self.lock:
+                self.result = result
+                self.done = self.total = int(result.get("total") or 0)
+                self.counts = {k: int(result.get(k) or 0)
+                               for k in ("ok", "dead", "unknown", "batched")}
+        except Exception as e:                                   # noqa: BLE001
+            with self.lock:
+                self.error = f"{type(e).__name__}: {e}"
+        finally:
+            if conn is not None:
+                conn.close()
+            with self.lock:
+                self.running = False
+
+    def status(self) -> dict:
+        with self.lock:
+            return {"running": self.running, "done": self.done,
+                    "total": self.total, "counts": dict(self.counts),
+                    "error": self.error, "result": self.result}
+
+
 SCAN: ScanJob | None = None
 
 
@@ -411,6 +494,59 @@ class JsApi:
             return {"running": False, "done": 0, "total": 0, "changed": 0,
                     "error": None, "result": None}
         return running.status()
+
+    def verify_start(self, limit: int = 0) -> dict:
+        """Check the listings on the board: are they still open?
+
+        Runs on its own connection and its own thread: 1,449 visible postings
+        take minutes, and the window has to stay usable while they are read.
+        """
+        running = getattr(self, "_verify", None)
+        if running is not None and running.running:
+            return {"started": False, "reason": "a check is already running"}
+        self._verify = VerifyJob(self.cfg)
+        return self._verify.start(int(limit) if limit else None)
+
+    def verify_status(self) -> dict:
+        running = getattr(self, "_verify", None)
+        if running is None:
+            return {"running": False, "done": 0, "total": 0,
+                    "counts": {"ok": 0, "dead": 0, "unknown": 0, "batched": 0},
+                    "error": None, "result": None}
+        return running.status()
+
+    def cancel_verify(self) -> dict:
+        running = getattr(self, "_verify", None)
+        return running.cancel() if running is not None else {"cancelled": False}
+
+    def boot_verify(self) -> dict:
+        """Check listings when the window opens, if that has not happened lately.
+
+        The same shape as the boot scan, and for the same reason: without
+        something running on its own, the only liveness verdicts this app ever
+        had came from a person typing a command. Bounded by `verify_per_pass`
+        so a first run on a big store is not an unbounded download.
+        """
+        from . import db as dbm
+        global SCAN
+        if getattr(self, "_picker_shown", False):
+            return {"started": False, "reason": "waiting for you to pick a profile"}
+        if not _flag(self.cfg.prefs.get("verify_on_start", True)):
+            return {"started": False, "reason": "automatic checks are off"}
+        if SCAN is not None and SCAN.running:
+            return {"started": False, "reason": "a scan is running"}
+        days = int(float(self.cfg.prefs.get("verify_max_age_days", 3) or 3))
+        with dbm.LOCK:
+            rows = dbm.postings_to_check(
+                self.conn, float(self.cfg.prefs.get("min_score", 6)),
+                max_age_days=days, limit=1)
+        if not rows:
+            return {"started": False, "reason": "every listing was checked recently"}
+        limit = int(float(self.cfg.prefs.get("verify_per_pass", 500) or 500))
+        started = self.verify_start(limit)
+        started["limit"] = limit
+        started["auto"] = True
+        return started
 
     def save_setting(self, key: str, value) -> dict:
         """Write one setting, then reload so scoring/filters see it at once."""

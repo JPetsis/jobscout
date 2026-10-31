@@ -307,18 +307,23 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         # and 13 -> 9 on the next scan before this line existed.
         if prefs and desc and desc != (p.description or ""):
             sc = score_posting(prefs, replace(p, description=desc))
+        # Seen in a board's listing means open, as of now, for free. It also
+        # revives a row that was marked dead and has been re-advertised: before
+        # this, `verify_status` was never touched by a scan, so a re-posted role
+        # stayed "⚠ dead" for good.
         conn.execute(
             """UPDATE postings SET last_seen_at=?, last_seen_run=?, title=?, company=?, location=?,
                    url=?, posted_at=?, description=?, salary_min=?, salary_max=?, salary_currency=?,
                    salary_period=?, salary_annual_max=?, salary_raw=?, expires_at=?,
                    early_applicant=MAX(early_applicant, ?),
+                   verify_status='ok', verify_note='', verified_at=?,
                    score=?, reasons=?, filtered=?, filtered_reason=?
                WHERE id=?""",
             (now, run_id, p.title, p.company, p.location,
              p.url or row["url"], p.posted_at or row["posted_at"],
              desc, p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
              p.salary_annual_max, p.salary_raw, p.expires_at or row["expires_at"],
-             1 if p.early_applicant else 0,
+             1 if p.early_applicant else 0, now,
              sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, row["id"]),
         )
         conn.commit()
@@ -339,14 +344,16 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
              external_id, posted_at, first_seen_at, first_seen_run, last_seen_at, last_seen_run,
              description, compensation, salary_min, salary_max, salary_currency, salary_period,
              salary_annual_max, salary_raw, expires_at, early_applicant,
+             verify_status, verified_at,
              score, reasons, filtered, filtered_reason, dup_of, status)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fp, ak, p.source, p.company, p.title, p.location, p.url, p.external_id, p.posted_at,
             now, run_id, now, run_id, p.description, p.compensation,
             p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
             p.salary_annual_max, p.salary_raw, p.expires_at,
             1 if p.early_applicant else 0,
+            "ok", now,                  # a posting a board just returned is open
             sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, dup_of, "new",
         ),
     )
@@ -610,13 +617,47 @@ def update_verify(conn: sqlite3.Connection, pid: int, state: str, note: str = ""
 def postings_to_verify(conn: sqlite3.Connection, statuses=("saved", "applied"),
                        max_age_days: int = 3, limit: int = 15):
     """Saved/applied rows whose liveness check is missing or old (oldest first)."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat(timespec="seconds")
+    # A row seen by a scan now carries verified_at, so "0 days" has to mean
+    # "check it anyway" rather than "older than this instant", which nothing is.
     marks = ",".join("?" * len(statuses))
+    if max_age_days <= 0:
+        return conn.execute(
+            f"SELECT * FROM postings WHERE url <> '' AND status IN ({marks}) "
+            "ORDER BY verified_at LIMIT ?", (*statuses, limit),
+        ).fetchall()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)
+              ).isoformat(timespec="seconds")
     return conn.execute(
         f"SELECT * FROM postings WHERE url <> '' AND status IN ({marks}) "
         "AND (verified_at = '' OR verified_at < ?) ORDER BY verified_at LIMIT ?",
         (*statuses, cutoff, limit),
     ).fetchall()
+
+
+def postings_to_check(conn: sqlite3.Connection, min_score: float, *,
+                      statuses=("new", "saved", "applied"), max_age_days: int = 3,
+                      limit: int | None = None) -> list:
+    """Rows worth a liveness check: the ones the board can actually show.
+
+    Scope matters more than speed here. A real store held 45,224 postings and
+    1,449 of them above the score floor; checking the other 43,775 costs hours
+    and answers a question nobody asked. Highest score first, so a pass that is
+    stopped early has covered what the user is most likely to open.
+    """
+    marks = ",".join("?" * len(statuses))
+    sql = ("SELECT * FROM postings WHERE url <> '' AND filtered=0 AND dup_of IS NULL "
+           f"AND status IN ({marks}) AND score >= ? ")
+    params: tuple = (*statuses, float(min_score))
+    if max_age_days > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)
+                  ).isoformat(timespec="seconds")
+        sql += "AND (verified_at = '' OR verified_at < ?) "
+        params += (cutoff,)
+    sql += "ORDER BY score DESC, verified_at"
+    if limit:
+        sql += " LIMIT ?"
+        params += (int(limit),)
+    return conn.execute(sql, params).fetchall()
 
 
 def rescore_all(conn: sqlite3.Connection, prefs: dict, progress=None) -> tuple[int, int]:

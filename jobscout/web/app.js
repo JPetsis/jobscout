@@ -166,6 +166,99 @@ function timeAgo(iso) {
    only drives the same bar the button drives, so an automatic scan is not a
    second kind of scan. It also never blocks the window: a scan that cannot
    start leaves a grid that still works. */
+/* Are the listings still open?
+
+   Its own button, not a phase of Scan: reading boards takes seconds, checking
+   1,400 visible postings takes minutes, and folding the second into the first
+   would make Scan mean "wait ten minutes". The scan still contributes for free,
+   since a posting a board returns is marked alive when it is stored. */
+let VERIFY_POLL = null;
+let AUTO_SCAN = false;
+
+function verifyLabel(st) {
+  const c = st.counts || {};
+  return 'checked ' + (st.done || 0) + ' of ' + (st.total || 0) +
+    ' \u00b7 ' + (c.ok || 0) + ' open \u00b7 ' + (c.dead || 0) + ' gone' +
+    ((c.unknown || 0) ? ' \u00b7 ' + c.unknown + ' unknown' : '');
+}
+
+async function checkListings(auto) {
+  if (VERIFY_POLL || POLL) return;              // one job at a time
+  $('scan-bar').hidden = false;
+  $('scan-bar').classList.remove('scan-failed');
+  $('scan-label').textContent = 'checking the listings are still open\u2026';
+  $('scan-fill').style.width = '0';
+  let res;
+  try {
+    res = await pywebview.api.verify_start(0);
+  } catch (e) {
+    $('scan-label').textContent = 'check failed: ' + String(e);
+    return;
+  }
+  if (!res || !res.started) {
+    $('scan-label').textContent = (res && res.reason) || 'could not start';
+    if (auto) $('scan-bar').hidden = true;
+    return;
+  }
+  $('check-btn').disabled = true;
+  clearInterval(VERIFY_POLL);
+  VERIFY_POLL = setInterval(pollVerify, 500);
+}
+
+async function pollVerify() {
+  let st;
+  try {
+    st = await pywebview.api.verify_status();
+  } catch (e) {
+    clearInterval(VERIFY_POLL); VERIFY_POLL = null;
+    $('check-btn').disabled = false;
+    $('scan-label').textContent = 'check failed: ' + String(e);
+    return;
+  }
+  if (st.error) {
+    clearInterval(VERIFY_POLL); VERIFY_POLL = null;
+    $('check-btn').disabled = false;
+    $('scan-label').textContent = 'check failed: ' + st.error;
+    return;
+  }
+  if (st.running) {
+    $('scan-label').textContent = verifyLabel(st);
+    $('scan-fill').style.width = st.total
+      ? Math.round((st.done / st.total) * 100) + '%' : '0';
+    return;
+  }
+  clearInterval(VERIFY_POLL); VERIFY_POLL = null;
+  $('check-btn').disabled = false;
+  $('scan-fill').style.width = '100%';
+  $('scan-label').textContent = st.result
+    ? verifyLabel(st) : 'nothing to check';
+  await reload();
+  STATS = await pywebview.api.stats();
+  renderStats();
+  setTimeout(() => { if (!POLL && !VERIFY_POLL) $('scan-bar').hidden = true; }, 6000);
+}
+
+/* On open, check only if nothing has looked recently. Waits for a boot scan:
+   two jobs reading boards at once is noise, and the scan marks rows alive. */
+async function maybeAutoCheck() {
+  let res = null;
+  try {
+    res = await pywebview.api.boot_verify();
+  } catch (e) {
+    return;
+  }
+  if (!res || !res.started) {
+    if (res && res.reason) $('check-btn').title = 'Check now (' + res.reason + ')';
+    return;
+  }
+  $('check-btn').disabled = true;
+  $('scan-bar').hidden = false;
+  $('scan-label').textContent = 'checking the listings are still open\u2026';
+  $('scan-fill').style.width = '0';
+  clearInterval(VERIFY_POLL);
+  VERIFY_POLL = setInterval(pollVerify, 500);
+}
+
 async function maybeAutoScan() {
   let res = null;
   try {
@@ -176,8 +269,11 @@ async function maybeAutoScan() {
   if (!res || !res.started) {
     // say why not, on the button's tooltip, so "it did not scan" is answerable
     if (res && res.reason) $('scan-btn').title = 'Scan now (' + res.reason + ')';
+    // Nothing was read now, so this is the moment to check the stored listings.
+    maybeAutoCheck();
     return;
   }
+  AUTO_SCAN = true;
   $('scan-btn').disabled = true;
   $('scan-bar').hidden = false;
   $('scan-label').textContent = res.hours == null
@@ -651,6 +747,7 @@ function wirePanes() {
   $('apps-close').addEventListener('click', closePanes);
   wirePay();
   $('scan-btn').addEventListener('click', startScan);
+  $('check-btn').addEventListener('click', () => checkListings(false));
   $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
   // dismissing keeps a verified download on disk; the next check re-offers it
   $('update-install').addEventListener('click', onUpdateClick);
@@ -2119,6 +2216,12 @@ async function pollScan() {
     $('scan-btn').disabled = false;
     await reload();
     setTimeout(() => { $('scan-bar').hidden = true; }, 6000);
+    if (AUTO_SCAN) {
+      // The scan just marked everything it returned as open; what is left is
+      // the older part of the board.
+      AUTO_SCAN = false;
+      maybeAutoCheck();
+    }
   }
 }
 
