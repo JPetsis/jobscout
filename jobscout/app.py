@@ -337,7 +337,7 @@ class VerifyJob:
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def start(self, limit: int | None = None) -> dict:
+    def start(self, limit: int | None = None, max_age_days: int = 3) -> dict:
         with self.lock:
             if self.running:
                 return {"started": False, "reason": "a check is already running"}
@@ -346,8 +346,8 @@ class VerifyJob:
             self.counts = {"ok": 0, "dead": 0, "unknown": 0, "batched": 0}
             self.error = None
             self.result = None
-        self._thread = threading.Thread(target=self._run, args=(limit,), daemon=True,
-                                        name="jobscout-verify")
+        self._thread = threading.Thread(target=self._run, args=(limit, max_age_days),
+                                        daemon=True, name="jobscout-verify")
         self._thread.start()
         return {"started": True}
 
@@ -362,13 +362,13 @@ class VerifyJob:
             self.done, self.total = done, total
             self.counts = dict(counts)
 
-    def _run(self, limit: int | None) -> None:
+    def _run(self, limit: int | None, max_age_days: int = 3) -> None:
         conn = None
         try:
             conn = dbm.connect(self.cfg.root / "jobscout.db")
             conn.execute("PRAGMA busy_timeout = 30000")
             result = verifymod.run_pass(
-                self.cfg, conn, limit=limit,
+                self.cfg, conn, limit=limit, max_age_days=max_age_days,
                 workers=int(self.cfg.prefs.get("verify_workers", 6) or 6),
                 progress=self._progress, cancel=self._cancel.is_set)
             with self.lock:
@@ -495,17 +495,23 @@ class JsApi:
                     "error": None, "result": None}
         return running.status()
 
-    def verify_start(self, limit: int = 0) -> dict:
+    def verify_start(self, limit: int = 0, force: bool = False) -> dict:
         """Check the listings on the board: are they still open?
 
         Runs on its own connection and its own thread: 1,449 visible postings
         take minutes, and the window has to stay usable while they are read.
+
+        `force` is what the button means: a person asking "check now" does not
+        want to be told that every row was already seen today. Without it, the
+        scan's own "seen = alive" marks would leave a manual press with nothing
+        to do on the day after a scan.
         """
         running = getattr(self, "_verify", None)
         if running is not None and running.running:
             return {"started": False, "reason": "a check is already running"}
         self._verify = VerifyJob(self.cfg)
-        return self._verify.start(int(limit) if limit else None)
+        return self._verify.start(int(limit) if limit else None,
+                                  max_age_days=0 if force else 3)
 
     def verify_status(self) -> dict:
         running = getattr(self, "_verify", None)

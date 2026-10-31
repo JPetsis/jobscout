@@ -19,6 +19,7 @@ let TEXT_TIMER = null;        // debounce for typing
 let SETTINGS_ROWS = [];       // the last settings read, for the pay view's defaults
 let CURRENT = null;           // posting shown in the detail pane
 let POLL = null;              // scan poll timer
+let SCANNING = false;         // a scan is running, independent of the timer id
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -183,14 +184,21 @@ function verifyLabel(st) {
 }
 
 async function checkListings(auto) {
-  if (VERIFY_POLL || POLL) return;              // one job at a time
+  if (VERIFY_POLL) return;                      // one check at a time
+  if (SCANNING || POLL) {
+    // Saying nothing is how this button looked broken: a finished scan left its
+    // timer handle set, so every click returned here in silence.
+    $('scan-bar').hidden = false;
+    $('scan-label').textContent = 'a scan is running \u2014 check when it is done';
+    return;
+  }
   $('scan-bar').hidden = false;
   $('scan-bar').classList.remove('scan-failed');
   $('scan-label').textContent = 'checking the listings are still open\u2026';
   $('scan-fill').style.width = '0';
   let res;
   try {
-    res = await pywebview.api.verify_start(0);
+    res = await pywebview.api.verify_start(0, true);
   } catch (e) {
     $('scan-label').textContent = 'check failed: ' + String(e);
     return;
@@ -276,6 +284,7 @@ async function maybeAutoScan() {
     return;
   }
   AUTO_SCAN = true;
+  SCANNING = true;
   $('scan-btn').disabled = true;
   $('scan-bar').hidden = false;
   $('scan-label').textContent = res.hours == null
@@ -2163,9 +2172,10 @@ async function startScan() {
   }
   if (!res || !res.started) {
     $('scan-label').textContent = (res && res.reason) || 'could not start';
-    btn.disabled = false;
+    $('scan-btn').disabled = false;
     return;
   }
+  SCANNING = true;
   clearInterval(POLL);
   POLL = setInterval(pollScan, 600);
 }
@@ -2175,7 +2185,7 @@ async function pollScan() {
   try {
     p = await pywebview.api.scan_progress();
   } catch (e) {
-    clearInterval(POLL);
+    clearInterval(POLL); POLL = null; SCANNING = false;
     $('scan-label').textContent = 'scan failed: ' + String(e);
     $('scan-btn').disabled = false;
     return;
@@ -2183,13 +2193,13 @@ async function pollScan() {
   for (const e of (p.events || [])) applyScanEvent(e);
 
   if (p.error) {
-    clearInterval(POLL);
+    clearInterval(POLL); POLL = null; SCANNING = false;
     $('scan-label').textContent = 'scan failed: ' + p.error;
     $('scan-btn').disabled = false;
     return;
   }
   if (!p.running) {
-    clearInterval(POLL);
+    clearInterval(POLL); POLL = null; SCANNING = false;
     const s = p.summary;
     const failures = (s && s.errors) || [];
     if (s && s.fetched === 0 && failures.length) {

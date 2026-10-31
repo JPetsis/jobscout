@@ -795,6 +795,38 @@ def test_checking_listings_is_its_own_job_not_a_phase_of_the_scan():
         assert hasattr(appmod.JsApi, name), name
 
 
+def test_checking_now_ignores_the_freshness_window(ws, monkeypatch):
+    """A scan marks every posting it returns as seen, which is also a liveness
+    verdict. Pressing Check listings the same day then found nothing to do, so
+    the button has to mean "check them anyway"."""
+    from jobscout import verify as vmod
+    seen = []
+
+    def fake_pass(cfg, conn, **kw):
+        seen.append(kw.get("max_age_days"))
+        return {"total": 0, "ok": 0, "dead": 0, "unknown": 0, "batched": 0,
+                "cancelled": False, "purged": 0}
+
+    monkeypatch.setattr(vmod, "run_pass", fake_pass)
+    api_obj = appmod.JsApi()
+    api_obj.verify_start(2, True)
+    time.sleep(0.2)
+    api_obj.verify_start(2, False)
+    time.sleep(0.2)
+    assert seen == [0, 3], "the button forces, the boot pass respects freshness"
+
+
+def test_a_finished_scan_releases_the_check_button():
+    """The button was a silent no-op because `POLL` kept its timer id after a
+    scan ended and the guard returned before doing anything."""
+    js = (Path(__file__).resolve().parents[1] / "jobscout" / "web" / "app.js"
+          ).read_text(encoding="utf-8")
+    assert "let SCANNING = false;" in js
+    assert js.count("POLL = null; SCANNING = false;") >= 3
+    assert "if (SCANNING || POLL)" in js
+    assert "verify_start(0, true)" in js
+
+
 def test_the_check_job_reports_what_it_found(ws, monkeypatch):
     from jobscout import verify as vmod
 
