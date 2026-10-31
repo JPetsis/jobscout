@@ -252,6 +252,41 @@ def alt_key(p: Posting) -> str | None:
     return _sha1(f"{norm(p.company)}|{norm(p.title)}|{geo.place_key(p.location)}")
 
 
+def _same_source_twin(conn: sqlite3.Connection, p: Posting) -> int | None:
+    """An existing row from the SAME board that is the same role as `p`.
+
+    Boards republish: XING carried one Landesverwaltungsamt role twice, under
+    "…amt Berlin" and "…amt Berlin Personalservice", with the title cut at 100
+    characters the second time and a fresh posting id. `fingerprint` cannot see
+    that (it is source+id by design) and `alt_key` cannot either (company and
+    title both differ), so the same job sat on the board twice.
+
+    The rule is deliberately narrow: same source, same location, one title a
+    prefix of the other (both long enough to mean something), and the same for
+    the company. A shared prefix alone is not evidence.
+    """
+    if not (p.title and p.company and p.location):
+        return None
+    rows = conn.execute(
+        "SELECT id, title, company FROM postings "
+        "WHERE source = ? AND dup_of IS NULL AND status <> 'dismissed' "
+        "AND lower(location) = lower(?)",
+        (p.source, p.location),
+    ).fetchall()
+    title, company = norm(p.title), norm(p.company)
+    if len(title) < 30 or len(company) < 4:
+        return None
+    for r in rows:
+        other_title, other_company = norm(r["title"]), norm(r["company"])
+        if len(other_title) < 30:
+            continue
+        if not (title.startswith(other_title) or other_title.startswith(title)):
+            continue
+        if company.startswith(other_company) or other_company.startswith(company):
+            return r["id"]
+    return None
+
+
 def _same_words(a: str, b: str) -> bool:
     """Do two texts hold the same words, ignoring line breaks and spacing?"""
     return " ".join(a.split()) == " ".join(b.split())
@@ -338,6 +373,8 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         ).fetchone()
         if r2:
             dup_of = r2["id"]
+    if dup_of is None:
+        dup_of = _same_source_twin(conn, p)
 
     cur = conn.execute(
         """INSERT INTO postings (fingerprint, alt_key, source, company, title, location, url,
@@ -514,6 +551,61 @@ def set_description(conn, pid: int, description: str) -> None:
         (description, now, pid),
     )
     conn.commit()
+
+
+def dedupe_same_source(conn: sqlite3.Connection) -> int:
+    """Mark republished rows from one board as duplicates. Returns how many.
+
+    Run as one pass after a scan rather than per upsert: the comparison is
+    against other rows of the same board and place, so doing it for 45,000
+    upserts would repeat the same work thousands of times.
+    """
+    groups: dict[tuple[str, str], list] = {}
+    rows = conn.execute(
+        "SELECT id, source, title, company, location FROM postings "
+        "WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id"
+    ).fetchall()
+    marked = 0
+    for r in rows:
+        title, company = norm(r["title"]), norm(r["company"])
+        if len(title) < 30 or len(company) < 4:
+            continue
+        bucket = groups.setdefault((r["source"], norm(r["location"])), [])
+        twin = None
+        for other in bucket:
+            o_title, o_company = other["title"], other["company"]
+            if not (title.startswith(o_title) or o_title.startswith(title)):
+                continue
+            if company.startswith(o_company) or o_company.startswith(company):
+                twin = other["id"]
+                break
+        if twin is not None:
+            conn.execute("UPDATE postings SET dup_of=? WHERE id=?", (twin, r["id"]))
+            marked += 1
+            continue                     # a duplicate is not a yardstick itself
+        bucket.append({"id": r["id"], "title": title, "company": company})
+    if marked:
+        conn.commit()
+    return marked
+
+
+def purge_dead(conn: sqlite3.Connection, keep_statuses=("saved", "applied")) -> int:
+    """Delete postings a check found gone. Returns how many went.
+
+    A dead advert has no use on a board, but two kinds of row are not just an
+    advert: one the user saved or applied to, and one an application points at.
+    The Applications pane joins on `posting_id`, so deleting that row would
+    erase what the user did, which is the record the logger exists to keep.
+    """
+    marks = ",".join("?" * len(keep_statuses))
+    cur = conn.execute(
+        f"DELETE FROM postings WHERE verify_status = 'dead' "
+        f"AND status NOT IN ({marks}) "
+        "AND id NOT IN (SELECT posting_id FROM applications)",
+        (*keep_statuses,),
+    )
+    conn.commit()
+    return cur.rowcount
 
 
 def set_early(conn, pid: int) -> None:

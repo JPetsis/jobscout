@@ -378,6 +378,13 @@ def scan(cfg, conn, fetcher, *,
         stats.update(extra)
     if stopped_early:
         stats["cancelled"] = True
+    # Boards republish the same role under a second profile or with a title cut
+    # at 100 characters, and a fresh posting id means the fingerprint cannot see
+    # it. One pass over the table catches those pairs; doing it per upsert would
+    # repeat the same comparison for every row of a 45,000-row store.
+    deduped = dbm.dedupe_same_source(conn)
+    if deduped:
+        stats["deduped"] = deduped
     dbm.finish_run(conn, run_id, stats)
     m_all, s_all = dbm.count_matches(conn, min_score, strong_th)
 
@@ -395,6 +402,7 @@ def scan(cfg, conn, fetcher, *,
         "errors": list(fetcher.errors), "requests": fetcher.requests,
         "sources": stats["sources"], "cancelled": stopped_early,
         "unmarked": unmarked, "skipped_fresh": skipped_fresh,
+        "deduped": int(stats.get("deduped", 0) or 0),
     }
     emit({"kind": "done", **{k: v for k, v in summary.items() if k != "matches_top"}})
     return summary

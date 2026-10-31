@@ -230,8 +230,10 @@ async function pollVerify() {
   clearInterval(VERIFY_POLL); VERIFY_POLL = null;
   $('check-btn').disabled = false;
   $('scan-fill').style.width = '100%';
+  const removed = (st.result && st.result.purged) || 0;
   $('scan-label').textContent = st.result
-    ? verifyLabel(st) : 'nothing to check';
+    ? verifyLabel(st) + (removed ? ' \u00b7 ' + removed + ' removed' : '')
+    : 'nothing to check';
   await reload();
   STATS = await pywebview.api.stats();
   renderStats();

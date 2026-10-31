@@ -76,8 +76,9 @@ def test_a_full_board_list_settles_every_row_in_one_request(tmp_path, monkeypatc
     assert out["batched"] == 3
     assert dbm.get_posting(conn, keep1)["verify_status"] == "ok"
     assert dbm.get_posting(conn, keep2)["verify_status"] == "ok"
-    assert dbm.get_posting(conn, gone)["verify_status"] == "dead", \
-        "the board lists every live job, so absence is evidence"
+    assert dbm.get_posting(conn, gone) is None, \
+        "absence from a complete board list is evidence, and dead rows are removed"
+    assert out["purged"] == 1
 
 
 def test_an_incomplete_board_list_never_kills_rows(tmp_path, monkeypatch):
@@ -168,6 +169,68 @@ def test_a_rate_limited_host_gets_a_slower_pace_only_for_it():
     paced.get("https://example.org/jobs/x")
     assert f.calls[0][1] == 1.1
     assert f.calls[1][1] is None, "every other host keeps the shared pace"
+
+
+def test_dead_rows_are_removed_but_what_you_acted_on_stays(tmp_path):
+    """A dead advert has no use on a board. An application is a record of
+    something the user did, and the Applications pane joins on posting_id, so
+    deleting that row would erase it."""
+    conn = dbm.connect(tmp_path / "t.db")
+    gone_new = _store(conn, url="https://x/gone1")
+    gone_saved = _store(conn, url="https://x/gone2", status="saved")
+    gone_applied = _store(conn, url="https://x/gone3")
+    dbm.set_status(conn, gone_applied, "applied")
+    from jobscout import api as apimod
+    apimod.save_application(conn, gone_applied, {})
+
+    for pid in (gone_new, gone_saved, gone_applied):
+        dbm.update_verify(conn, pid, "dead", "HTTP 410")
+
+    purged = dbm.purge_dead(conn)
+    left = {r["id"] for r in conn.execute("SELECT id FROM postings")}
+    assert purged == 1
+    assert gone_new not in left
+    assert gone_saved in left, "you saved it"
+    assert gone_applied in left, "an application points at it"
+    assert apimod.list_applications(conn), "the logger still has its record"
+
+
+def test_a_republished_role_from_one_board_is_marked_duplicate(tmp_path):
+    """XING carried the Landesverwaltungsamt role twice: same place, company
+    "…amt Berlin" against "…amt Berlin Personalservice", title cut at 100
+    characters, new posting id. Neither fingerprint nor alt_key could see it."""
+    conn = dbm.connect(tmp_path / "t.db")
+    old = _store(conn, source="xing", url="https://www.xing.com/jobs/a-158857672",
+                 title="Anwendungsentwickler/in für Programmierung, Betreuung und "
+                       "Weiterentwicklung des Beihilfefachverfahrens",
+                 ext="158857672")
+    conn.execute("UPDATE postings SET company=? WHERE id=?",
+                 ("Landesverwaltungsamt Berlin", old))
+    conn.commit()
+    new = _store(conn, source="xing", url="https://www.xing.com/jobs/b-158906548",
+                 title="Anwendungsentwickler/in für Programmierung, Betreuung und "
+                       "Weiterentwicklung des Beihilfefachverfahre",
+                 ext="158906548")
+    conn.execute("UPDATE postings SET company=? WHERE id=?",
+                 ("Landesverwaltungsamt Berlin Personalservice", new))
+    conn.commit()
+
+    assert dbm.dedupe_same_source(conn) == 1
+    row = conn.execute("SELECT dup_of FROM postings WHERE id=?", (new,)).fetchone()
+    assert row["dup_of"] == old, "the older advert stays the visible one"
+
+
+def test_two_different_roles_sharing_a_prefix_are_not_merged(tmp_path):
+    conn = dbm.connect(tmp_path / "t.db")
+    _store(conn, source="xing", url="https://x/1", title="Senior Backend Entwickler PHP",
+           ext="1")
+    _store(conn, source="xing", url="https://x/2", title="Senior Backend Entwickler PHP "
+           "und DevOps", ext="2")
+    conn.execute("UPDATE postings SET company='Foo GmbH'")
+    conn.commit()
+    conn.execute("UPDATE postings SET company='Bar AG' WHERE id=2")
+    conn.commit()
+    assert dbm.dedupe_same_source(conn) == 0
 
 
 def test_progress_is_reported_for_a_bar(tmp_path, monkeypatch):

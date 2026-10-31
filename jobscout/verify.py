@@ -261,5 +261,11 @@ def run_pass(cfg, conn, *, min_score: float | None = None, max_age_days: int = 3
                 for row, state, note in results:
                     record(row, state, note[:120])
 
+    purged = 0
+    if str(prefs.get("purge_dead", True)).strip().lower() not in ("false", "0", "no", "off"):
+        # A dead advert has no use on the board, but the deletion keeps saved,
+        # applied and applied-to rows; see db.purge_dead.
+        purged = dbm.purge_dead(conn)
+
     return {"total": total, **counts, "cancelled": bool(cancel and cancel()),
-            "dead_titles": dead_titles[:20]}
+            "purged": purged, "dead_titles": dead_titles[:20]}

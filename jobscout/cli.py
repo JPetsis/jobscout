@@ -864,10 +864,16 @@ def cmd_verify(args) -> int:
     fetcher = _fetcher()
     print(ui.bold(f"verifying {len(rows)} posting(s)"))
     counts, dead = _verify_rows(conn, fetcher, rows, quiet=args.quiet)
+    purged = dbm.purge_dead(conn)
     print("\n" + ui.rule())
     print(f"checked {len(rows)} · {ui.green(str(counts['ok']) + ' ok')} · "
           f"{ui.red(str(counts['dead']) + ' dead')} · {counts['unknown']} unknown")
-    if dead:
+    if purged:
+        print(ui.dim(f"  removed {purged} dead posting(s); saved/applied and "
+                     f"applied-to rows were kept"))
+    if dead and not purged:
+        # When they were just deleted, listing their ids invites a second look
+        # at rows that no longer exist.
         print(ui.red("dead: ") + " ".join(f"#{i}" for i, _ in dead))
         print(ui.dim("  dismiss with: jobscout mark <id> dismissed"))
     return 0
