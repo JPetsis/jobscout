@@ -22,6 +22,21 @@ changelog = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(changelog)
 
 
+def test_hand_written_notes_win_over_commit_subjects(tmp_path, monkeypatch, capsys):
+    """A release note is written for the person installing the app. When the
+    curated file exists it is what gets published, verbatim."""
+    (tmp_path / "v9.9.9.md").write_text("Real notes, written by hand.\n",
+                                        encoding="utf-8")
+    monkeypatch.setattr(changelog, "RELEASES", tmp_path)
+    assert changelog.main(["changelog.py", "v9.9.9"]) == 0
+    assert capsys.readouterr().out.strip() == "Real notes, written by hand."
+
+
+def test_without_a_curated_file_the_subjects_are_the_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(changelog, "RELEASES", tmp_path)
+    assert changelog.hand_written("v0.0.0") is None
+
+
 def git(repo: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 

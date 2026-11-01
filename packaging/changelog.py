@@ -10,15 +10,18 @@ Python rather than shell because this repo is Python and its CI matrix includes
 Windows: a bash script there depends on MSYS quoting and on the checkout's line
 endings, and both produced failures that said nothing about the notes.
 
-The repo commits straight to main with conventional prefixes and no pull
-requests, so GitHub's own `generate_release_notes` has nothing to work from --
-the commits ARE the changelog.
+PREFER HAND-WRITTEN NOTES. A commit subject is a development log, not release
+notes: "one word costs one query" tells the person installing the app nothing.
+`packaging/releases/<tag>.md` is published verbatim when it exists, and the
+generated list below is only the fallback for a tag that has no such file. Write
+that file before tagging; it is part of the release, not an afterthought.
 """
 from __future__ import annotations
 
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 # Order matters: it is the order the sections appear in.
 GROUPS = [
@@ -74,6 +77,18 @@ def split_subject(subject: str) -> tuple[str, str] | None:
     if not kind.isalpha():
         return None
     return kind, rest.strip()
+
+
+RELEASES = Path(__file__).resolve().parent / "releases"
+
+
+def hand_written(target: str) -> str | None:
+    """The curated notes for this tag, or None when nobody wrote them."""
+    try:
+        text = (RELEASES / f"{target}.md").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
 
 
 def build_notes(prev: str, target: str, cwd: str | None = None) -> str:
@@ -134,6 +149,14 @@ def main(argv: list[str]) -> int:
               file=sys.stderr)
         print("       changelog.py <from> <to>", file=sys.stderr)
         return 2
+    curated = hand_written(target)
+    if curated:
+        sys.stdout.write(curated + "\n")
+        return 0
+    # No curated file: publish the commit subjects, and say so on stderr so the
+    # release log shows which release went out without notes.
+    print(f"warning: no packaging/releases/{target}.md; using commit subjects",
+          file=sys.stderr)
     sys.stdout.write(build_notes(prev, target))
     return 0
 
