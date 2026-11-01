@@ -53,6 +53,41 @@ def test_exclude_filters():
     assert sc.filtered and sc.reason.startswith("excluded:")
 
 
+SV = ("Vi söker en vikarierande antikvarie med ansvar för animalosteologi. "
+      "Du kommer att arbeta med våra osteologiska samlingar under 2027 och du "
+      "ska ha mycket god kännedom om svenska arkeologiska förhållanden.")
+DE = ("W 2-Professur für Ur- und Frühgeschichte. Die Stelle ist unbefristet "
+      "und die Bewerbung ist bis zum 30. November möglich. Die Universität "
+      "bietet eine Vergütung nach W 2 und eine gute Ausstattung.")
+
+
+def test_a_language_outside_the_allow_list_filters_the_posting():
+    prefs = dict(PREFS, language_allow=["en", "de"], title_terms=["antikvarie"])
+    sc = score_posting(prefs, mk(title="Vikarierande antikvarie", description=SV))
+    assert sc.filtered and sc.reason == "lang:sv"
+    assert sc.lang == "sv"
+
+
+def test_an_allowed_language_is_scored_normally():
+    prefs = dict(PREFS, language_allow=["en", "de"], title_terms=["professur"])
+    sc = score_posting(prefs, mk(title="W 2-Professur", description=DE))
+    assert not sc.filtered
+    assert sc.lang == "de"
+
+
+def test_text_too_short_to_classify_is_kept():
+    """The expensive mistake is hiding a job because a guess went wrong."""
+    prefs = dict(PREFS, language_allow=["en"], title_terms=["archaeologist"])
+    sc = score_posting(prefs, mk(title="Archaeologist (m/w/d)", description=""))
+    assert not sc.filtered and sc.lang == ""
+
+
+def test_no_language_list_means_no_language_filter():
+    prefs = dict(PREFS, title_terms=["antikvarie"])
+    sc = score_posting(prefs, mk(title="Vikarierande antikvarie", description=SV))
+    assert not sc.filtered and sc.lang == ""
+
+
 def test_stale_filters_when_date_known():
     old = (date.today() - timedelta(days=40)).isoformat()
     sc = score_posting(PREFS, mk(title="Python Engineer", posted_at=old))

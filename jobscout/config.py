@@ -18,6 +18,12 @@ DEFAULT_CONFIG = '''\
 
 preferences:
   max_age_days: 21        # drop postings older than this when a date is known
+  # The languages an advert may be written in, as two-letter codes. Empty means
+  # no filter at all. Set, it drops an advert that is clearly written in another
+  # language -- the language of the advert is usually the language of the job,
+  # though a university posting in English may still want the local language.
+  # An advert whose text is too short to classify is KEPT, never guessed at.
+  language_allow: []
   # How many matches the app loads. They load best-scored first, and the window
   # filters what it has, so this only needs to be large enough to cover the
   # board: the footer says when it is not.

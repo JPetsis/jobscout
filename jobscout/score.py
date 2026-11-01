@@ -54,6 +54,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from . import geo
+from .language import allowed as lang_allowed
+from .language import detect
 from .models import Posting
 from .textutil import date_part, norm
 
@@ -66,6 +68,9 @@ class Score:
     reasons: list = field(default_factory=list)   # [[label, points], ...]
     filtered: bool = False
     reason: str = ""
+    #: The language the advert is written in, when `language_allow` is on and
+    #: the text was long enough to tell. "" = not checked or not clear.
+    lang: str = ""
 
 
 def prefs_hash(prefs: dict) -> str:
@@ -227,6 +232,17 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
     if term:
         s.filtered, s.reason = True, f"description_deny:{term}"
         return s
+
+    # Language of the advert. Optional: an empty list means no filter at all.
+    # Only the first 1,500 characters are read, which is plenty of evidence and
+    # keeps a re-score of 45,000 rows from turning into a text-processing job.
+    # An advert too short to classify is KEPT -- see language.allowed.
+    allow = prefs.get("language_allow") or []
+    if allow:
+        s.lang = detect(f"{p.title}. {(p.description or '')[:1500]}")
+        if not lang_allowed(s.lang, allow):
+            s.filtered, s.reason = True, f"lang:{s.lang}"
+            return s
 
     max_age = _num(prefs, "max_age_days", 0)
     d = date_part(p.posted_at)

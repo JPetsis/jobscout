@@ -173,6 +173,10 @@ _NEW_COLUMNS = [
     # the board said when it was read, so it can only be set, never cleared by a
     # later listing that simply did not repeat it.
     ("early_applicant", "INTEGER NOT NULL DEFAULT 0"),
+    # The advert's language, filled when `language_allow` is on. Stored so the
+    # window can say WHY a posting was filtered, and so a re-score does not have
+    # to reclassify text that has not changed.
+    ("lang", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
@@ -352,14 +356,15 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
                    salary_period=?, salary_annual_max=?, salary_raw=?, expires_at=?,
                    early_applicant=MAX(early_applicant, ?),
                    verify_status='ok', verify_note='', verified_at=?,
-                   score=?, reasons=?, filtered=?, filtered_reason=?
+                   score=?, reasons=?, filtered=?, filtered_reason=?, lang=?
                WHERE id=?""",
             (now, run_id, p.title, p.company, p.location,
              p.url or row["url"], p.posted_at or row["posted_at"],
              desc, p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
              p.salary_annual_max, p.salary_raw, p.expires_at or row["expires_at"],
              1 if p.early_applicant else 0, now,
-             sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, row["id"]),
+             sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason,
+             sc.lang, row["id"]),
         )
         conn.commit()
         return row["id"], False, None
@@ -382,8 +387,8 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
              description, compensation, salary_min, salary_max, salary_currency, salary_period,
              salary_annual_max, salary_raw, expires_at, early_applicant,
              verify_status, verified_at,
-             score, reasons, filtered, filtered_reason, dup_of, status)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             score, reasons, filtered, filtered_reason, lang, dup_of, status)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fp, ak, p.source, p.company, p.title, p.location, p.url, p.external_id, p.posted_at,
             now, run_id, now, run_id, p.description, p.compensation,
@@ -391,7 +396,8 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
             p.salary_annual_max, p.salary_raw, p.expires_at,
             1 if p.early_applicant else 0,
             "ok", now,                  # a posting a board just returned is open
-            sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, dup_of, "new",
+            sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason,
+            sc.lang, dup_of, "new",
         ),
     )
     conn.commit()
@@ -681,8 +687,10 @@ def set_score(conn, pid: int, sc: Score) -> None:
     read 19.
     """
     conn.execute(
-        "UPDATE postings SET score=?, reasons=?, filtered=?, filtered_reason=? WHERE id=?",
-        (sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason, pid),
+        "UPDATE postings SET score=?, reasons=?, filtered=?, filtered_reason=?, lang=? "
+        "WHERE id=?",
+        (sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason,
+         sc.lang, pid),
     )
     conn.commit()
 
@@ -821,7 +829,8 @@ def rescore_all(conn: sqlite3.Connection, prefs: dict, progress=None) -> tuple[i
         sc = score_posting(prefs, row_to_posting(row))
         if (sc.score != row["score"] or json.dumps(sc.reasons) != (row["reasons"] or "[]")
                 or bool(sc.filtered) != bool(row["filtered"])
-                or sc.reason != (row["filtered_reason"] or "")):
+                or sc.reason != (row["filtered_reason"] or "")
+                or (sc.lang or "") != (row["lang"] or "")):
             set_score(conn, row["id"], sc)
             changed += 1
         if progress is not None and (i % 250 == 0 or i == total):

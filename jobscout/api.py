@@ -578,6 +578,12 @@ SETTINGS = [
      "label": "Countries to accept",
      "help": "Two-letter codes, for example de or us. Empty means no country "
              "filter; remote postings with no country are kept."},
+    {"key": "preferences.language_allow", "op": "list", "kind": "str_list",
+     "group": "Where",
+     "label": "Languages to accept",
+     "help": "Two-letter codes, for example en or de. Empty means no language "
+             "filter. An advert clearly written in another language is "
+             "filtered out; one too short to tell is kept."},
     {"key": "preferences.locations_prefer", "op": "list", "kind": "str_list",
      "group": "Where",
      "label": "Places you prefer",
@@ -658,6 +664,7 @@ SECTION_OF = {
     "preferences.stack_preferred": ("wanted", False),
     "preferences.title_deny": ("wanted", False),
     "preferences.country_allow": ("where", False),
+    "preferences.language_allow": ("where", False),
     "preferences.locations_prefer": ("where", False),
     "preferences.min_score": ("matching", False),
     "preferences.strong_threshold": ("matching", False),
