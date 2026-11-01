@@ -80,6 +80,16 @@ def write_digest(cfg: Config, conn, run_id: int | None = None, top: int | None =
         f"`jobscout digest --all` lists them._",
         "",
     ]
+    # Deadlines first: a good match that closes on Friday is more urgent than a
+    # better one that stays open all month.
+    closing_days = int(cfg.prefs.get("closing_days") or 14)
+    closing = dbm.closing_soon(conn, closing_days)
+    if closing:
+        md += [f"## ⏳ Closing within {closing_days} days", ""]
+        for r in closing[:15]:
+            md.append(f"- **{r['title']}** — {r['company'] or '?'} · closes {r['deadline_at']}"
+                      f"{' · applied' if r['application_id'] else ''}")
+        md.append("")
     if strongs:
         md += [f"## 🔥 Strong matches (score ≥ {strong_th:g})", ""]
         md += [_line(r) for r in strongs]

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import statistics
 from datetime import date, datetime, timedelta, timezone
 
 from . import contract
 from . import db as dbm
 from . import deadlines
+from . import requirements
 from . import salary as salmod
 from . import sources
 from .textutil import strip_null_runs
@@ -182,6 +184,9 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
     # does, in its own metadata). Strip on READ as well as on fetch, so a row
     # stored before the fix looks right the moment it is opened.
     out["description"] = strip_null_runs(out.get("description") or "")
+    # What the advert says it requires, in words no filter can catch: a C1 in
+    # German on an English advert, a PhD, a work permit, years of experience.
+    out["requirements"] = requirements.extract(out.get("description") or "")
     out["score"] = float(out.get("score") or 0.0)
     out["direct"] = sources.is_direct(out.get("source") or "")
     out["direct_note"] = sources.direct_note(out.get("source") or "")
@@ -765,6 +770,114 @@ def source_options(enabled) -> list[dict]:
              "checked": n in on, "group": group_of(n)} for n in SOURCE_NAMES]
     rows.sort(key=lambda r: rank.get(r["group"], len(rank)))
     return rows
+
+
+def deadline_watch(cfg, conn, days: int | None = None) -> dict:
+    """What closes soon, and what of it you have not applied to yet."""
+    days = int(days or (cfg.prefs or {}).get("closing_days") or 14)
+    items = []
+    for r in dbm.closing_soon(conn, days):
+        raw = (r["deadline_at"] or "")[:10]
+        try:
+            left = (date.fromisoformat(raw) - date.today()).days
+        except ValueError:
+            left = None
+        items.append({"id": r["id"], "title": r["title"], "company": r["company"],
+                      "deadline_at": raw, "days_left": left,
+                      "score": float(r["score"] or 0),
+                      "applied": r["application_id"] is not None})
+    return {"days": days, "count": len(items),
+            "unapplied": sum(1 for i in items if not i["applied"]),
+            "items": items[:10]}
+
+
+def source_health(cfg, conn) -> list[dict]:
+    """Every board this profile runs, with the last thing it actually did."""
+    rows = dbm.source_health(conn)
+    enabled = set(getattr(cfg, "enabled", []) or [])
+    out = []
+    for name in sources.SOURCE_NAMES:
+        h = rows.get(name) or {}
+        if not h and name not in enabled:
+            continue
+        out.append({"name": name, "label": sources.label_for(name),
+                    "enabled": name in enabled, "scanned": bool(h),
+                    "last_run": h.get("last_run", ""),
+                    "last_fetched": int(h.get("last_fetched") or 0),
+                    "last_new": int(h.get("last_new") or 0),
+                    "last_error": h.get("last_error", ""),
+                    "zero_streak": int(h.get("zero_streak") or 0),
+                    "last_ok": h.get("last_ok", ""),
+                    "last_ok_fetched": int(h.get("last_ok_fetched") or 0)})
+    out.sort(key=lambda r: (not r["enabled"], -r["zero_streak"], r["label"].lower()))
+    return out
+
+
+#: Words that say nothing about why a posting was dismissed.
+_SUGGEST_STOP = frozenset("""
+    der die das und mit für von den dem des ist sind wir sie sich auf als bei
+    aus oder ein eine einen einem einer haben hat nicht auch zur zum sowie
+    the and with for from that this your our you are will have has not
+    job jobs role position full time part remote senior junior lead
+    engineer developer manager berlin munich hamburg germany deutschland
+    m/w/d w/m/d mwd
+""".split())
+
+
+def reject_suggestions(cfg, conn, limit: int = 5) -> list[dict]:
+    """Terms that kept showing up in what you dismissed and not in what you kept.
+
+    Counted, not learned: a suggestion says "9 of 11 postings you dismissed
+    contained this, 1 of 40 you kept did" and you decide. Nothing is applied
+    until you press Add.
+    """
+    prefs = cfg.prefs or {}
+    known = {str(t).lower() for key in ("title_deny", "exclude_terms", "title_terms")
+             for t in (prefs.get(key) or [])}
+    dismissed, kept = [], []
+    for r in conn.execute(
+            "SELECT title, status FROM postings WHERE dup_of IS NULL "
+            "AND status IN ('dismissed', 'saved', 'applied')"):
+        (dismissed if r["status"] == "dismissed" else kept).append(r["title"] or "")
+    if len(dismissed) < 3:
+        return []
+
+    def counts(titles):
+        c: dict[str, int] = {}
+        for title in titles:
+            for word in set(re.findall(r"[a-zäöüß]{4,}", title.lower())):
+                if word not in _SUGGEST_STOP:
+                    c[word] = c.get(word, 0) + 1
+        return c
+
+    in_dismissed, in_kept = counts(dismissed), counts(kept)
+    out = []
+    for term, n in sorted(in_dismissed.items(), key=lambda kv: -kv[1]):
+        if n < 3 or term in known:
+            continue
+        if in_kept.get(term, 0) > max(1, n * 0.2):
+            continue
+        out.append({"term": term, "dismissed": n,
+                    "kept": in_kept.get(term, 0), "dismissed_total": len(dismissed)})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def add_reject_term(cfg, term: str) -> dict:
+    """Append one word to titles to reject, keeping every comment in the file."""
+    from . import cfgwrite
+    term = " ".join(str(term or "").split()).lower()
+    if not term:
+        return {"ok": False, "error": "a term is required"}
+    text = pathlib.Path(cfg.path).read_text(encoding="utf-8")
+    raw = cfgwrite.get_value(text, "preferences.title_deny")
+    current = [str(t) for t in (raw if isinstance(raw, list) else [])]
+    if term in {t.lower() for t in current}:
+        return {"ok": True, "unchanged": True, "value": current}
+    updated = cfgwrite.set_list(text, "preferences.title_deny", current + [term])
+    pathlib.Path(cfg.path).write_text(updated, encoding="utf-8")
+    return {"ok": True, "unchanged": False, "value": current + [term]}
 
 
 def read_settings(path) -> list[dict]:

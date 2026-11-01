@@ -561,6 +561,31 @@ class JsApi:
             self.cfg = load_config()          # re-read; the file just changed
         return out
 
+    # ------------------------------------------------------- what needs you
+
+    def deadline_watch(self, days: int | None = None) -> dict:
+        """Postings whose advert states a deadline soon, and whether you applied.
+
+        The filter answers "show me closing ones"; this answers "is anything
+        about to close that I have not applied to", which is the question that
+        loses jobs.
+        """
+        return api.deadline_watch(self.cfg, self.conn, days)
+
+    def source_health(self) -> list[dict]:
+        """What each board did on its last run: results, zero streak, error."""
+        return api.source_health(self.cfg, self.conn)
+
+    def reject_suggestions(self) -> list[dict]:
+        """Words common in what you dismissed, rare in what you kept."""
+        return api.reject_suggestions(self.cfg, self.conn)
+
+    def add_reject_term(self, term: str) -> dict:
+        out = api.add_reject_term(self.cfg, str(term or ""))
+        if out.get("ok"):
+            self.cfg = load_config()
+        return out
+
     # ------------------------------------------------- companies you follow
 
     def watchlist(self) -> list[dict]:

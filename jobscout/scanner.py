@@ -365,6 +365,16 @@ def scan(cfg, conn, fetcher, *,
             dbm.mark_source_scanned(
                 conn, r["name"], datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
+    # One health line per board that was asked, including the ones that answered
+    # nothing: "zero, five runs in a row" is the only visible sign of a parser
+    # that broke while the site kept saying 200.
+    for name in names:
+        st = stats["sources"].get(name) or {}
+        errs = [str(e) for e in fetcher.errors if str(e).startswith(f"{name}:")]
+        dbm.note_source_health(
+            conn, name, int(st.get("fetched", 0) or 0),
+            int(st.get("new", 0) or 0), "; ".join(errs)[:300])
+
     used_probes = probe_start - probe_budget["left"]
     if used_probes:
         stats["detail_probes"] = used_probes

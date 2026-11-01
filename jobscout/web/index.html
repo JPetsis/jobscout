@@ -92,6 +92,14 @@ document.documentElement.dataset.theme =
      it; the second narrows the set (source, status, and the two freshness
      filters). One flat row put eight controls at the same weight and made the
      search box compete with a checkbox. -->
+<!-- What is about to close and has not been applied to. Shown only when there
+     is something to say, and dismissible for the session. -->
+<div id="closing-bar" class="updatebar" hidden role="status">
+  <span class="up-text" id="closing-line"></span>
+  <button id="closing-show" class="ghost small">Show them</button>
+  <button id="closing-dismiss" class="ghost small" aria-label="Dismiss this notice">✕</button>
+</div>
+
 <section class="filters" aria-label="Find and filter">
   <div class="find-row">
     <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">

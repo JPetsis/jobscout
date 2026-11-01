@@ -93,6 +93,7 @@ async function boot() {
     wirePanes();
     render();
     loadAppsCount();            // the header badge, async and never blocking
+    loadClosingWatch();         // what closes soon, async and never blocking
     checkForUpdates();          // async; never blocks the grid
     maybeAutoScan();            // async; the backend decides whether it is due
   } catch (e) {
@@ -843,6 +844,19 @@ function renderDetail(d) {
   // two places saying it is how they end up disagreeing after a save.
   body.appendChild(dl);
 
+  // What the advert states in words no filter can catch, each with the sentence
+  // it came from in its tooltip. Shown before the reasons: a requirement that
+  // rules you out matters more than a keyword that scores you points.
+  if ((d.requirements || []).length) {
+    const reqs = el('div', 'd-reqs');
+    for (const q of d.requirements) {
+      const chip = el('span', 'req-chip ' + (q.kind || ''), q.label);
+      if (q.detail) chip.title = q.detail;
+      reqs.appendChild(chip);
+    }
+    body.appendChild(reqs);
+  }
+
   const why = el('div', 'd-why');
   for (const [label, pts] of (d.reasons || [])) {
     why.appendChild(el('span', null, label + ' +' + pts));
@@ -1450,7 +1464,49 @@ function boardsPane() {
   wrap.appendChild(foot);
 
   wrap.appendChild(followBlock());
+  wrap.appendChild(healthCard());
   return wrap;
+}
+
+/* Each board's last run. A board that keeps answering with nothing has usually
+ * changed its page, and that is invisible everywhere else in the app. */
+function healthCard() {
+  const card = el('div', 'set-card');
+  card.appendChild(el('p', 'set-card-title', 'Source health'));
+  card.appendChild(el('p', 'set-lead',
+    'What each board returned the last time it ran. A board answering with ' +
+    'nothing, run after run, has usually changed its page.'));
+  const list = el('div', 'health-list');
+  card.appendChild(list);
+  pywebview.api.source_health().then((rows) => {
+    for (const r of rows || []) {
+      const bad = r.zero_streak > 0;
+      const row = el('div', 'health-row' + (bad ? ' bad' : '') +
+                            (!r.scanned ? ' unknown' : ''));
+      row.appendChild(el('span', 'health-dot'));
+      row.appendChild(el('span', 'health-name', r.label));
+      let text;
+      if (!r.last_run) {
+        text = 'not scanned yet';
+      } else if (r.last_fetched) {
+        text = r.last_fetched.toLocaleString() + ' on ' + r.last_run.slice(0, 10);
+      } else {
+        text = 'nothing · ' + r.zero_streak + ' run' +
+          (r.zero_streak === 1 ? '' : 's') + ' in a row';
+        if (r.last_ok_fetched) {
+          text += ' · last good: ' + r.last_ok_fetched.toLocaleString() +
+                  ' on ' + (r.last_ok || '').slice(0, 10);
+        }
+      }
+      row.appendChild(el('span', 'health-run', text));
+      if (r.last_error) {
+        row.title = r.last_error;
+        row.appendChild(el('span', 'health-err', '⚠'));
+      }
+      list.appendChild(row);
+    }
+  }).catch(() => {});
+  return card;
 }
 
 function boardCard(opt, knobs, row, changed) {
@@ -1533,7 +1589,93 @@ function wantedPane() {
   wrap.appendChild(el('p', 'set-lead',
     'These three lists decide what is a match at all, and what rises to the top.'));
   for (const r of rowsFor('wanted', false)) wrap.appendChild(fieldRow(r));
+  wrap.appendChild(suggestCard());
+  wrap.appendChild(setupCard());
   return wrap;
+}
+
+/* Words that keep appearing in what you dismissed and not in what you kept.
+ * A suggestion is a COUNT, not a guess: you see "4 of 6" and decide. */
+function suggestCard() {
+  const card = el('div', 'set-card');
+  card.appendChild(el('p', 'set-card-title', 'From your decisions'));
+  const list = el('div', 'suggest-list');
+  card.appendChild(list);
+  pywebview.api.reject_suggestions().then((rows) => {
+    if (!rows || !rows.length) {
+      card.hidden = true;
+      return;
+    }
+    card.appendChild(el('p', 'set-lead',
+      'Words that kept showing up in postings you dismissed. Adding one filters ' +
+      'those out on the next scan and the next re-score.'));
+    for (const s of rows) {
+      const row = el('div', 'suggest-row');
+      row.appendChild(el('span', 'suggest-term', s.term));
+      row.appendChild(el('span', 'suggest-count',
+        s.dismissed + ' of ' + s.dismissed_total + ' dismissed · ' +
+        s.kept + ' kept'));
+      const btn = el('button', 'ghost small', 'Reject it');
+      btn.type = 'button';
+      btn.addEventListener('click', async () => {
+        const out = await pywebview.api.add_reject_term(s.term);
+        if (out && out.ok) {
+          btn.textContent = 'Added';
+          btn.disabled = true;
+          markScoresStale();
+        }
+      });
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+  }).catch(() => { card.hidden = true; });
+  return card;
+}
+
+/* Three questions for an empty profile. The app is meant to be handed to
+ * someone in another field, and a template with an empty title list is not a
+ * starting point for them. */
+function setupCard() {
+  const tt = SET.rows.find((r) => r.key === 'preferences.title_terms');
+  if (!tt || (tt.value || []).length) return document.createDocumentFragment();
+  const card = el('div', 'set-card setup-card');
+  card.appendChild(el('p', 'set-card-title', 'Start here'));
+  card.appendChild(el('p', 'set-lead',
+    'Three answers are enough to get a first scan worth reading. Everything ' +
+    'below stays editable.'));
+  const grid = el('div', 'setup-grid');
+  const roles = el('input');
+  roles.placeholder = 'Roles, comma separated: archaeologist, zooarchaeologist';
+  const places = el('input');
+  places.placeholder = 'Countries, two-letter: de, at, ch, uk';
+  const skip = el('input');
+  skip.placeholder = 'Skip words: praktikum, vertrieb';
+  for (const [label, input] of [['What roles?', roles],
+                                ['Where?', places],
+                                ['What to skip?', skip]]) {
+    const box = el('label', 'setup-q');
+    box.appendChild(el('span', 'setup-label', label));
+    box.appendChild(input);
+    grid.appendChild(box);
+  }
+  card.appendChild(grid);
+  const go = el('button', 'ghost', 'Save and scan');
+  go.type = 'button';
+  go.addEventListener('click', async () => {
+    const split = (v) => v.split(',').map((x) => x.trim()).filter(Boolean);
+    if (split(roles.value).length) {
+      await pywebview.api.save_setting('preferences.title_terms', split(roles.value));
+    }
+    if (split(places.value).length) {
+      await pywebview.api.save_setting('preferences.country_allow', split(places.value));
+    }
+    if (split(skip.value).length) {
+      await pywebview.api.save_setting('preferences.title_deny', split(skip.value));
+    }
+    window.location.reload();
+  });
+  card.appendChild(go);
+  return card;
 }
 
 function wherePane() {
@@ -2685,6 +2827,30 @@ async function applicationBlock(d) {
   });
   wrap.appendChild(kill);
   return wrap;
+}
+
+/* What closes soon. The filter answers "show me closing ones"; this answers the
+ * question that loses jobs: is anything about to close that I have not applied
+ * to. One line, dismissible, and it disappears once you use it. */
+async function loadClosingWatch() {
+  let out = null;
+  try { out = await pywebview.api.deadline_watch(); } catch (e) { return; }
+  if (!out || !out.count) return;
+  const n = out.count, u = out.unapplied;
+  const line = n + (n === 1 ? ' posting closes' : ' postings close') +
+    ' within ' + out.days + ' days' +
+    (u ? ' · ' + u + ' not applied to' : ' · all applied');
+  $('closing-line').textContent = line;
+  $('closing-bar').hidden = false;
+  $('closing-show').addEventListener('click', () => {
+    const box = $('closing');
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    $('closing-bar').hidden = true;
+  });
+  $('closing-dismiss').addEventListener('click', () => {
+    $('closing-bar').hidden = true;
+  });
 }
 
 /* ---------- the Applications pane ---------- */

@@ -486,6 +486,53 @@ button.ghost.gear {
 button.ghost:disabled { opacity: .5; cursor: default; }
 button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 
+/* ---- source health, suggestions, setup ---- */
+.health-list { display: grid; gap: 2px; margin-top: 8px; }
+.health-row {
+  display: grid; grid-template-columns: 10px minmax(90px, 1fr) 2fr 16px;
+  align-items: center; gap: 8px;
+  padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.health-row:last-child { border-bottom: 0; }
+.health-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.health-row.bad .health-dot { background: var(--warn); }
+.health-row.unknown .health-dot { background: var(--line); }
+.health-row.unknown .health-run { opacity: .7; }
+.health-name { color: var(--ink); font-weight: 550; }
+.health-run { color: var(--muted); }
+.health-row.bad .health-run { color: var(--warn); }
+.health-err { color: var(--warn); cursor: help; }
+
+.suggest-list { display: grid; gap: 4px; margin-top: 6px; }
+.suggest-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.suggest-row:last-child { border-bottom: 0; }
+.suggest-term { font-weight: 600; color: var(--ink); }
+.suggest-count { color: var(--muted); margin-right: auto; }
+
+.setup-grid { display: grid; gap: 8px; margin: 10px 0; }
+.setup-q { display: grid; gap: 4px; }
+.setup-label { font-size: 12px; color: var(--muted); }
+.setup-q input {
+  height: 34px; padding: 0 10px; font: inherit;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink);
+}
+.setup-q input:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+
+/* What the advert asks for, in words the filters cannot see. */
+.d-reqs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.req-chip {
+  font-size: 12px; padding: 3px 9px 5px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink); background: var(--panel);
+  cursor: help;
+}
+.req-chip.language { border-color: var(--blue); }
+.req-chip.degree { border-color: var(--gold, #8a6400); }
+.req-chip.permit { border-color: var(--warn, #b3261e); }
+
 /* ---- scan progress ---- */
 .scanbar {
   display: flex; align-items: center; gap: 12px;

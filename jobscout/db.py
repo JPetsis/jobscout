@@ -224,6 +224,72 @@ def sources_scanned(conn) -> dict[str, str]:
                                       (SCAN_STAMP + "%",))}
 
 
+HEALTH_KEY = "health:"
+
+
+def note_source_health(conn, name: str, fetched: int, new: int = 0,
+                       error: str = "", when: str = "") -> None:
+    """Remember what one board did on its last run.
+
+    The failure this exists for is silent: a board answering HTTP 200 with zero
+    results looks identical to a board with no vacancies. `zero_streak` is the
+    tell, and `last_ok_fetched` is what it used to return.
+    """
+    when = when or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with LOCK:
+        row = conn.execute("SELECT value FROM meta WHERE key=?",
+                           (HEALTH_KEY + name,)).fetchone()
+        try:
+            cur = json.loads(row["value"]) if row and row["value"] else {}
+        except ValueError:
+            cur = {}
+        streak = int(cur.get("zero_streak") or 0)
+        if fetched:
+            streak = 0
+            cur["last_ok"] = when
+            cur["last_ok_fetched"] = int(fetched)
+        else:
+            streak += 1
+        cur.update({"last_run": when, "last_fetched": int(fetched),
+                    "last_new": int(new), "last_error": (error or "")[:300],
+                    "zero_streak": streak})
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                     (HEALTH_KEY + name, json.dumps(cur)))
+        conn.commit()
+
+
+def source_health(conn) -> dict[str, dict]:
+    """{source: health record} for every board that has been run."""
+    with LOCK:
+        rows = conn.execute("SELECT key, value FROM meta WHERE key LIKE ?",
+                            (HEALTH_KEY + "%",)).fetchall()
+    out: dict[str, dict] = {}
+    for r in rows:
+        try:
+            out[r["key"][len(HEALTH_KEY):]] = json.loads(r["value"])
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def closing_soon(conn, days: int, limit: int = 60) -> list:
+    """Postings whose advert states a deadline within `days`, soonest first.
+
+    LEFT JOIN so a row that already has an application comes back marked: the
+    question the caller asks is "what closes that I have not applied to".
+    """
+    with LOCK:
+        return conn.execute(
+            "SELECT p.id, p.title, p.company, p.location, p.deadline_at, "
+            "       p.score, p.source, p.url, a.id AS application_id "
+            "FROM postings p LEFT JOIN applications a ON a.posting_id = p.id "
+            "WHERE p.dup_of IS NULL AND p.filtered = 0 AND p.deadline_at <> '' "
+            "  AND date(p.deadline_at) >= date('now') "
+            "  AND date(p.deadline_at) <= date('now', ?) "
+            "ORDER BY date(p.deadline_at) ASC LIMIT ?",
+            (f"+{int(days)} days", int(limit))).fetchall()
+
+
 def canonical_url(url: str) -> str:
     """Strip query/fragment and trailing slash for stable fingerprints."""
     u = (url or "").strip()
