@@ -67,6 +67,9 @@ preferences:
     - sre
   title_boost: 3          # points per title term hit
   title_cap: 6            # total cap for title points
+  # How many distinct `title_terms` per board become actual searches. Each
+  # costs a request per board per page; spellings of one word share a slot.
+  query_roles: 3
   # whole-word match in TITLE -> filtered out
   # (role-type words belong here, not in exclude_terms)
   title_deny:

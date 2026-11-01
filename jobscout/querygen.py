@@ -43,6 +43,8 @@ ADDED to it, never replace it, so hand-tuned queries keep working.
 """
 from __future__ import annotations
 
+import re
+
 # Sources verified to accept an empty keyword and return a recent-postings
 # sweep (measured 2026-10-03; extended 2026-10-15: jobup, jobscout24,
 # jobware, talent and governmentjobs all return a sweep for an empty
@@ -81,6 +83,24 @@ _LOCATION_DEFAULTS = {
 }
 
 
+# Accents folded to their base letter, then the German/English spellings of one
+# sound collapsed ("ae" -> "a"). Without this the same word in three spellings
+# costs three of the three role slots, which is how a profile listing
+# zooarchaeology never searched for it.
+_ACCENTS = str.maketrans({
+    "ä": "a", "ö": "o", "ü": "u", "ß": "ss", "é": "e", "è": "e", "ê": "e",
+    "á": "a", "à": "a", "â": "a", "í": "i", "ì": "i", "ó": "o", "ò": "o",
+    "ú": "u", "ù": "u", "ç": "c", "ñ": "n", "å": "a", "ø": "o", "æ": "a",
+})
+
+
+def _spelling_key(term: str) -> str:
+    """One key per word, however the profile spells it."""
+    s = str(term).lower().translate(_ACCENTS)
+    s = s.replace("ae", "a").replace("oe", "o").replace("ue", "u")
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
 def _norm_list(values, limit: int) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
@@ -92,7 +112,7 @@ def _norm_list(values, limit: int) -> list[str]:
         # keywords on most boards and blow the budget without paying off
         if not s or len(s) > 32 or " " in s:
             continue
-        key = s.lower()
+        key = _spelling_key(s)
         if key in seen:
             continue
         seen.add(key)
@@ -172,7 +192,11 @@ def generate_queries(cfg, name: str, prefs: dict | None = None) -> list[dict]:
         add("")
 
     # 2. role vocabulary from the profile's own title_terms
-    role_limit = int(settings.get("query_roles", 3) or 3)
+    role_limit = settings.get("query_roles", prefs.get("query_roles", 3))
+    try:
+        role_limit = int(role_limit)
+    except (TypeError, ValueError):
+        role_limit = 3
     for term in _norm_list(prefs.get("title_terms"), role_limit):
         add(term)
 

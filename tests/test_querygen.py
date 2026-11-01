@@ -32,6 +32,32 @@ def test_non_software_profile_generates_its_own_queries():
     assert not any("php" in k.lower() or "engineer" in k.lower() for k in qs)
 
 
+def test_spellings_of_one_word_cost_one_role_slot():
+    """A profile lists archäolog, archaeolog and archaolog because boards spell
+    it differently. Those are ONE word: spending all three role slots on it is
+    how zooarchaeology never got searched."""
+    prefs = {
+        "title_terms": ["archäolog", "archaeolog", "archaolog", "zooarchäolog",
+                        "zooarchaeolog", "archäozoolog", "prähistor"],
+        "stack_preferred": {},
+    }
+    from jobscout.querygen import _spelling_key
+
+    qs = kws(generate_queries(cfg(), "stepstone", prefs))
+    assert qs[0] == "", "the broad sweep still comes first"
+    keys = [_spelling_key(q) for q in qs if q]
+    assert len(keys) == len(set(keys)), "one query per word, not per spelling"
+    assert any("zooarch" in k for k in keys), "the second word gets a slot now"
+
+
+def test_a_profile_can_ask_for_more_role_words():
+    prefs = {"title_terms": ["archäolog", "zooarchäolog", "archäozoolog",
+                             "prähistor", "neolith"],
+             "stack_preferred": {}, "query_roles": 5}
+    qs = kws(generate_queries(cfg(), "stepstone", prefs))
+    assert len([q for q in qs if q]) == 5
+
+
 def test_broad_query_is_always_first_when_capable():
     for src in ("stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch"):
         qs = kws(generate_queries(cfg(), src, DEV))
