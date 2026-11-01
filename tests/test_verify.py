@@ -28,12 +28,12 @@ def _cfg(tmp_path, **prefs):
 
 
 def _store(conn, *, url, title=None, source="greenhouse", ext="", score=10,
-           status="new", filtered=0):
+           status="new", filtered=0, company="ACME", location=""):
     # The fingerprint is source+title+company+location, so two rows with the
     # same title would collapse into one -- the title carries the URL instead.
     run = dbm.start_run(conn)
     p = Posting(source=source, title=title or f"Engineer {url}",
-                company="ACME", url=url, external_id=ext)
+                company=company, location=location, url=url, external_id=ext)
     pid, _, _ = dbm.upsert(conn, p, score_posting(PREFS, p), run, "t")
     conn.execute("UPDATE postings SET score=?, filtered=?, status=? WHERE id=?",
                  (score, filtered, status, pid))
@@ -169,6 +169,25 @@ def test_a_rate_limited_host_gets_a_slower_pace_only_for_it():
     paced.get("https://example.org/jobs/x")
     assert f.calls[0][1] == 1.1
     assert f.calls[1][1] is None, "every other host keeps the shared pace"
+
+
+def test_one_post_on_two_boards_keeps_one_row(tmp_path):
+    """jobs.ac.uk and THE both carried the Cambridge museum directorship, word
+    for word. Merging those is right; merging two different employers is not."""
+    conn = dbm.connect(tmp_path / "t.db")
+    title = "Directorship of the Museum of Archaeology and Anthropology"
+    a = _store(conn, url="https://a/1", source="jobsacuk", title=title,
+               company="University of Cambridge - Department of Archaeology",
+               location="Cambridge")
+    b = _store(conn, url="https://b/1", source="theunijobs", title=title,
+               company="UNIVERSITY OF CAMBRIDGE", location="Cambridge")
+    assert dbm.dedupe_cross_source(conn, {"greenhouse"}) == 1
+    assert conn.execute("SELECT dup_of FROM postings WHERE id=?", (b,)).fetchone()["dup_of"] == a
+    # the same title at another university in the same city is another job
+    c = _store(conn, url="https://c/1", source="theunijobs", title=title,
+               company="University of Oxford", location="Cambridge")
+    assert dbm.dedupe_cross_source(conn, {"greenhouse"}) == 0
+    assert conn.execute("SELECT dup_of FROM postings WHERE id=?", (c,)).fetchone()["dup_of"] is None
 
 
 def test_dead_rows_are_removed_but_what_you_acted_on_stays(tmp_path):

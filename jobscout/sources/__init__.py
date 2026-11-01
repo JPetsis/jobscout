@@ -23,6 +23,7 @@ SOURCE_NAMES = [
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
+    "theunijobs",
     "instaffo", "ycombinator", "wellfound", "dice",
 ]
 
@@ -94,6 +95,7 @@ GROUPS = {
     "wissenschaftskarriere": GROUP_ACADEMIC,
     "myscience": GROUP_ACADEMIC,
     "jobsacuk": GROUP_UK,
+    "theunijobs": GROUP_UK,
     # per-company boards: you choose the employers, and they can be anywhere
     "greenhouse": GROUP_COMPANY, "ashby": GROUP_COMPANY,
     "recruitee": GROUP_COMPANY, "lever": GROUP_COMPANY,
@@ -166,6 +168,7 @@ NOT_DIRECT = frozenset({
     # a UK university board: employers advertise there, but the advert is the
     # board's page, not the employer's own
     "jobsacuk",
+    "theunijobs",
     # DACH boards and job centres: employers post here, and so do agencies and
     # republishers, so a per-row claim is impossible
     "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch", "ams",

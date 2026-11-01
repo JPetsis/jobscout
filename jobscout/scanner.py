@@ -26,7 +26,7 @@ from . import salary as salmod
 from .config import source_settings
 from .http import FetchError
 from .score import Score, contract_label_from_reasons, prefs_hash, score_posting
-from .sources import iter_sources
+from .sources import DIRECT_SOURCES, iter_sources
 
 Event = dict
 OnEvent = Callable[[Event], None]
@@ -383,6 +383,10 @@ def scan(cfg, conn, fetcher, *,
     # it. One pass over the table catches those pairs; doing it per upsert would
     # repeat the same comparison for every row of a 45,000-row store.
     deduped = dbm.dedupe_same_source(conn)
+    # Two boards can carry one post word for word (jobs.ac.uk and THE both ran
+    # the Cambridge museum directorship). Same-source passes cannot see that;
+    # this one can, and prefers the employer's own board when either is direct.
+    deduped += dbm.dedupe_cross_source(conn, set(DIRECT_SOURCES))
     if deduped:
         stats["deduped"] = deduped
     dbm.finish_run(conn, run_id, stats)

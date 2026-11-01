@@ -102,6 +102,7 @@ SOURCE_MODULES = [
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
+    "theunijobs",
     "instaffo", "ycombinator", "wellfound", "dice",
 ]
 _on_disk = sorted(p.stem for p in (PACKAGE / "sources").glob("*.py") if p.name != "__init__.py")

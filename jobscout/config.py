@@ -565,6 +565,11 @@ sources:
     # the posting's expiry. `queries` are keyword searches; 25 per page.
     queries: []              # from your profile unless set
 
+  theunijobs:
+    # theunijobs: Times Higher Education's board. UK-based but carries European
+    # professorial adverts too. 20 per page, sorted newest first.
+    queries: []              # from your profile unless set
+
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>

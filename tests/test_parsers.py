@@ -741,6 +741,34 @@ def test_stepstone_accepts_absolute_title_links(fixture_text):
     assert p.posted_at.startswith("2026-")
 
 
+def test_theunijobs_reads_the_board_card(fixture_text):
+    """THE carries the European professorial adverts next to the British ones,
+    and its anchor is broken across lines: "<a \n\n href=\"\n\t/unijobs/…"."""
+    from jobscout.sources import theunijobs
+
+    postings = theunijobs.parse(fixture_text("theunijobs_2026.html"))
+    assert len(postings) == 3
+    p = postings[0]
+    assert p.title.startswith("Professorship (W2) of Classical Archaeology")
+    assert p.company == "LUDWIG MAXIMILIANS UNIVERSITAET MUENCHEN"
+    assert p.location.startswith("Munich")
+    assert p.url.startswith("https://www.timeshighereducation.com/unijobs/listing/416816/")
+    assert "LinkSource" not in p.url, "the tracking suffix is not part of the advert"
+    assert p.external_id == "416816"
+    assert p.posted_at == "2026-10-22"
+    assert p.compensation == "W2"
+
+
+def test_theunijobs_turns_relative_dates_into_days():
+    from datetime import date, timedelta
+    from jobscout.sources import theunijobs
+
+    assert theunijobs._posted("10 days ago") == (date.today() - timedelta(days=10)).isoformat()
+    assert theunijobs._posted("2 hours ago") == date.today().isoformat()
+    assert theunijobs._posted("Today") == date.today().isoformat()
+    assert theunijobs._posted("") == ""
+
+
 def test_jobsacuk_reads_the_uk_board_card(fixture_text):
     """The card carries what the sector cares about: department, employer,
     salary band, the date placed, and a CLOSING date that becomes the expiry."""

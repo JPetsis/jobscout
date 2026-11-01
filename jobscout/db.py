@@ -589,6 +589,50 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
     return marked
 
 
+def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
+    """Two boards advertising one post: keep a single row. Returns how many went.
+
+    Deliberately narrow. It merges only when the title is IDENTICAL after
+    normalisation, the place matches and one company name contains the other,
+    because a wrong merge hides a job the user could have applied to. It caught
+    the Cambridge museum directorship, advertised with the same wording by
+    jobs.ac.uk and THE, from two different boards.
+
+    The employer's own board wins when one of the rows came from it; otherwise
+    the row seen first stays, so the original advert keeps its id and history.
+    """
+    groups: dict[tuple[str, str], list] = {}
+    rows = conn.execute(
+        "SELECT id, source, title, company, location FROM postings "
+        "WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id"
+    ).fetchall()
+    for r in rows:
+        # boards disagree about how much of the address to print ("Cambridge"
+        # vs "Cambridge, United Kingdom"), so only the first segment is compared
+        place = norm((r["location"] or "").split(",")[0])
+        title, company = norm(r["title"]), norm(r["company"])
+        if len(title) < 30 or len(company) < 6 or not place:
+            continue
+        groups.setdefault((place, title), []).append(
+            {"id": r["id"], "source": r["source"], "company": company})
+    marked = 0
+    for items in groups.values():
+        if len(items) < 2:
+            continue
+        keeper = next((it for it in items if it["source"] in direct), items[0])
+        for it in items:
+            if it is keeper:
+                continue
+            a, b = keeper["company"], it["company"]
+            if a.startswith(b) or b.startswith(a):
+                conn.execute("UPDATE postings SET dup_of=? WHERE id=?",
+                             (keeper["id"], it["id"]))
+                marked += 1
+    if marked:
+        conn.commit()
+    return marked
+
+
 def purge_dead(conn: sqlite3.Connection, keep_statuses=("saved", "applied")) -> int:
     """Delete postings a check found gone. Returns how many went.
 
