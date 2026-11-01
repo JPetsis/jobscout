@@ -246,8 +246,9 @@ def test_the_header_groups_verbs_views_and_tools():
     """Reported: six identical buttons in a row, so nothing told you which one
     was a view and which one did work. Grouping is the whole UX answer here."""
     base = Path(__file__).resolve().parents[1] / "jobscout" / "web"
-    html = (base / "index.html").read_text(encoding="utf-8")
+    page = (base / "index.html").read_text(encoding="utf-8")
     css = (base / "styles.css").read_text(encoding="utf-8")
+    html = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
 
     # Views are one control, not two loose buttons.
     views = html.split('class="seg views"', 1)[1].split("</div>", 1)[0]
@@ -257,8 +258,11 @@ def test_the_header_groups_verbs_views_and_tools():
     work = html.split('class="bar-work"', 1)[1].split("</div>", 1)[0]
     assert 'id="scan-btn"' in work and 'id="check-btn"' in work
 
-    # Dividers are the grouping: two of them, three clusters.
+    # Dividers are the grouping: two of them, three clusters, in the order
+    # asked for: work, then views, then tools.
     assert html.count('class="bar-div"') == 2
+    assert html.index('class="bar-work"') < html.index('class="seg views"')
+    assert html.index('id="pay-btn"') < html.index('id="apps-btn"')
 
     # Settings is a tool at the edge, icon-only, and still announced.
     assert 'id="settings-btn"' in html

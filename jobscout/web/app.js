@@ -2703,6 +2703,12 @@ async function loadAppsCount() {
         ? n + ' logged · ' + stats.open + ' still running' +
           (stats.due ? ' · ' + stats.due + ' follow-up' + (stats.due === 1 ? '' : 's') + ' due' : '')
         : 'Every application you logged, and what came of it';
+      // The due marker is a dot, and a dot is colour alone: say it in words as
+      // well, for the screen reader and for anyone who cannot see the colour.
+      btn.setAttribute('aria-label', n
+        ? 'Applications, ' + n + ' logged' +
+          (stats.due ? ', ' + stats.due + ' follow-up due' : '')
+        : 'Applications');
     }
   } catch (e) { /* a count must never break the window */ }
 }

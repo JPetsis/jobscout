@@ -110,25 +110,43 @@ body {
      nudge the corner radius to sit with the panel's own rounding */
   border-radius: 4px;
 }
-.stats { font-size: 12.5px; color: var(--muted); }
+/* nowrap + ellipsis: at 800px the header is tight, and "5 strong" used to break
+   across two lines mid-phrase. */
+.stats {
+  font-size: 12.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
 .stats b { color: var(--ink); font-weight: 600; }
 .stats .gold { color: var(--gold); font-weight: 600; }
 
 /* ---- filters ---- */
 .filters {
+  display: grid;
+  gap: 8px;
+  padding: 0 18px 12px;
+}
+/* Two rows: find, then narrow. Each row groups its own controls and wraps only
+   when the window makes it unavoidable. */
+.find-row, .filter-row {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 18px 12px;
   flex-wrap: wrap;
 }
+/* The search is the primary control, so it is the only one that is taller and
+   the only one with an icon: field, not another chip. */
 .filters input[type=search] {
-  flex: 1 1 240px;
-  min-width: 180px;
-  padding: 7px 11px;
+  flex: 1 1 320px;
+  min-width: 220px;
+  height: 38px;
+  padding: 0 11px 0 34px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M20 20l-4.2-4.2'/></svg>");
+  background-repeat: no-repeat;
+  background-position: 11px center;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel);
+  /* background-color, not the shorthand: `background:` would wipe the icon */
+  background-color: var(--panel);
   color: var(--ink);
   font: inherit;
 }
@@ -136,13 +154,16 @@ body {
 .filters select:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
 
 .filters select {
-  padding: 7px 9px;
+  height: 34px;
+  padding: 0 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  color: var(--ink);
+  /* the narrowing row is secondary: quiet until touched */
+  color: var(--muted);
   font: inherit;
 }
+.filters select:hover, .filters select:focus { color: var(--ink); }
 
 .seg {
   display: inline-flex;
@@ -156,13 +177,16 @@ body {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  padding: 7px 12px;
+  padding: 0 12px;
+  height: 32px;                 /* + the 1px border of .seg = 34, like a field */
+  display: inline-flex; align-items: center;
+  white-space: nowrap;
   cursor: pointer;
 }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--chip); color: var(--blue); font-weight: 600; }
 /* the theme switcher is icon-only: glyphs are narrower than words */
-.seg.theme button { padding: 7px 9px; font-size: 13px; line-height: 1; }
+.seg.theme button { padding: 0 9px; font-size: 13px; line-height: 1; }
 
 .count { font-size: 12.5px; color: var(--muted); margin-left: auto; }
 
@@ -283,6 +307,25 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* A filter pill: a checkbox that reads as a toggle, which is what it is.
+   The input stays focusable (opacity, not display:none) so the keyboard still
+   reaches it, and :has() paints the pill from the input's own state. */
+.toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel); color: var(--muted);
+  font-size: 12.5px; cursor: pointer; user-select: none;
+  /* wrapping beats being cut off at the window edge on a narrow window */
+  white-space: normal; max-width: 100%;
+}
+.toggle:hover { border-color: var(--blue); color: var(--ink); }
+.toggle:has(input:checked) {
+  border-color: var(--blue); background: var(--chip);
+  color: var(--ink); font-weight: 600;
+}
+.toggle:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+
 .fresh {
   display: inline-flex;
   align-items: center;
@@ -414,23 +457,33 @@ body {
    disappears on the light theme's warm paper (checked at 3x). */
 .bar-div { width: 1px; align-self: stretch; margin: 2px 0;
            background: var(--muted); opacity: .35; }
-.bar-work, .bar-tools { display: flex; gap: 8px; align-items: center; }
+.bar-work, .bar-tools { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
 /* Views read as a switch between panes, which is what they are. */
-.seg.views button { padding: 6px 12px; color: var(--ink); }
+.seg.views button { color: var(--ink); }
 .seg.views button:hover { background: var(--chip); color: var(--blue); }
-/* Settings is a tool, not a verb: an icon at the edge, announced by its label. */
-button.ghost.gear { padding: 6px 10px; font-size: 15px; line-height: 1; }
+/* ONE control height down the whole chrome. Mixed heights were visible at 3x
+   (search 36, selects 35, pills 30, gear 29) and read as sloppiness long before
+   anyone could name it. */
 button.ghost {
   background: var(--panel);
   border: 1px solid var(--line);
   color: var(--ink);
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 0 12px;
+  height: 34px;
+  display: inline-flex; align-items: center;
+  white-space: nowrap;          /* a two-line "Check listings" is a defect */
   font: inherit;
   cursor: pointer;
 }
 button.ghost:hover { border-color: var(--blue); color: var(--blue); }
-button.ghost.small { padding: 3px 9px; font-size: 12px; }
+button.ghost.small { padding: 0 9px; font-size: 12px; height: 26px; }
+/* Settings is a tool, not a verb: a square icon at the edge, announced by its
+   label. Declared after .ghost so it only refines it. */
+button.ghost.gear {
+  padding: 0; width: 36px; height: 34px; font-size: 15px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 button.ghost:disabled { opacity: .5; cursor: default; }
 button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 
@@ -763,7 +816,13 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
 
 /* ---- the job logger ------------------------------------------------ */
 .pane.apps { width: 760px; }
-#apps-btn.warn { color: var(--warn); border-color: var(--warn); }
+/* A due follow-up is a DOT, not a repainted label: colouring one segment of a
+   segmented control made it read as the selected tab next to a plain "Pay". */
+#apps-btn.warn { color: var(--ink); }
+#apps-btn.warn::after {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn); margin-left: 3px;
+}
 
 .apps-stats {
   display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px;

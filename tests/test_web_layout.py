@@ -55,10 +55,27 @@ def test_the_columns_fill_the_whole_width():
 
 
 def test_a_filter_label_may_wrap_instead_of_being_cut_off():
-    # the RULE, not ".chip.direct.fresh {" which comes first in the file
-    fresh = CSS.split("\n.fresh {", 1)[1].split("}", 1)[0]
-    assert "white-space: normal" in fresh
-    assert "max-width: 100%" in fresh
+    # filter checkboxes are pills now; the wrapping rule moved with them
+    toggle = CSS.split("\n.toggle {", 1)[1].split("}", 1)[0]
+    assert "white-space: normal" in toggle
+    assert "max-width: 100%" in toggle
+    # the checkbox stays reachable by keyboard: hidden by opacity, not display
+    assert "position: absolute; opacity: 0" in CSS.split("\n.toggle input {", 1)[1].split("}", 1)[0]
+
+
+def test_the_filter_bar_has_two_grouped_rows():
+    """Reported: eight controls in one line, all at the same weight. Find is a
+    row of its own, narrowing is another, and each groups its own controls."""
+    assert 'class="find-row"' in HTML and 'class="filter-row"' in HTML
+    find_row = HTML.split('class="find-row"', 1)[1].split('<div class="filter-row"', 1)[0]
+    assert 'id="q"' in find_row and 'id="band"' in find_row
+    filter_row = HTML.split('class="filter-row"', 1)[1].split("</section>", 1)[0]
+    assert 'id="source"' in filter_row and 'id="status"' in filter_row
+    assert 'id="closing"' in filter_row and 'id="fresh"' in filter_row
+    assert 'id="count"' in filter_row, "the count reports what the filters leave"
+    assert 'class="toggle"' in filter_row, "the checkboxes read as pills"
+    grid = CSS.split("\n.filters {", 1)[1].split("}", 1)[0]
+    assert "display: grid" in grid
 
 
 def test_the_filters_are_the_controls_the_tests_look_for():
