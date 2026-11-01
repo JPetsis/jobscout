@@ -1607,9 +1607,17 @@ function suggestCard() {
   card.appendChild(el('p', 'set-card-title', 'From your decisions'));
   const list = el('div', 'suggest-list');
   card.appendChild(list);
-  pywebview.api.reject_suggestions().then((rows) => {
-    if (!rows || !rows.length) {
-      card.hidden = true;
+  pywebview.api.reject_suggestions().then((out) => {
+    const rows = (out && out.items) || [];
+    if (!rows.length) {
+      // Say why it is empty. A card that vanishes leaves the person who read
+      // about suggestions wondering whether the app is broken.
+      const n = (out && out.dismissed) || 0;
+      const need = ((out && out.needed) || 3) - n;
+      card.appendChild(el('p', 'set-lead',
+        'Dismiss a few postings and the words they share will appear here as ' +
+        'things to reject. ' + (n ? n + ' dismissed so far' : 'Nothing dismissed yet') +
+        (need > 0 ? ' · ' + need + ' more before a pattern can be named.' : '.')));
       return;
     }
     card.appendChild(el('p', 'set-lead',

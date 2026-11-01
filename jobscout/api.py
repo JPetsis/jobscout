@@ -824,7 +824,7 @@ _SUGGEST_STOP = frozenset("""
 """.split())
 
 
-def reject_suggestions(cfg, conn, limit: int = 5) -> list[dict]:
+def reject_suggestions(cfg, conn, limit: int = 5) -> dict:
     """Terms that kept showing up in what you dismissed and not in what you kept.
 
     Counted, not learned: a suggestion says "9 of 11 postings you dismissed
@@ -839,8 +839,10 @@ def reject_suggestions(cfg, conn, limit: int = 5) -> list[dict]:
             "SELECT title, status FROM postings WHERE dup_of IS NULL "
             "AND status IN ('dismissed', 'saved', 'applied')"):
         (dismissed if r["status"] == "dismissed" else kept).append(r["title"] or "")
+    # The caller always gets a shape it can show. An empty list with no counts
+    # is why the card silently vanished for a profile with two dismissals.
     if len(dismissed) < 3:
-        return []
+        return {"items": [], "dismissed": len(dismissed), "needed": 3}
 
     def counts(titles):
         c: dict[str, int] = {}
@@ -861,7 +863,7 @@ def reject_suggestions(cfg, conn, limit: int = 5) -> list[dict]:
                     "kept": in_kept.get(term, 0), "dismissed_total": len(dismissed)})
         if len(out) >= limit:
             break
-    return out
+    return {"items": out, "dismissed": len(dismissed), "needed": 3}
 
 
 def add_reject_term(cfg, term: str) -> dict:

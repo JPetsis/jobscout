@@ -81,7 +81,17 @@ def test_a_word_you_dismissed_repeatedly_is_offered_as_a_reject_term(tmp_path):
     _store(conn, title="Engineer kept two", status="applied")
 
     out = api.reject_suggestions(_cfg(tmp_path), conn)
-    assert any(s["term"] == "vertriebsleiter" for s in out)
+    assert any(s["term"] == "vertriebsleiter" for s in out["items"])
+    assert out["dismissed"] == 4 and out["needed"] == 3
+
+
+def test_the_suggestion_card_is_told_why_it_is_empty(tmp_path):
+    """Reported: the card never appeared. It hid itself when it had nothing to
+    say, which reads as a broken feature rather than an empty one."""
+    conn = dbm.connect(tmp_path / "t.db")
+    _store(conn, title="Vertriebsleiter", status="dismissed")
+    out = api.reject_suggestions(_cfg(tmp_path), conn)
+    assert out["items"] == [] and out["dismissed"] == 1 and out["needed"] == 3
 
 
 def test_adding_a_reject_term_keeps_the_file_comments(tmp_path):

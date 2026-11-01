@@ -576,7 +576,7 @@ class JsApi:
         """What each board did on its last run: results, zero streak, error."""
         return api.source_health(self.cfg, self.conn)
 
-    def reject_suggestions(self) -> list[dict]:
+    def reject_suggestions(self) -> dict:
         """Words common in what you dismissed, rare in what you kept."""
         return api.reject_suggestions(self.cfg, self.conn)
 
