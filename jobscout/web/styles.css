@@ -504,6 +504,17 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .health-row:last-child { border-bottom: 0; }
 .health-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .health-row.bad .health-dot { background: var(--warn); }
+.health-item { border-bottom: 1px solid var(--line); }
+.health-item .health-row { border-bottom: 0; }
+.health-item.open .health-row { padding-bottom: 2px; }
+.health-summary { color: var(--warn); font-size: 12.5px; margin: 8px 0 0; }
+.health-error {
+  font-size: 12px; color: var(--warn); padding: 0 0 6px 18px;
+  overflow-wrap: anywhere; cursor: pointer;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.health-item.open .health-error { -webkit-line-clamp: 8; }
 .health-row.unknown .health-dot { background: var(--line); }
 .health-row.unknown .health-run { opacity: .7; }
 .health-name { color: var(--ink); font-weight: 550; }

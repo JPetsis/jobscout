@@ -1505,11 +1505,24 @@ function healthCard() {
         }
       }
       row.appendChild(el('span', 'health-run', text));
+      const item = el('div', 'health-item');
+      item.appendChild(row);
       if (r.last_error) {
-        row.title = r.last_error;
-        row.appendChild(el('span', 'health-err', '⚠'));
+        // The error itself, not a symbol that needs a hover to explain. Click
+        // to see all of it: a hover tooltip is not available on touch, and was
+        // reported as "a question mark that does nothing".
+        const err = el('div', 'health-error', r.last_error);
+        err.title = 'Click to show the whole message';
+        err.addEventListener('click', () => item.classList.toggle('open'));
+        item.appendChild(err);
       }
-      list.appendChild(row);
+      list.appendChild(item);
+    }
+    const broken = (rows || []).filter((r) => r.last_error).length;
+    if (broken) {
+      card.insertBefore(el('p', 'health-summary',
+        broken + (broken === 1 ? ' board reported' : ' boards reported') +
+        ' an error on its last run'), list);
     }
   }).catch(() => {});
   return card;
@@ -2385,7 +2398,12 @@ async function pollScan() {
         s.new + ' new · ' + s.matches + ' matches this run' +
         (((s.skipped_fresh || []).length)
           ? ' · ' + s.skipped_fresh.length + ' sources were fresh' : '') +
-        (failures.length ? ' · ' + failures.length + ' sources failed' : '') +
+        // Errors are strings, not boards: XING alone emits one note per query
+        // ("3 of 20 listings had no link and were skipped"), which read as
+        // "4 sources failed" when four boards were fine.
+        (failures.length
+          ? ' · ' + failures.length + ' error' + (failures.length === 1 ? '' : 's')
+          : '') +
         (s.cancelled ? '  (cancelled early)' : '');
     }
     $('scan-btn').disabled = false;
