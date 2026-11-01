@@ -86,8 +86,14 @@ def strip_null_runs(text: str) -> str:
     Two or more in a row only, and lowercase only: a single "null" is a word a
     programming advert may legitimately use ("returns null when the row is
     missing"), while "null null null" is a rendering bug.
+
+    Text with no such run is returned UNCHANGED, including its whitespace: this
+    also runs on every stored description, and silently trimming a document is
+    not its job (a probe test caught exactly that).
     """
-    return _NULL_RUN.sub("", text or "").strip()
+    text = text or ""
+    cleaned = _NULL_RUN.sub("", text)
+    return cleaned.strip() if cleaned != text else text
 
 
 def fold(s: str) -> str:

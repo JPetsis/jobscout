@@ -22,6 +22,7 @@ from . import db as dbm
 from . import deadlines
 from . import salary as salmod
 from . import sources
+from .textutil import strip_null_runs
 
 VALID_STATUSES = ("new", "saved", "applied", "dismissed")
 
@@ -177,6 +178,10 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
         out["salary"] = salmod.fmt_row(row) or ""
     except Exception:                                        # noqa: BLE001
         out["salary"] = ""
+    # A board's template can leave "null null null" at the end of the text (XING
+    # does, in its own metadata). Strip on READ as well as on fetch, so a row
+    # stored before the fix looks right the moment it is opened.
+    out["description"] = strip_null_runs(out.get("description") or "")
     out["score"] = float(out.get("score") or 0.0)
     out["direct"] = sources.is_direct(out.get("source") or "")
     out["direct_note"] = sources.direct_note(out.get("source") or "")
