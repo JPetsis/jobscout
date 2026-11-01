@@ -250,9 +250,10 @@ def test_the_header_groups_verbs_views_and_tools():
     css = (base / "styles.css").read_text(encoding="utf-8")
     html = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
 
-    # Views are one control, not two loose buttons.
-    views = html.split('class="seg views"', 1)[1].split("</div>", 1)[0]
+    # Views are two buttons shaped like the work buttons, in their own group.
+    views = html.split('class="bar-views"', 1)[1].split("</div>", 1)[0]
     assert 'id="apps-btn"' in views and 'id="pay-btn"' in views
+    assert views.count('class="ghost"') == 2, "same shape as Scan and Check"
 
     # Verbs sit together, apart from the views and from the tools.
     work = html.split('class="bar-work"', 1)[1].split("</div>", 1)[0]
@@ -261,13 +262,13 @@ def test_the_header_groups_verbs_views_and_tools():
     # Dividers are the grouping: two of them, three clusters, in the order
     # asked for: work, then views, then tools.
     assert html.count('class="bar-div"') == 2
-    assert html.index('class="bar-work"') < html.index('class="seg views"')
+    assert html.index('class="bar-work"') < html.index('class="bar-views"')
     assert html.index('id="pay-btn"') < html.index('id="apps-btn"')
 
     # Settings is a tool at the edge, icon-only, and still announced.
     assert 'id="settings-btn"' in html
     assert 'aria-label="Settings"' in html
-    assert ".bar-div" in css and ".seg.views" in css
+    assert ".bar-div" in css and ".bar-views" in css
 
 
 def test_the_window_does_not_ask_for_a_fixed_number(ws):

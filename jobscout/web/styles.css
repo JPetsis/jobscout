@@ -457,10 +457,9 @@ body {
    disappears on the light theme's warm paper (checked at 3x). */
 .bar-div { width: 1px; align-self: stretch; margin: 2px 0;
            background: var(--muted); opacity: .35; }
-.bar-work, .bar-tools { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
-/* Views read as a switch between panes, which is what they are. */
-.seg.views button { color: var(--ink); }
-.seg.views button:hover { background: var(--chip); color: var(--blue); }
+.bar-work, .bar-views, .bar-tools {
+  display: flex; gap: 8px; align-items: center; flex: 0 0 auto;
+}
 /* ONE control height down the whole chrome. Mixed heights were visible at 3x
    (search 36, selects 35, pills 30, gear 29) and read as sloppiness long before
    anyone could name it. */
