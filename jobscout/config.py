@@ -559,6 +559,12 @@ sources:
     # location parameter.
     queries: []              # from your profile unless set
 
+  jobsacuk:
+    # jobs.ac.uk: the UK higher-education board. Server-rendered, no key. Cards
+    # carry the department, the salary band and a CLOSING date, which becomes
+    # the posting's expiry. `queries` are keyword searches; 25 per page.
+    queries: []              # from your profile unless set
+
 companies:
   greenhouse:
     # board tokens from https://boards.greenhouse.io/<token>

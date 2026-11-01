@@ -157,19 +157,20 @@ def test_jobicy_cursor_paging():
 
 # --- SSR sources -----------------------------------------------------------
 
-def test_jobware_reads_data_attributes(fixture_text):
-    html = fixture_text("jobware_list.html")
-    # The trap this parser exists for: the cards carry NO plain anchors.
-    assert 'href="/job/' not in html
+def test_jobware_reads_the_current_card_markup(fixture_text):
+    """The board moved again: the detail link is a plain anchor now, and the
+    old `data-job-detail-url` on a button is gone. That change is why the source
+    stored nothing for eight runs while the page still answered 200."""
+    html = fixture_text("jobware_2026.html")
     ps = jobware.parse(html)
-    assert len(ps) == 1
+    assert len(ps) == 2
     p = ps[0]
-    assert p.title == "PHP Entwickler (m/w/d)"
-    assert p.company == "Multa Medio Informationssysteme AG"
-    assert p.location == "Würzburg (DE)"
-    assert p.url == "https://www.jobware.de/job/php-entwickler-m-w-d-064559047"
-    assert p.external_id == "064559047"
-    assert p.posted_at == "2026-10-10"
+    assert p.title.startswith("Soldatin / Soldat im Flugabwehrraketendienst")
+    assert p.company == "Bundesamt für das Personalmanagement der Bundeswehr"
+    assert p.location == "deutschlandweit"
+    assert p.url.startswith("https://www.jobware.de/job/")
+    assert p.external_id.isdigit()
+    assert p.posted_at == "2026-11-01"
 
 
 def test_jobware_paging_and_location_warning(fixture_text):

@@ -1,5 +1,13 @@
 """talent.com — global job aggregator with a German front (de.talent.com).
 
+BROKEN as of 2026-11-01: the search page now returns a client-rendered shell.
+No `jobcard-container-` markup, no /view?id= links, no data-testid and no JSON
+payload in the HTML (checked for php, archaeologie and Archaologie, all 200s of
+~450KB of CSS and an empty ItemList). The parser below is kept for the day the
+data comes back, but nothing will be fetched until talent exposes an API or the
+markup returns. Do not spend a scan budget on it.
+
+
 `GET https://de.talent.com/jobs?k=<kw>&l=<loc>&p=<page>` is server-rendered:
 20 cards per page (verified live 2026-10-15, `&p=2` returns different rows).
 Cards are `div[data-testid="jobcard-container-<id>"]` and carry

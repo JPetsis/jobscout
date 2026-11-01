@@ -12,7 +12,11 @@ LABEL = "StepStone"
 BASE = "https://www.stepstone.de"
 
 _CARD_SPLIT = 'data-testid="job-item"'
-_RE_HREF = re.compile(r'href="(/stellenangebote--[^"]+)"')
+# The title anchor is ABSOLUTE now ("https://www.stepstone.de/stellenangebote--…").
+# The old pattern required a leading slash, so every card was dropped and the
+# source stored nothing for thirty runs while the page still answered 200.
+_RE_HREF = re.compile(
+    r'href="(?:(?:https?://[a-z.]*stepstone\.de)?(/stellenangebote--[^"]+))"')
 _RE_TITLE = re.compile(r'data-at="job-item-title"[^>]*>(.*?)</a>', re.S)
 _RE_COMPANY = re.compile(r'data-genesis-element="COMPANY_LOGO_IMAGE"[^>]*\balt="([^"]+)"')
 _RE_COMPANY_FALLBACK = re.compile(r'\balt="([^"]{2,120})"')

@@ -21,30 +21,37 @@ from urllib.parse import quote_plus
 
 from ..http import Fetcher
 from ..models import Posting
-from ..textutil import date_part
+from ..textutil import clean_html, date_part
 
 NAME = "jobware"
 LABEL = "Jobware"
 API = "https://www.jobware.de/jobs"
 
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
-_H2 = re.compile(r"<h2[^>]*>(?P<title>[^<]+)</h2>")
-_COMPANY = re.compile(r'job-card__advertiser-name">\s*([^<]+?)\s*<')
+# The card is a Qwik component whose markup moved: the detail link is now a
+# plain anchor in the footer (`data-job-detail-link`), next to a real
+# `<time dateTime=…>`, and the title sits in `job-card__title-wrapper`. The old
+# parser looked for `data-job-detail-url` on a BUTTON that no longer exists, so
+# it stored nothing for eight runs while the page answered 200.
+_CARD_SPLIT = 'class="job-card__title-wrapper"'
+_H2 = re.compile(r"<h2[^>]*>(?P<title>.*?)</h2>", re.S)
+_COMPANY = re.compile(r'job-card__advertiser-name[^"]*"[^>]*>\s*([^<]+?)\s*<')
+# The place sits AFTER a visually-hidden "in" span inside the location tag
+# ("…<span class=visually-hidden>in</span> Berlin"), so capturing the tag's
+# text yields "in". The old pattern was right about that; it is kept.
 _LOCATION = re.compile(r'nrmdy-visually-hidden">in</span>\s*([^<]+?)\s*<')
-_DETAIL = re.compile(r'data-job-detail-url="(/job/[^"]+)"')
-_TIME = re.compile(r'<time dateTime="([^"]+)"')
+_DETAIL = re.compile(r'href="(/job/[^"]+)"')
+_TIME = re.compile(r'<time[^>]*dateTime="([^"]+)"')
 
 
 def parse(text: str) -> list[Posting]:
     text = _COMMENT.sub("", text or "")
-    h2s = list(_H2.finditer(text))
+    chunks = text.split(_CARD_SPLIT)[1:]
     out = []
-    for i, m in enumerate(h2s):
-        start = m.start()
-        end = h2s[i + 1].start() if i + 1 < len(h2s) else len(text)
-        chunk = text[start:end]
+    for chunk in chunks:
+        m = _H2.search(chunk)
         det = _DETAIL.search(chunk)
-        title = m.group("title").strip()
+        title = clean_html(m.group("title")) if m else ""
         if not det or not title:
             continue
         company = _COMPANY.search(chunk)
@@ -55,7 +62,7 @@ def parse(text: str) -> list[Posting]:
             source=NAME,
             title=title,
             company=(company.group(1).strip() if company else ""),
-            location=(loc.group(1).strip() if loc else ""),
+            location=clean_html(loc.group(1)) if loc else "",
             url="https://www.jobware.de" + det.group(1),
             external_id=(ext.group(1) if ext else det.group(1)),
             posted_at=(date_part(tm.group(1)) if tm else ""),

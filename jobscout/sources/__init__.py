@@ -22,7 +22,7 @@ SOURCE_NAMES = [
     "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
-    "academics", "wissenschaftskarriere", "euraxess", "myscience",
+    "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
     "instaffo", "ycombinator", "wellfound", "dice",
 ]
 
@@ -52,6 +52,7 @@ GROUP_OTHER = "Other"
 GROUP_DACH = "Germany, Austria & Switzerland"
 GROUP_US = "United States"
 GROUP_EU = "European Union"
+GROUP_UK = "United Kingdom"
 GROUP_GLOBAL = "Global & remote"
 GROUP_ACADEMIC = "Academic & research"
 GROUP_COMPANY = "Company boards"
@@ -60,6 +61,7 @@ GROUP_ORDER = [
     GROUP_DACH,
     GROUP_US,
     GROUP_EU,
+    GROUP_UK,
     GROUP_GLOBAL,
     GROUP_ACADEMIC,
     GROUP_COMPANY,
@@ -91,6 +93,7 @@ GROUPS = {
     "academics": GROUP_ACADEMIC,
     "wissenschaftskarriere": GROUP_ACADEMIC,
     "myscience": GROUP_ACADEMIC,
+    "jobsacuk": GROUP_UK,
     # per-company boards: you choose the employers, and they can be anywhere
     "greenhouse": GROUP_COMPANY, "ashby": GROUP_COMPANY,
     "recruitee": GROUP_COMPANY, "lever": GROUP_COMPANY,
@@ -160,6 +163,9 @@ def is_direct(name: str) -> bool:
 # it is. Not being direct is the safe default (no badge, no claim), so this list
 # exists to record the decision, not to change behaviour.
 NOT_DIRECT = frozenset({
+    # a UK university board: employers advertise there, but the advert is the
+    # board's page, not the employer's own
+    "jobsacuk",
     # DACH boards and job centres: employers post here, and so do agencies and
     # republishers, so a per-row claim is impossible
     "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch", "ams",

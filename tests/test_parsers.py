@@ -726,6 +726,50 @@ def test_workday_detail_keeps_the_tenant_on_its_own_host():
     assert text == "Build GPUs"
 
 
+def test_stepstone_accepts_absolute_title_links(fixture_text):
+    """The title anchor became absolute (https://www.stepstone.de/…). The old
+    pattern required a leading slash, so every card was dropped and the source
+    stored nothing for thirty runs while the page answered 200."""
+    postings = stepstone.parse(fixture_text("stepstone_2026.html"))
+    assert len(postings) == 2
+    p = postings[0]
+    assert p.url.startswith("https://www.stepstone.de/stellenangebote--")
+    assert p.url.endswith("-14325183-inline.html")
+    assert p.external_id == "14325183"
+    assert "Archäolog" in p.title
+    assert p.company and p.location == "Schwarzach am Main"
+    assert p.posted_at.startswith("2026-")
+
+
+def test_jobsacuk_reads_the_uk_board_card(fixture_text):
+    """The card carries what the sector cares about: department, employer,
+    salary band, the date placed, and a CLOSING date that becomes the expiry."""
+    from jobscout.sources import jobsacuk
+
+    postings = jobsacuk.parse(fixture_text("jobsacuk_2026.html"))
+    assert len(postings) == 3
+    p = postings[0]
+    assert p.title == "Lecturer in Archaeology and Heritage"
+    assert p.company.startswith("Birkbeck, University of London")
+    assert "School of Historical" in p.company, "the department tells two roles apart"
+    assert p.location == "London"
+    assert p.url.startswith("https://www.jobs.ac.uk/job/")
+    assert p.external_id == "1087955"
+    assert p.posted_at == "2026-09-15"
+    assert p.expires_at == "2026-11-02", "the closing date is a real expiry"
+    assert "44,247" in p.compensation
+
+
+def test_jobsacuk_infers_the_missing_year_forward_and_back():
+    from datetime import date
+    from jobscout.sources import jobsacuk
+
+    placed = jobsacuk._ymd("31 Dec", closing=False)
+    assert placed and date.fromisoformat(placed) <= date.today()
+    closes = jobsacuk._ymd("01 Jan", closing=True)
+    assert closes and date.fromisoformat(closes) >= date.today()
+
+
 def test_xing_reads_the_early_applicant_highlight(fixture_text):
     """XING ships the highlight as JSON inside the page, not as visible text.
 
