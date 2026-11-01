@@ -294,6 +294,12 @@ body {
 .chip.deadline { color: var(--muted); }
 .chip.deadline.soon { color: var(--warn, #b3261e); border-color: transparent; background: rgba(179,38,30,.10); font-weight: 600; }
 .chip.deadline.gone { opacity: .6; text-decoration: line-through; }
+/* The whole card, not just the pill: a closed advert should stop competing with
+   the open ones. Dimmed and struck through, still readable, still clickable. */
+.card.expired { opacity: .55; }
+.card.expired .title,
+.card.expired .company { text-decoration: line-through; }
+.card.expired:hover { opacity: .8; }
 /* The words a full-text search matched, on the card that matched them. */
 .snippet {
   margin-top: 6px;
@@ -487,6 +493,8 @@ button.ghost:disabled { opacity: .5; cursor: default; }
 button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 
 /* ---- source health, suggestions, setup ---- */
+/* breathing room from the block above it, and below it from the pane edge */
+.health-card { margin-top: 16px; margin-bottom: 8px; }
 .health-list { display: grid; gap: 2px; margin-top: 8px; }
 .health-row {
   display: grid; grid-template-columns: 10px minmax(90px, 1fr) 2fr 16px;

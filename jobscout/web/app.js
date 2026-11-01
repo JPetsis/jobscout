@@ -468,7 +468,13 @@ function render() {
 }
 
 function card(r, strongTh) {
-  const c = el('div', 'card' + (r.status !== 'new' ? ' done' : ''));
+  // A posting whose stated deadline has passed is not a candidate any more.
+  // The pill said so; the card has to say so too, or the row still competes for
+  // attention with the ones that are open.
+  const expired = r.closes_in_days !== null && r.closes_in_days !== undefined &&
+                  r.closes_in_days < 0;
+  const c = el('div', 'card' + (r.status !== 'new' ? ' done' : '') +
+                      (expired ? ' expired' : ''));
   c.dataset.id = r.id;
   c.title = (r.reasons || []).map(([l, p]) => l + ' +' + p).join(' · ') || '';
 
@@ -1471,7 +1477,7 @@ function boardsPane() {
 /* Each board's last run. A board that keeps answering with nothing has usually
  * changed its page, and that is invisible everywhere else in the app. */
 function healthCard() {
-  const card = el('div', 'set-card');
+  const card = el('div', 'set-card health-card');
   card.appendChild(el('p', 'set-card-title', 'Source health'));
   card.appendChild(el('p', 'set-lead',
     'What each board returned the last time it ran. A board answering with ' +
