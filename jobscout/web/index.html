@@ -43,17 +43,31 @@ document.documentElement.dataset.theme =
     <h1>jobscout</h1>
   </div>
   <div class="stats" id="stats"><span class="muted">loading…</span></div>
+  <!-- Three kinds of thing, three groups. Verbs (Scan, Check) are not views
+       (Applications, Pay), and settings is not an action: a flat row of six
+       identical buttons made all of them look equally likely to be what you
+       wanted. Dividers do the grouping; the eye reads left to right as
+       "where am I, what can I do, how is it set up". -->
   <div class="bar-actions">
-    <div class="seg theme" id="theme" role="group" aria-label="Colour scheme">
-      <button data-v="system" title="Follow the system setting" aria-label="Follow the system setting">◐</button>
-      <button data-v="light" title="Light" aria-label="Light">☀</button>
-      <button data-v="dark" title="Dark" aria-label="Dark">☾</button>
+    <div class="seg views" id="views" role="group" aria-label="Views">
+      <button id="apps-btn" title="Every application you logged, and what came of it">Applications</button>
+      <button id="pay-btn" title="What the postings in your board advertise, per year">Pay</button>
     </div>
-    <button id="apps-btn" class="ghost" title="Every application you logged, and what came of it">Applications</button>
-    <button id="pay-btn" class="ghost" title="What the postings in your board advertise, per year">Pay</button>
-    <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
-    <button id="check-btn" class="ghost" title="Check the listings on your board: are they still open?">Check listings</button>
-    <button id="settings-btn" class="ghost" title="Edit your profile: titles, skills, locations, strictness">Settings</button>
+    <span class="bar-div" aria-hidden="true"></span>
+    <div class="bar-work" role="group" aria-label="Fetch and check">
+      <button id="scan-btn" class="ghost" title="Fetch new openings from the enabled sources">Scan</button>
+      <button id="check-btn" class="ghost" title="Check the listings on your board: are they still open?">Check listings</button>
+    </div>
+    <span class="bar-div" aria-hidden="true"></span>
+    <div class="bar-tools" role="group" aria-label="Display and settings">
+      <div class="seg theme" id="theme" role="group" aria-label="Colour scheme">
+        <button data-v="system" title="Follow the system setting" aria-label="Follow the system setting">◐</button>
+        <button data-v="light" title="Light" aria-label="Light">☀</button>
+        <button data-v="dark" title="Dark" aria-label="Dark">☾</button>
+      </div>
+      <button id="settings-btn" class="ghost gear" title="Settings: titles, skills, locations, boards, strictness"
+              aria-label="Settings">⚙</button>
+    </div>
   </div>
 </header>
 

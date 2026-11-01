@@ -408,7 +408,18 @@ body {
 
 
 /* ---- header actions ---- */
-.bar-actions { display: flex; gap: 8px; margin-left: auto; }
+.bar-actions { display: flex; gap: 10px; align-items: center; margin-left: auto; }
+/* A hairline, not a box: the groups must be legible without adding furniture.
+   Drawn in --muted at low opacity rather than --line, because a 1px --line rule
+   disappears on the light theme's warm paper (checked at 3x). */
+.bar-div { width: 1px; align-self: stretch; margin: 2px 0;
+           background: var(--muted); opacity: .35; }
+.bar-work, .bar-tools { display: flex; gap: 8px; align-items: center; }
+/* Views read as a switch between panes, which is what they are. */
+.seg.views button { padding: 6px 12px; color: var(--ink); }
+.seg.views button:hover { background: var(--chip); color: var(--blue); }
+/* Settings is a tool, not a verb: an icon at the edge, announced by its label. */
+button.ghost.gear { padding: 6px 10px; font-size: 15px; line-height: 1; }
 button.ghost {
   background: var(--panel);
   border: 1px solid var(--line);

@@ -242,6 +242,30 @@ def test_the_result_ceiling_is_refused_outside_its_range(ws):
         api.write_setting(load_config().path, "preferences.max_results", -1)
 
 
+def test_the_header_groups_verbs_views_and_tools():
+    """Reported: six identical buttons in a row, so nothing told you which one
+    was a view and which one did work. Grouping is the whole UX answer here."""
+    base = Path(__file__).resolve().parents[1] / "jobscout" / "web"
+    html = (base / "index.html").read_text(encoding="utf-8")
+    css = (base / "styles.css").read_text(encoding="utf-8")
+
+    # Views are one control, not two loose buttons.
+    views = html.split('class="seg views"', 1)[1].split("</div>", 1)[0]
+    assert 'id="apps-btn"' in views and 'id="pay-btn"' in views
+
+    # Verbs sit together, apart from the views and from the tools.
+    work = html.split('class="bar-work"', 1)[1].split("</div>", 1)[0]
+    assert 'id="scan-btn"' in work and 'id="check-btn"' in work
+
+    # Dividers are the grouping: two of them, three clusters.
+    assert html.count('class="bar-div"') == 2
+
+    # Settings is a tool at the edge, icon-only, and still announced.
+    assert 'id="settings-btn"' in html
+    assert 'aria-label="Settings"' in html
+    assert ".bar-div" in css and ".seg.views" in css
+
+
 def test_the_window_does_not_ask_for_a_fixed_number(ws):
     """A constant in the page would quietly become the ceiling again."""
     js = (Path(__file__).resolve().parent.parent / "jobscout" / "web" / "app.js").read_text(encoding="utf-8")
