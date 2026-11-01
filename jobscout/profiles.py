@@ -109,6 +109,16 @@ def _pointer_value() -> str:
         return ""
 
 
+def has_choice() -> bool:
+    """Whether a profile has ever been chosen -- Default included.
+
+    An empty pointer file means Default was chosen; no file at all means the
+    question has never been answered, which is the only case worth a screen at
+    startup.
+    """
+    return pointer_path().is_file()
+
+
 def read_active() -> str:
     """The profile actually in use, or "" when the base workspace is.
 
@@ -124,18 +134,18 @@ def read_active() -> str:
 
 
 def write_active(name: str) -> None:
-    """Point the app at a profile. "" selects the base ("Default")."""
+    """Point the app at a profile. "" selects the base ("Default").
+
+    Default writes an EMPTY pointer file rather than removing it: the file's
+    existence is the record that a choice was made, so the app can tell
+    "Default, chosen" from "nobody has chosen yet" and stop asking at every
+    start.
+    """
     if name and not valid_name(name):
         raise ValueError(name_problem(name) or "invalid profile name")
     path = pointer_path()
-    if not name:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_atomic(path, name + "\n")
+    write_atomic(path, (name + "\n") if name else "\n")
 
 
 # ---------------------------------------------------------------- listing

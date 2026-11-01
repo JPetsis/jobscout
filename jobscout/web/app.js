@@ -1073,7 +1073,14 @@ function wireProfiles(launch) {
     if (!name) return pickerError('a profile needs a name');
     createProfile(name);
   });
-  $('picker-cancel').addEventListener('click', closePicker);
+  $('picker-cancel').addEventListener('click', async () => {
+    closePicker();
+    // Closing the picker on Default is an answer too. Record it, or the app
+    // asks the same question at the next start.
+    if (!PROFILES.active) {
+      try { await pywebview.api.switch_profile(''); } catch (e) { /* not fatal */ }
+    }
+  });
   if (launch && launch.ask) openPicker(launch);
 }
 

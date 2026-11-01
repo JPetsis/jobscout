@@ -594,10 +594,12 @@ class JsApi:
     def launch(self) -> dict:
         """What the window needs to decide whether to ask who is using it.
 
-        The question is asked once per run, and only when there is a choice to
-        make: with a single profile it would be a screen nobody needs to click
-        through. `_asked` is what stops it reappearing after a switch, because
-        switching reloads the page and the page asks again.
+        The question is asked when nobody has answered it yet -- a fresh
+        install, or a workspace whose pointer was never written. Once a profile
+        has been chosen, the app opens it directly: the picker is a first-run
+        question, not a toll gate. `_asked` stops it reappearing after a switch,
+        because switching reloads the page and the page asks again; the picker
+        stays reachable from Settings ▸ Profile.
         """
         from . import profiles as profmod
         rows = profmod.list_profiles()
@@ -605,7 +607,11 @@ class JsApi:
         # the run that just created the workspace. Naming your own workspace is
         # the first decision a person should get to make, and it is cheaper here
         # than renaming it later.
-        ask = (len(rows) > 1 or self._first_run) and not self._asked
+        # A single profile is still not a choice worth a screen, and a chosen
+        # profile is not a question asked again: only the unanswered question
+        # (two or more workspaces, nothing recorded yet) or the first run.
+        unanswered = len(rows) > 1 and not profmod.has_choice()
+        ask = (self._first_run or unanswered) and not self._asked
         self._asked = True
         # boot_scan must not fill a workspace the user has not chosen yet
         self._picker_shown = ask

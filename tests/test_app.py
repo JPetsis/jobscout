@@ -898,6 +898,30 @@ def test_launch_asks_when_there_is_a_choice(api):
     assert len(out["profiles"]) == 2
 
 
+def test_the_app_opens_the_profile_you_used_last(api):
+    """Reported: the picker stood in the way at every start. A chosen profile is
+    not a question to ask again; the picker is a first-run screen."""
+    assert api.switch_profile("Second")["ok"] is True
+    fresh = appmod.JsApi()                      # what the next start builds
+    out = fresh.launch()
+    assert out["ask"] is False
+    assert out["active"] == "Second"
+
+
+def test_choosing_default_is_remembered(tmp_path, monkeypatch):
+    """Default has no directory of its own, so it used to leave no trace and the
+    app asked again forever. An empty pointer file is the record."""
+    monkeypatch.setenv("JOBSCOUT_HOME", str(tmp_path / "home"))
+    from jobscout.config import init_workspace
+    from jobscout import profiles
+    init_workspace(profiles.base_root())
+    profiles.create("Second")
+    profiles.write_active("")
+    assert profiles.has_choice() is True
+    out = appmod.JsApi().launch()
+    assert out["ask"] is False and out["active"] == ""
+
+
 def test_launch_asks_only_once_per_run(api):
     """After a switch the page reloads and asks again; it must be told no."""
     assert api.launch()["ask"] is True
