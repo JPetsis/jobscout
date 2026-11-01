@@ -78,6 +78,25 @@ def _page(ld=None, og=None, body=""):
     return "".join(parts)
 
 
+def test_the_template_nulls_after_the_description_are_dropped():
+    """Reported on the Liotec advert: the text ended with "null null null …".
+
+    XING's own JSON-LD carries them, ten times, after the last paragraph: a
+    server-side template printing a missing value. Stripped in extraction, so
+    every advert opened from now on is clean.
+    """
+    import json
+    from jobscout.detail import html_detail_page
+    ld = json.dumps({"@type": "JobPosting",
+                     "description": "<p>Schick uns gern Links zu GitHub.</p>"
+                                    "\n null\n null\n null\n null"})
+    text, why, _raw = html_detail_page("https://example.test/job",
+                                       FakeFetcher(body=_page(ld=ld, og="")))
+    assert why == ""
+    assert text.endswith("Schick uns gern Links zu GitHub.")
+    assert "null" not in text
+
+
 def test_json_ld_description_wins_over_the_social_blurb():
     """The whole bug in one test: both are present, the long real one must win."""
     ld = '{"@type": "JobPosting", "description": "<p>' + ("Real advert text. " * 30) + '</p>"}'

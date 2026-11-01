@@ -3,7 +3,20 @@ from datetime import date
 
 from jobscout.textutil import (balanced_json, clean_html, clean_html_lines,
                                date_part, de_rel_date, iso_from_epoch, norm,
-                               slug, snippet)
+                               slug, snippet, strip_null_runs)
+
+
+def test_a_template_null_run_is_not_text():
+    """XING's JSON-LD ends with ten literal nulls; the advert rendered them as
+    "null null null null" after the last paragraph."""
+    assert strip_null_runs("Apps mit.\n    null\n    null\n    null\n  ") == "Apps mit."
+    assert strip_null_runs("null null null") == ""
+    # one null is a word a programming advert may use
+    assert strip_null_runs("returns null when the row is missing") == \
+        "returns null when the row is missing"
+    # and NULL in SQL is not the bug
+    assert strip_null_runs("WHERE x IS NULL AND y IS NULL") == \
+        "WHERE x IS NULL AND y IS NULL"
 
 
 def test_clean_html_strips_style_and_script_bodies():

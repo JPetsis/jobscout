@@ -74,6 +74,22 @@ def norm(s: str) -> str:
     return _WS.sub(" ", (s or "").lower()).strip()
 
 
+#: A run of standalone lowercase "null" tokens, which is never prose. XING's
+#: JSON-LD description ends with ten of them (a server-side template printing a
+#: missing value), and they reached the advert as "null null null null".
+_NULL_RUN = re.compile(r"(?:\s*\bnull\b){2,}")
+
+
+def strip_null_runs(text: str) -> str:
+    """Drop runs of "null" tokens a board's template leaked into the text.
+
+    Two or more in a row only, and lowercase only: a single "null" is a word a
+    programming advert may legitimately use ("returns null when the row is
+    missing"), while "null null null" is a rendering bug.
+    """
+    return _NULL_RUN.sub("", text or "").strip()
+
+
 def fold(s: str) -> str:
     """Lowercase with umlauts transliterated, for comparing names across boards
     that spell München as Muenchen and Kiel as KIEL."""
