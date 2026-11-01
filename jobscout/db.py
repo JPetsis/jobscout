@@ -7,7 +7,7 @@ import re
 import sqlite3
 import threading
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .models import Posting
@@ -590,13 +590,21 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
 
 
 def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
-    """Two boards advertising one post: keep a single row. Returns how many went.
+    """Boards advertising one post: keep a single row. Returns how many went.
 
     Deliberately narrow. It merges only when the title is IDENTICAL after
     normalisation, the place matches and one company name contains the other,
     because a wrong merge hides a job the user could have applied to. It caught
     the Cambridge museum directorship, advertised with the same wording by
     jobs.ac.uk and THE, from two different boards.
+
+    It does NOT merge translations. A German and an English advert for the same
+    chair share no word, and the fields that survive translation — employer,
+    city, grade (W1/W2/W3), even the publication date — are shared by every
+    other chair the same university is advertising that month. Tried on the real
+    Kiel store, that rule merged two genuinely different W2 chairs into a third
+    one, so the honest answer is to pick one board per market rather than to
+    guess. See `sources/__init__.py` for what each board covers.
 
     The employer's own board wins when one of the rows came from it; otherwise
     the row seen first stays, so the original advert keeps its id and history.

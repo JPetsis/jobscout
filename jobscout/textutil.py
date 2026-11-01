@@ -74,6 +74,12 @@ def norm(s: str) -> str:
     return _WS.sub(" ", (s or "").lower()).strip()
 
 
+def fold(s: str) -> str:
+    """Lowercase with umlauts transliterated, for comparing names across boards
+    that spell München as Muenchen and Kiel as KIEL."""
+    return (s or "").translate(_UMLAUT).lower()
+
+
 def slug(s: str) -> str:
     """URL-ish slug: umlauts transliterated, everything else folded to dashes."""
     s = (s or "").translate(_UMLAUT).lower()
