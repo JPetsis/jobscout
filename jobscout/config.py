@@ -578,6 +578,14 @@ sources:
     # the posting's expiry. `queries` are keyword searches; 25 per page.
     queries: []              # from your profile unless set
 
+  interamt:
+    # Interamt, the German public-sector board (Bund, Länder, Kommunen, and the
+    # universities and research institutes that post their IT staff there).
+    # The site's search is a Wicket form, so a keyword query is a POST, not a
+    # URL; one page of ten per query. Detail pages are stable as
+    # /koop/app/stellenangebot/<id>.
+    queries: []              # from your profile unless set
+
   theunijobs:
     # theunijobs: Times Higher Education's board. UK-based but carries European
     # professorial adverts too. 20 per page, sorted newest first.

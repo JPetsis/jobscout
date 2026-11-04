@@ -99,6 +99,7 @@ SOURCE_MODULES = [
     "themuse", "workday",
     "adzuna", "usajobs",
     "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
+    "interamt",
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",

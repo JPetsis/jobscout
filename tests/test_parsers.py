@@ -741,6 +741,29 @@ def test_stepstone_accepts_absolute_title_links(fixture_text):
     assert p.posted_at.startswith("2026-")
 
 
+def test_interamt_reads_the_public_sector_table():
+    """Interamt's search is a POST and its rows are a server-rendered table.
+
+    The fixture is one real result page for "Softwareentwickler"; the callback
+    hrefs in it are session-bound, so the parser must build the stable
+    /stellenangebot/<id> address instead of trusting the anchor.
+    """
+    from pathlib import Path
+    from jobscout.sources.interamt import parse_results
+    page = (Path(__file__).parent / "fixtures" / "interamt_2026.html").read_text(
+        encoding="utf-8")
+    ps = parse_results(page)
+    assert len(ps) == 10
+    first = ps[0]
+    assert first.title.startswith("Softwareentwickler/Programmierer")
+    assert first.company == "Landkreis Ilm-Kreis"
+    assert first.location == "99310 Arnstadt"
+    assert first.url == "https://interamt.de/koop/app/stellenangebot/1508039"
+    assert first.external_id == "1508039"
+    assert first.posted_at == "2026-11-03"
+    assert first.expires_at == "2026-11-24"
+
+
 def test_theunijobs_reads_the_board_card(fixture_text):
     """THE carries the European professorial adverts next to the British ones,
     and its anchor is broken across lines: "<a \n\n href=\"\n\t/unijobs/…"."""
