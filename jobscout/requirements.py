@@ -40,8 +40,72 @@ _YEARS = re.compile(
     r"(?:jahre|years?)\b", re.I)
 _YEARS_PLUS = re.compile(r"\b(\d{1,2})\s*\+\s*(?:jahre|years?)\b", re.I)
 
+#: AI is asked for in three ways and only one of them is a requirement.
+_AI = re.compile(
+    r"\b(?:ki|ai|llms?|genai|generative(?:n)? ki|k\u00fcnstliche intelligenz|"
+    r"artificial intelligence|machine learning|deep learning|"
+    r"prompt engineering|agentic|rag)\b", re.I)
+_AI_NEED = re.compile(
+    r"\b(?:voraussetzung|zwingend|erforderlich|erwartet|erwarten|"
+    r"m\u00fcssen|m\u00fcssen sie|required|requirement|must|erfahrung mit|"
+    r"umgang mit|kenntnisse (?:in|mit)|vertraut|sicher im umgang|"
+    r"nachweislich|hands-on|praktische erfahrung)\b", re.I)
+_AI_BONUS = re.compile(
+    r"\b(?:von vorteil|w\u00fcnschenswert|wunschenswert|idealerweise|"
+    r"nice to have|bonus|optional|gerne|bereicherung|"
+    r"not required|nicht erforderlich)\b", re.I)
+
 #: The nearest language must be within this many characters of the level.
 _MAX_GAP = 60
+
+
+def ai_signal(text: str) -> str:
+    """How an advert asks for AI work: 'required', 'bonus' or ''.
+
+    Only a requirement sentence counts. "Erfahrung mit KI von Vorteil" mentions
+    AI and is exactly the advert a requirement filter is meant to exclude, so
+    the bonus marker in the same sentence wins. Silence means not stated: many
+    good adverts describe the work without naming it, and guessing there would
+    hide jobs the person could have had.
+    """
+    # Clause and proximity, not sentence membership: a bulleted requirement list
+    # is one "sentence" by newline, and "Erfahrung mit ..." three bullets above
+    # the word "KI" would otherwise make every such advert a requirement.
+    kinds = [_ai_kind_at(text, m) for m in _AI.finditer(text or "")]
+    if "required" in kinds:
+        return "required"
+    return "bonus" if "bonus" in kinds else ""
+
+
+def _clause_bounds(text: str, start: int, end: int) -> tuple[int, int]:
+    """The clause containing a match, as offsets into `text`."""
+    left = 0
+    for m in _CLAUSE.finditer(text, 0, start):
+        left = m.end()
+    tail = _CLAUSE.search(text, end)
+    return left, (tail.start() if tail else len(text))
+
+
+def _near(clause: str, s: int, e: int, pattern: re.Pattern,
+          gap: int = 45) -> bool:
+    """Is a marker within `gap` characters of the term at [s, e)?"""
+    for m in pattern.finditer(clause):
+        if m.end() <= s and s - m.end() <= gap:
+            return True
+        if m.start() >= e and m.start() - e <= gap:
+            return True
+    return False
+
+
+def _ai_kind_at(text: str, m: re.Match) -> str:
+    """'bonus', 'required' or '' for one AI mention, judged in its clause."""
+    a, b = _clause_bounds(text, m.start(), m.end())
+    clause, s, e = text[a:b], m.start() - a, m.end() - a
+    if _near(clause, s, e, _AI_BONUS):
+        return "bonus"
+    if _near(clause, s, e, _AI_NEED):
+        return "required"
+    return ""
 
 
 def _sentences(text: str) -> list[str]:
@@ -108,6 +172,14 @@ def extract(text: str) -> list[dict]:
              "label": "German C1", "detail": "the sentence it came from"}.
     """
     found: list[dict] = []
+    if ai_signal(text) == "required":
+        m = next((m for m in _AI.finditer(text)
+                  if _ai_kind_at(text, m) == "required"), None)
+        detail = ""
+        if m:
+            a, b = _clause_bounds(text, m.start(), m.end())
+            detail = text[a:b].strip()
+        found.append({"kind": "ai", "label": "AI required", "detail": detail})
     seen: set[tuple[str, str]] = set()
 
     def add(kind: str, label: str, detail: str) -> None:

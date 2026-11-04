@@ -617,6 +617,13 @@ SETTINGS = [
      "group": "How strict",
      "label": "Scan in the background when the last scan is older than",
      "help": "Hours. 0 means only when you press Scan."},
+    {"key": "preferences.require_ai", "op": "scalar", "kind": "bool",
+     "default": False,
+     "group": "How strict",
+     "label": "Only match jobs that require working with AI",
+     "help": "On, only adverts that state working with AI as a requirement are "
+             "shown. A mention as a bonus does not count, and neither does an "
+             "advert stored without its text."},
     {"key": "preferences.require_title_match", "op": "scalar", "kind": "bool",
      "default": True,
      "group": "How strict",
@@ -680,6 +687,7 @@ SECTION_OF = {
     "preferences.strong_threshold": ("matching", False),
     "preferences.max_age_days": ("matching", False),
     "preferences.closing_days": ("matching", False),
+    "preferences.require_ai": ("matching", False),
     "preferences.require_title_match": ("matching", False),
     "preferences.stack_needs_title_match": ("matching", False),
     "preferences.max_results": ("matching", True),

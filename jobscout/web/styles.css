@@ -549,6 +549,7 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
   cursor: help;
 }
 .req-chip.language { border-color: var(--blue); }
+.req-chip.ai { border-color: var(--cta); }
 .req-chip.degree { border-color: var(--gold, #8a6400); }
 .req-chip.permit { border-color: var(--warn, #b3261e); }
 
