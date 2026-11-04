@@ -113,6 +113,13 @@ def fetch(settings: dict, fetcher, *, delay: float | None = None) -> list[Postin
     opener.addheaders = [("User-Agent", fetcher.user_agent if hasattr(fetcher, "user_agent")
                           else "Mozilla/5.0 (compatible; jobscout)"),
                          ("Accept-Language", "de-DE,de;q=0.9")]
+    if not queries:
+        # Enabled but unasked: without this, the board quietly returns nothing
+        # and the health table reads "nothing" forever, which looks like a
+        # broken parser rather than a profile that never told it what to search.
+        fetcher.errors.append(f"{NAME}: no queries configured for this profile")
+        return []
+
     out: list[Posting] = []
     seen: set[str] = set()
     for q in queries:

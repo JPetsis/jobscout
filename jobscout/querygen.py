@@ -67,7 +67,7 @@ QUERY_DRIVEN = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
     "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
-    "myscience",
+    "myscience", "interamt",
 }
 
 # `location` semantics differ per board, so one profile value cannot be shared.
