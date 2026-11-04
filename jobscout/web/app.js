@@ -179,7 +179,10 @@ let AUTO_SCAN = false;
 
 function verifyLabel(st) {
   const c = st.counts || {};
+  // Verifying is host-serial: name the board being worked on, or a long queue
+  // on one slow host looks exactly like a frozen job.
   return 'checked ' + (st.done || 0) + ' of ' + (st.total || 0) +
+    (st.host ? ' \u00b7 ' + st.host : '') +
     ' \u00b7 ' + (c.ok || 0) + ' open \u00b7 ' + (c.dead || 0) + ' gone' +
     ((c.unknown || 0) ? ' \u00b7 ' + c.unknown + ' unknown' : '');
 }

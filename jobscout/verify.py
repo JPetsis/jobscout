@@ -191,7 +191,9 @@ def run_pass(cfg, conn, *, min_score: float | None = None, max_age_days: int = 3
         if state == "dead":
             dead_titles.append(f"{row['title'][:60]} ({row['source']})")
         if progress is not None:
-            progress(done, total, counts)
+            # The host is part of the progress: verifying is host-serial, so a
+            # slow board looks exactly like a hung job without it.
+            progress(done, total, counts, row["source"])
 
     # --- one request per board, in both directions -------------------------
     groups: dict[tuple[str, str], list] = {}

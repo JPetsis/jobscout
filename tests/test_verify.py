@@ -262,5 +262,7 @@ def test_progress_is_reported_for_a_bar(tmp_path, monkeypatch):
     _use_board(monkeypatch, board)
     seen = []
     verify.run_pass(_cfg(tmp_path), conn, max_age_days=0,
-                    progress=lambda done, total, counts: seen.append((done, total)))
-    assert seen[-1] == (3, 3)
+                    progress=lambda done, total, counts, host="":
+                    seen.append((done, total, counts, host)))
+    assert seen[-1][:3] == (3, 3, {"ok": 3, "dead": 0, "unknown": 0, "batched": 0})
+    assert seen[-1][3], "the host travels with the progress"

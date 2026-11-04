@@ -755,7 +755,9 @@ def test_theunijobs_reads_the_board_card(fixture_text):
     assert p.url.startswith("https://www.timeshighereducation.com/unijobs/listing/416816/")
     assert "LinkSource" not in p.url, "the tracking suffix is not part of the advert"
     assert p.external_id == "416816"
-    assert p.posted_at == "2026-10-22"
+    # "10 days ago" is relative: the fixture is a live card, so the date moves.
+    from datetime import date, timedelta
+    assert p.posted_at == (date.today() - timedelta(days=10)).isoformat()
     assert p.compensation == "W2"
 
 

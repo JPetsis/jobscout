@@ -332,6 +332,7 @@ class VerifyJob:
         self.done = 0
         self.total = 0
         self.counts = {"ok": 0, "dead": 0, "unknown": 0, "batched": 0}
+        self.host = ""               # the board the last verdict came from
         self.error: str | None = None
         self.result: dict | None = None
         self._cancel = threading.Event()
@@ -357,10 +358,11 @@ class VerifyJob:
         self._cancel.set()
         return {"cancelled": True}
 
-    def _progress(self, done: int, total: int, counts: dict) -> None:
+    def _progress(self, done: int, total: int, counts: dict, host: str = "") -> None:
         with self.lock:
             self.done, self.total = done, total
             self.counts = dict(counts)
+            self.host = host or self.host
 
     def _run(self, limit: int | None, max_age_days: int = 3) -> None:
         conn = None
@@ -389,6 +391,7 @@ class VerifyJob:
         with self.lock:
             return {"running": self.running, "done": self.done,
                     "total": self.total, "counts": dict(self.counts),
+                    "host": self.host,
                     "error": self.error, "result": self.result}
 
 
