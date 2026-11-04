@@ -766,6 +766,24 @@ def test_interamt_reads_the_public_sector_table():
     assert first.expires_at == "2026-11-24"
 
 
+def test_interamt_detail_keeps_the_bullets():
+    """Reported from a real advert: the app showed almost nothing.
+
+    Pforzheim's "Koordinator fuer Webprojekte" is 51 list items and four
+    paragraphs. Reading only <p> dropped the requirements, which on a German
+    public-sector advert is the whole body.
+    """
+    from pathlib import Path
+    from jobscout.sources.interamt import _description
+    page = (Path(__file__).parent / "fixtures" /
+            "interamt_detail_bullets_2026.html").read_text(encoding="utf-8")
+    text = _description(page)
+    assert len(text) > 3000
+    assert "DAS AUFGABENGEBIET" in text
+    assert text.count("\u2022") >= 10, "the requirement bullets are the advert"
+    assert "TVöD" in text or "unbefristete" in text
+
+
 def test_interamt_detail_keeps_the_advert_and_drops_the_site_notice():
     from pathlib import Path
     from jobscout.sources.interamt import _description

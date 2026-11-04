@@ -41,18 +41,26 @@ def _text(fragment: str) -> str:
 
 
 def _description(page: str) -> str:
-    """The advert's own words, from the paragraphs of a detail page."""
-    body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", page)
-    paras = [_text(p) for p in re.findall(r"(?is)<p[^>]*>(.*?)</p>", body)]
-    text = " ".join(p for p in paras if len(p) > 40)
-    # The first paragraph is the site's "enable JavaScript" notice, not the ad.
-    for boiler in ("Bitte aktivieren Sie JavaScript", "canopy canopy"):
-        if text.startswith(boiler) or boiler in text[:200]:
-            cut = text.find(boiler)
-            end = text.find(".", cut)
-            if end != -1:
-                text = text[end + 1:].strip()
-    return text
+    """The advert's own words, whole.
+
+    Interamt puts the body in a `ia-e-richtext` block: paragraphs, headings and
+    lists. Reading only the `<p>` tags loses every bullet, which on a German
+    public-sector advert is most of the requirements -- the Pforzheim advert has
+    51 list items and almost no paragraphs.
+    """
+    i = page.find('class="ia-e-richtext')
+    if i == -1:
+        return ""
+    start = page.find(">", i) + 1
+    end = page.find("ia-e-section-title", start)
+    chunk = page[start:end if end != -1 else start + 60000]
+    chunk = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", chunk)
+    chunk = re.sub(r"(?i)<li[^>]*>", "\n\u2022 ", chunk)
+    chunk = re.sub(r"(?i)</?(?:p|div|h[1-6]|tr|ul|ol|table|section)[^>]*>", "\n", chunk)
+    chunk = re.sub(r"(?i)<br\s*/?>", "\n", chunk)
+    text = html.unescape(re.sub(r"<[^>]+>", " ", chunk))
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def _iso(day_month_year: str) -> str:
