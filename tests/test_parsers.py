@@ -758,10 +758,24 @@ def test_interamt_reads_the_public_sector_table():
     assert first.title.startswith("Softwareentwickler/Programmierer")
     assert first.company == "Landkreis Ilm-Kreis"
     assert first.location == "99310 Arnstadt"
-    assert first.url == "https://interamt.de/koop/app/stellenangebot/1508039"
+    # The table's own href is a session-bound callback; the canonical address
+    # redirects once and then serves the advert.
+    assert first.url == "https://interamt.de/koop/app/stelle?id=1508039"
     assert first.external_id == "1508039"
     assert first.posted_at == "2026-11-03"
     assert first.expires_at == "2026-11-24"
+
+
+def test_interamt_detail_keeps_the_advert_and_drops_the_site_notice():
+    from pathlib import Path
+    from jobscout.sources.interamt import _description
+    page = (Path(__file__).parent / "fixtures" /
+            "interamt_detail_2026.html").read_text(encoding="utf-8")
+    text = _description(page)
+    assert len(text) > 1000
+    assert "Im Amt für IT und Organisation" in text
+    assert not text.startswith("canopy")
+    assert "Bitte aktivieren Sie JavaScript" not in text[:200]
 
 
 def test_theunijobs_reads_the_board_card(fixture_text):

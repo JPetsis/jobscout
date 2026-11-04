@@ -40,6 +40,21 @@ def _text(fragment: str) -> str:
     return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", fragment)).split())
 
 
+def _description(page: str) -> str:
+    """The advert's own words, from the paragraphs of a detail page."""
+    body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", page)
+    paras = [_text(p) for p in re.findall(r"(?is)<p[^>]*>(.*?)</p>", body)]
+    text = " ".join(p for p in paras if len(p) > 40)
+    # The first paragraph is the site's "enable JavaScript" notice, not the ad.
+    for boiler in ("Bitte aktivieren Sie JavaScript", "canopy canopy"):
+        if text.startswith(boiler) or boiler in text[:200]:
+            cut = text.find(boiler)
+            end = text.find(".", cut)
+            if end != -1:
+                text = text[end + 1:].strip()
+    return text
+
+
 def _iso(day_month_year: str) -> str:
     m = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", day_month_year)
     return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}" if m else ""
@@ -69,7 +84,10 @@ def parse_results(page: str) -> list[Posting]:
             title=title,
             company=cells.get("Behoerde", ""),
             location=cells.get("PLZOrte", ""),
-            url=f"{BASE}/koop/app/stellenangebot/{m.group(1)}",
+            # the only address that renders the advert without a live search
+            # session: it redirects once (?0&id=) and then serves the page. The
+            # table's own href is a session-bound Wicket callback.
+            url=f"{BASE}/koop/app/stelle?id={m.group(1)}",
             external_id=m.group(1),
             posted_at=_iso(cells.get("Von", "")),
             expires_at=_iso(cells.get("Bewerbungsfrist", "")),
@@ -131,9 +149,22 @@ def fetch(settings: dict, fetcher, *, delay: float | None = None) -> list[Postin
         except Exception as exc:                    # noqa: BLE001 - report, do not die
             fetcher.errors.append(f"{NAME}: {keywords}: {exc}")
             continue
-        for p in parse_results(page):
+        rows = parse_results(page)
+        limit = int(settings.get("detail_limit", 12) or 0)
+        before = len(out)
+        for p in rows:
             if p.external_id in seen:
                 continue
             seen.add(p.external_id)
+            # Scoring needs the advert's words, and with a requirement filter on
+            # a posting with no text is filtered out unseen. Fetch the detail in
+            # the same session, but only for the first page of a query.
+            if limit and (len(out) - before) < limit:
+                try:
+                    time.sleep(pace)
+                    detail = opener.open(p.url, timeout=40).read().decode("utf-8", "replace")
+                    p.description = _description(detail)
+                except Exception as exc:                # noqa: BLE001
+                    fetcher.errors.append(f"{NAME}: detail {p.external_id}: {exc}")
             out.append(p)
     return out
