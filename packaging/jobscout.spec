@@ -93,13 +93,13 @@ if not ENTRY.is_file():
 # below turns a drift into a build error.
 SOURCE_MODULES = [
     "linkedin", "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch",
-    "arbeitnow", "berlinstartupjobs", "ams", "eures", "jobsat", "hn", "remotive", "wwr",
+    "arbeitnow", "berlinstartupjobs", "ams", "jobsat", "hn", "remotive", "wwr",
     "remoteok", "larajobs", "workingnomads", "nodesk", "himalayas",
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
     "adzuna", "usajobs",
     "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
-    "interamt",
+    "interamt", "careers",
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",

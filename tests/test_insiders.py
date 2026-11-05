@@ -370,7 +370,7 @@ def test_a_page_with_no_board_says_where_to_look(ws):
     fetcher = _FakeFetcher({"example.com/careers": (200, "<html>no board here</html>")})
     out = api.watch_add(cfg, "https://example.com/careers", fetcher=fetcher)
     assert out["ok"] is False
-    assert "click into a role" in out["hint"]
+    assert "careers page that lists the openings" in out["hint"]
 
 
 def test_the_settings_screen_calls_the_three_company_endpoints():

@@ -4,7 +4,7 @@ from datetime import date
 
 from jobscout.models import Posting
 from jobscout.sources import (REGISTRY, SOURCE_NAMES, ams, arbeitnow, ashby,
-                              berlinstartupjobs, eures, greenhouse, himalayas, hn,
+                              berlinstartupjobs, greenhouse, himalayas, hn,
                               jobs_ch, jobsat, karriere_at, larajobs, lever, linkedin,
                               nodesk, recruitee, remoteok, remotive, smartrecruiters,
                               stepstone, stellenanzeigen, themuse, workday, workable,
@@ -347,24 +347,6 @@ def test_himalayas_prune_is_off_by_default():
     assert himalayas.prune_unverifiable(conn, {}) == 0
     assert conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0] == 1
     conn.close()
-
-
-def test_eures(fixture_json):
-    data = fixture_json("eures.json")
-    postings = eures.parse(data["jvs"])
-    assert len(postings) == 3
-    p = postings[0]
-    assert p.title.startswith("Key User / DevOps Engineer")
-    assert p.posted_at == "2026-09-16"
-    assert p.location == "Austria"
-    # The legacy .aspx route answers 200 with an empty shell for a withdrawn
-    # advert, so the current portal route is stored instead.
-    assert p.external_id and "/portal/jv-se/" in p.url
-    assert p.description and "<" not in p.description
-    # a cross-border posting keeps both NUTS countries
-    assert postings[1].location == "Germany, Austria"
-    # the German-language posting keeps its own text
-    assert "Bahnplanung" in postings[1].title
 
 
 def test_ams_token_is_reproducible():

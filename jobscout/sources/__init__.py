@@ -14,13 +14,13 @@ from importlib import import_module
 
 SOURCE_NAMES = [
     "linkedin", "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch",
-    "arbeitnow", "berlinstartupjobs", "ams", "eures", "jobsat", "hn", "remotive", "wwr",
+    "arbeitnow", "berlinstartupjobs", "ams", "jobsat", "hn", "remotive", "wwr",
     "remoteok", "larajobs", "workingnomads", "nodesk", "himalayas",
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
     "adzuna", "usajobs",
     "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
-    "interamt",
+    "interamt", "careers",
     "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
@@ -81,7 +81,7 @@ GROUPS = {
     # United States
     "themuse": GROUP_US, "usajobs": GROUP_US, "governmentjobs": GROUP_US, "dice": GROUP_US,
     # European Union
-    "eures": GROUP_EU, "euraxess": GROUP_EU,
+    "euraxess": GROUP_EU,
     # worldwide, and remote-first boards
     "linkedin": GROUP_GLOBAL, "hn": GROUP_GLOBAL,
     "remotive": GROUP_GLOBAL, "wwr": GROUP_GLOBAL,
@@ -101,6 +101,7 @@ GROUPS = {
     "greenhouse": GROUP_COMPANY, "ashby": GROUP_COMPANY,
     "recruitee": GROUP_COMPANY, "lever": GROUP_COMPANY,
     "smartrecruiters": GROUP_COMPANY, "workable": GROUP_COMPANY,
+    "careers": GROUP_COMPANY,
     "workday": GROUP_COMPANY, "teamtailor": GROUP_COMPANY,
     "join": GROUP_COMPANY,
 }
@@ -136,6 +137,7 @@ def group_of(name: str) -> str:
 DIRECT_SOURCES = {
     # the employer's own applicant-tracking board: one employer each, and the
     # place the posting appears before it is syndicated anywhere
+    "careers": "the employer's own careers page",
     "greenhouse": "the employer's own board",
     "ashby": "the employer's own board",
     "recruitee": "the employer's own board",
@@ -185,7 +187,7 @@ NOT_DIRECT = frozenset({
     # a US tech board where staffing firms are heavy posters (Jobot, Randstad)
     "dice",
     # European and US boards that mix sources
-    "eures", "themuse", "adzuna",
+    "themuse", "adzuna",
     # worldwide and remote boards, which mix employer ads with republished ones
     "linkedin", "hn", "remotive", "wwr", "remoteok", "larajobs", "workingnomads",
     "nodesk", "himalayas", "jobicy", "wordpressjobs", "pythonjobs", "fossjobs",

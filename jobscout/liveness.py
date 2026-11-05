@@ -75,7 +75,6 @@ _LEVER_RE = re.compile(rf"jobs\.lever\.co/([^/?#]+)/({_UUID})")
 _ASHBY_RE = re.compile(rf"jobs\.ashbyhq\.com/([^/?#]+)/({_UUID})")
 _SR_RE = re.compile(r"jobs\.smartrecruiters\.com/([^/?#]+)/(\d+)")
 _AMS_RE = re.compile(rf"jobs\.ams\.at/public/emps/jobs/({_UUID})")
-_EURES_RE = re.compile(r"europa\.eu/eures/portal/jv/id/([^/?#]+)\.aspx")
 # larajobs serves its own /job/<id> page behind a Cloudflare 401, but the
 # public /api/jobs feed is open and lists every live posting with its id, so
 # membership in that feed is a real verdict. No single-job endpoint exists.
@@ -170,30 +169,6 @@ def _ats_check(fetcher: Fetcher, url: str) -> tuple[str, str] | None:
             return "dead", "ams api says the offer is gone"
         if status != 200:
             return "unknown", f"ams api HTTP {status}"
-        return "ok", ""
-
-    m = _EURES_RE.search(url)
-    if m:
-        # The EURES portal page answers 200 for a fabricated vacancy id, so the
-        # page itself proves nothing. The detail API is authoritative: it 404s
-        # once a vacancy is withdrawn, and returns a payload with profiles.
-        import urllib.parse
-        jv_id = urllib.parse.unquote(m.group(1))
-        status, text = _probe(
-            fetcher,
-            f"https://europa.eu/eures/api/jv-searchengine/public/jv/id/{jv_id}?requestLang=en")
-        if status is None:
-            return "unknown", "eures api unreachable"
-        if status in (404, 410):
-            return "dead", "eures api says the vacancy is gone"
-        if status != 200:
-            return "unknown", f"eures api HTTP {status}"
-        try:
-            data = json.loads(text)
-        except ValueError:
-            return "unknown", "eures api: unexpected answer"
-        if not data.get("id") and not data.get("jvProfiles"):
-            return "dead", "eures api returned an empty vacancy"
         return "ok", ""
 
     m = _SR_RE.search(url)

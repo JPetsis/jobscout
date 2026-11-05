@@ -1125,6 +1125,7 @@ def watch_add(cfg, url: str, fetcher=None) -> dict:
     fetcher = fetcher or Fetcher()
 
     candidates = compmod.detect("", url)
+    body = ""
     page_note = ""
     if not candidates:
         try:
@@ -1136,11 +1137,22 @@ def watch_add(cfg, url: str, fetcher=None) -> dict:
         candidates = compmod.detect(body, url)
         page_note = "found on the page, not the URL"
     if not candidates:
+        # No company board, but the field says company.com/careers, so read the
+        # page itself: its advert links become postings, and a page with none
+        # (Archbau lists three vacancies as plain text) is followed as one.
+        from .sources import careers as careersmod
+        company = url.split("//")[-1].split("/")[0].removeprefix("www.")
+        found = (careersmod.parse_page(body, url, company)
+                 or careersmod.parse_whole_page(body, url, company))
+        if found:
+            status = compmod.add_token(cfg.path, "careers", url)
+            return {"ok": True, "board": "careers", "token": url, "status": status,
+                    "found": len(found),
+                    "note": "no company board on that page; following the page itself"}
         return {"ok": False, "candidates": [],
-                "error": "no Greenhouse / Ashby / Lever / Workable / "
-                         "SmartRecruiters / Teamtailor board on that page",
-                "hint": "open the careers page, click into a role, and paste the "
-                        "URL of the job listing itself"}
+                "error": "no job adverts found on that page",
+                "hint": "paste the careers page that lists the openings, or the "
+                        "URL of a single advert"}
 
     tried = []
     for src, tok in candidates:

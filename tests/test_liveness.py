@@ -190,24 +190,6 @@ def test_smartrecruiters_job_uses_the_api():
     assert liveness.check(gone, url)[0] == "dead"
 
 
-def test_eures_job_uses_the_api_not_the_portal_page():
-    # the portal page answers 200 for any id, so only the API can prove death
-    url = "https://europa.eu/eures/portal/jv/id/MTUxNTgtMjAyNjI4MzUwOS1TIDE.aspx?lang=en"
-    gone = RouteFetcher({"/jv/id/": (404, "")})
-    state, note = liveness.check(gone, url)
-    assert state == "dead" and "gone" in note
-    assert all("portal" not in u for u in gone.seen)   # never fetched the page
-
-    live = RouteFetcher({"/jv/id/": (200, '{"id": "MTUxNTgt", "jvProfiles": [{"a": 1}]}')})
-    assert liveness.check(live, url) == ("ok", "")
-
-    empty = RouteFetcher({"/jv/id/": (200, "{}")})
-    assert liveness.check(empty, url)[0] == "dead"
-
-    blocked = RouteFetcher({"/jv/id/": (429, "")})
-    assert liveness.check(blocked, url)[0] == "unknown"   # blocked is not dead
-
-
 def test_ams_job_uses_the_offer_api_not_the_spa_page():
     # every jobs.ams.at path returns 200 with the same SPA shell, so the page
     # can never prove death; /joboffer/uuid/<uuid> is the authoritative check

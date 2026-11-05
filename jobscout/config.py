@@ -315,7 +315,6 @@ sources:
     - arbeitnow
     - berlinstartupjobs
     - ams
-    - eures
     - jobsat
     - hn
     - remotive
@@ -394,6 +393,12 @@ sources:
       - { keywords: Softwareentwickler_in }
       - { keywords: Software Developer }
       - { keywords: DevOps Engineer }
+
+  careers:
+    # Employers' own careers pages, followed from the watchlist. One page per
+    # employer, no crawling: advert links become postings, and a page that lists
+    # its vacancies as plain text is kept as one posting.
+    queries: []
 
   eures:
     # EU official portal, public JSON search at europa.eu/eures/api.
@@ -681,8 +686,6 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "workday": {"pages": 3},
     "adzuna": {"country": "us", "pages": 1},
     "usajobs": {"results_per_page": 25},
-    "eures": {"search_code": "TITLE", "publication_period": "LAST_MONTH",
-              "per_page": 50, "max_pages": 2, "max_age_days": 45},
     "greenhouse": {},
     "ashby": {},
     "lever": {},
