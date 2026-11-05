@@ -357,7 +357,9 @@ def test_eures(fixture_json):
     assert p.title.startswith("Key User / DevOps Engineer")
     assert p.posted_at == "2026-09-16"
     assert p.location == "Austria"
-    assert p.external_id and p.url.endswith(".aspx?lang=en")
+    # The legacy .aspx route answers 200 with an empty shell for a withdrawn
+    # advert, so the current portal route is stored instead.
+    assert p.external_id and "/portal/jv-se/" in p.url
     assert p.description and "<" not in p.description
     # a cross-border posting keeps both NUTS countries
     assert postings[1].location == "Germany, Austria"

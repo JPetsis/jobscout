@@ -21,6 +21,7 @@ import re
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 
 from . import db as dbm
 from . import liveness
@@ -161,6 +162,40 @@ def _in_list(verdict, row, pid: str) -> bool:
     return bool(urls) and bool(key) and key.lower() in urls.lower()
 
 
+def _eures_verdict(fetcher, row) -> tuple[str, str]:
+    """Is this EURES advert still in the index the portal reads from?
+
+    Its pages are client-rendered and answer 200 whether the vacancy exists or
+    not, so a status code proves nothing. The search API is the same index the
+    portal shows, and a withdrawn advert leaves it, so the title is searched and
+    the id looked for. An advert older than the search window is left unknown
+    rather than guessed at.
+    """
+    from .sources import eures
+    title = (row["title"] or "").strip()
+    if len(title) < 8:
+        return "unknown", "eures: title too short to search"
+    expires = (row["expires_at"] or "")[:10]
+    if expires and expires < date.today().isoformat():
+        return "dead", "closing date passed"
+    posted = (row["posted_at"] or "")[:10]
+    if posted and posted < (date.today() - timedelta(days=25)).isoformat():
+        # The index only exposes the last month, so absence there proves
+        # nothing about an older advert. Unknown, not alive.
+        return "unknown", "eures: older than the search window"
+    try:
+        time.sleep(0.4)
+        data = fetcher.post_json(eures.API, eures._payload(title[:80], "", 1, 50, {}))
+    except Exception as exc:                                  # noqa: BLE001
+        return "unknown", f"eures: {exc}"[:120]
+    jvs = data.get("jvs") or []
+    if not jvs:
+        return "unknown", "eures: the title search returned nothing"
+    if str(row["external_id"]) in {str(j.get("id")) for j in jvs}:
+        return "ok", ""
+    return "dead", "no longer in the EURES search index"
+
+
 def run_pass(cfg, conn, *, min_score: float | None = None, max_age_days: int = 3,
              limit: int | None = None, workers: int = 6,
              progress=None, cancel=None) -> dict:
@@ -245,7 +280,11 @@ def run_pass(cfg, conn, *, min_score: float | None = None, max_age_days: int = 3
         for i, row in enumerate(group):
             if cancel is not None and cancel():
                 break
-            state, note = liveness.check(paced, row["url"], row["expires_at"] or "")
+            if row["source"] == "eures":
+                # A 200 from the portal shell is not evidence; ask the index.
+                state, note = _eures_verdict(fetcher, row)
+            else:
+                state, note = liveness.check(paced, row["url"], row["expires_at"] or "")
             if state == "unknown" and "429" in note:
                 time.sleep(_RATE_LIMIT_PAUSE)
                 state, note = liveness.check(paced, row["url"], row["expires_at"] or "")

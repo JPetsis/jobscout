@@ -33,7 +33,10 @@ from ..textutil import clean_html, clean_html_lines, iso_from_epoch
 NAME = "eures"
 LABEL = "EURES"
 API = "https://europa.eu/eures/api/jv-searchengine/public/jv-search/search"
-PORTAL = "https://europa.eu/eures/portal/jv/id/{id}.aspx?lang=en"
+# The 2024 portal route. The legacy /portal/jv/id/<id>.aspx answers 200 with an
+# empty shell for a withdrawn vacancy, which made every dead EURES row look
+# alive to a status-code check.
+PORTAL = "https://europa.eu/eures/portal/jv-se/{id}?lang=en"
 
 _COUNTRIES = {
     "at": "Austria", "de": "Germany", "ch": "Switzerland", "nl": "Netherlands",
