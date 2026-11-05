@@ -684,6 +684,8 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "recruitee": {},
     "themuse": {"pages": 5, "categories": [], "location": "", "api_key": ""},
     "workday": {"pages": 3},
+    "eures": {"search_code": "TITLE", "publication_period": "LAST_MONTH",
+              "per_page": 50, "max_pages": 2, "max_age_days": 45},
     "adzuna": {"country": "us", "pages": 1},
     "usajobs": {"results_per_page": 25},
     "greenhouse": {},

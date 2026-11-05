@@ -14,7 +14,7 @@ from importlib import import_module
 
 SOURCE_NAMES = [
     "linkedin", "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch",
-    "arbeitnow", "berlinstartupjobs", "ams", "jobsat", "hn", "remotive", "wwr",
+    "arbeitnow", "berlinstartupjobs", "ams", "eures", "jobsat", "hn", "remotive", "wwr",
     "remoteok", "larajobs", "workingnomads", "nodesk", "himalayas",
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
@@ -81,7 +81,7 @@ GROUPS = {
     # United States
     "themuse": GROUP_US, "usajobs": GROUP_US, "governmentjobs": GROUP_US, "dice": GROUP_US,
     # European Union
-    "euraxess": GROUP_EU,
+    "eures": GROUP_EU, "euraxess": GROUP_EU,
     # worldwide, and remote-first boards
     "linkedin": GROUP_GLOBAL, "hn": GROUP_GLOBAL,
     "remotive": GROUP_GLOBAL, "wwr": GROUP_GLOBAL,
@@ -187,7 +187,7 @@ NOT_DIRECT = frozenset({
     # a US tech board where staffing firms are heavy posters (Jobot, Randstad)
     "dice",
     # European and US boards that mix sources
-    "themuse", "adzuna",
+    "eures", "themuse", "adzuna",
     # worldwide and remote boards, which mix employer ads with republished ones
     "linkedin", "hn", "remotive", "wwr", "remoteok", "larajobs", "workingnomads",
     "nodesk", "himalayas", "jobicy", "wordpressjobs", "pythonjobs", "fossjobs",
