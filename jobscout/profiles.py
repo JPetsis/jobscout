@@ -143,6 +143,10 @@ def write_active(name: str) -> None:
     """
     if name and not valid_name(name):
         raise ValueError(name_problem(name) or "invalid profile name")
+    # A pointer to a workspace that does not exist reads as "Default" and the
+    # app silently changes workspace on the next start. Refuse it instead.
+    if name and not (profiles_dir() / name).is_dir():
+        raise ValueError(f"no profile called '{name}'")
     path = pointer_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     write_atomic(path, (name + "\n") if name else "\n")

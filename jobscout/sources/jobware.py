@@ -16,6 +16,7 @@ are sent.
 """
 from __future__ import annotations
 
+import html
 import re
 from urllib.parse import quote_plus
 
@@ -94,6 +95,40 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
     return out
 
 
+def _body(page: str) -> str:
+    """The advert's text, which Jobware ships inside a script as escaped HTML.
+
+    The detail page is a 565 KB client-rendered document with no JSON-LD body and
+    no Next/Nuxt payload, so html_detail found nothing and every Jobware card was
+    a title and a link. The advert is one long escaped string in the page's own
+    data, with <br> for line breaks; it is cut out at the first section heading
+    and unescaped.
+    """
+    for marker in ("Deine Aufgaben", "Ihre Aufgaben", "Stellenbeschreibung",
+                   "Aufgabenbereich"):
+        i = page.find(marker)
+        if i == -1:
+            continue
+        start, end = page.rfind('"', 0, i), page.find('"', i)
+        if start == -1 or end == -1 or end - start < 400:
+            continue
+        text = page[start + 1:end]
+        text = text.replace("\\n", "\n").replace('\\"', '"').replace("\\u00e4", "ä")
+        text = re.sub(r"<br\s*/?>", "\n", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = html.unescape(text)
+        lines = [" ".join(l.split()) for l in text.splitlines()]
+        out = "\n".join(l for l in lines if l)
+        if len(out) > 400:
+            return out
+    return ""
+
+
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
-    from .. import detail as detailmod
-    return detailmod.html_detail(p.url, fetcher)
+    try:
+        status, page = fetcher.get(p.url)
+    except Exception:                                    # noqa: BLE001
+        return None
+    if status != 200:
+        return None
+    return _body(page) or None
