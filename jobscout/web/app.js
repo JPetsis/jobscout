@@ -1378,9 +1378,16 @@ function profilePane() {
     'Each profile is a separate workspace: its own settings, job boards and ' +
     'saved postings. Nothing is shared between them.'));
 
-  const current = (PROFILES.profiles || []).find((p) => p.active);
+  // PROFILES is only filled when the picker opens, so a pane rendered before
+  // that fell back to "Default" while the app was in another workspace.
   const card = el('div', 'set-card');
-  card.appendChild(el('p', 'set-card-title', 'Using: ' + (current ? current.label : 'Default')));
+  const using = el('p', 'set-card-title', 'Using: …');
+  card.appendChild(using);
+  pywebview.api.launch().then((st) => {
+    PROFILES = st || PROFILES;
+    const current = (PROFILES.profiles || []).find((p) => p.active);
+    using.textContent = 'Using: ' + (current ? current.label : 'Default');
+  }).catch(() => { using.textContent = 'Using: unknown'; });
   const btn = el('button', 'ghost small', 'Switch or create…');
   btn.type = 'button';
   btn.addEventListener('click', async () => {
