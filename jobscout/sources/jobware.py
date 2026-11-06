@@ -17,6 +17,7 @@ are sent.
 from __future__ import annotations
 
 import html
+import json
 import re
 from urllib.parse import quote_plus
 
@@ -129,7 +130,46 @@ def _body(page: str) -> str:
                 line = html.unescape(re.sub(r"<[^>]+>", " ", facts.group(0)))
                 out = " ".join(line.split()) + "\n" + out
             return out
-    return ""
+    # No section heading matched: the advert is still in the page as a long
+    # escaped string, just without the markers this file knows. Take the
+    # longest prose string instead of returning nothing, because a posting with
+    # no body is unusable for anyone whose search is not this author's.
+    return _longest_text(page)
+
+
+def _longest_text(page: str) -> str:
+    """The longest human-readable escaped string in the page, or ""."""
+    best = ""
+    for m in re.finditer(r'"((?:[^"\\]|\\.){400,})"', page):
+        raw = m.group(1)
+        try:
+            text = json.loads('"' + raw + '"')
+        except Exception:                                # noqa: BLE001
+            text = raw.replace("\\n", "\n").replace('\\"', '"')
+        text = re.sub(r"<br\s*/?>", "\n", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = html.unescape(text)
+        # Code and CSS, not prose: braces, arrows, custom properties and
+        # clamp() are the page's own stylesheets, and they are far longer than
+        # any advert if left in.
+        if text.count("{") > 20 or "=>" in text[:300] or "function(" in text:
+            continue
+        if re.search(r"(clamp\(|var\(--|--nrmdy|@media|font-family|sans-serif)", text):
+            continue
+        if text.count(";") > 20 or text.count(":") > 60:
+            continue
+        if text.count("px") > 8 or "progid" in text:
+            continue
+        letters = sum(ch.isalpha() for ch in text)
+        if letters / max(1, len(text)) < 0.55:
+            continue
+        if len(re.findall(r"[A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df]{3,}", text)) < 60:
+            continue
+        lines = [" ".join(line.split()) for line in text.splitlines()]
+        out = "\n".join(line for line in lines if line)
+        if len(out) > len(best):
+            best = out
+    return best
 
 
 def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
