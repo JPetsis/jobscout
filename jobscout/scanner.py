@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -27,6 +28,7 @@ from .config import source_settings
 from .http import FetchError
 from .score import Score, contract_label_from_reasons, prefs_hash, score_posting
 from .sources import DIRECT_SOURCES, iter_sources
+from .textutil import clean_html_lines
 
 Event = dict
 OnEvent = Callable[[Event], None]
@@ -174,6 +176,33 @@ def _store_source(cfg, conn, mod, item: dict, *, run_id, min_score: float,
                 match_count += 1
                 found.append((pid, sc.score, p.title, p.company, p.location,
                               contract_label_from_reasons(sc.reasons)))
+        # A source whose listing carries no body (jobs_ch, smartrecruiters,
+        # jobup and others) would otherwise be scored on its title alone, while a
+        # source that ships the text is scored on the advert. Fill the body first
+        # for those, inside the same per-scan budget, so every connector is judged
+        # on the same evidence.
+        title_hit = any(str(lab).startswith("title:") for lab, _ in sc.reasons)
+        if (not (p.description or "").strip() and title_hit
+                and probe_budget.get("left", 0) > 0):
+            fetch_detail = getattr(mod, "fetch_detail", None)
+            text = ""
+            if fetch_detail is not None:
+                try:
+                    text = fetch_detail(p, fetcher) or ""
+                except Exception:                             # noqa: BLE001
+                    text = ""
+            if text.strip():
+                body = clean_html_lines(text)
+                conn.execute("UPDATE postings SET description=? WHERE id=?", (body, pid))
+                sc = score_posting(cfg.prefs, replace(p, description=body))
+                dbm.set_score(conn, pid, sc)
+                probe_budget["left"] = probe_budget.get("left", 0) - 1
+                if is_new:
+                    match_count += 1 if (not sc.filtered and dup is None and sc.score >= min_score) else 0
+                    if not sc.filtered and dup is None and sc.score >= min_score:
+                        found.append((pid, sc.score, p.title, p.company, p.location,
+                                      contract_label_from_reasons(sc.reasons)))
+
         probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
                                      probe_budget, dup, deadline_budget)
         if probed is not None:
