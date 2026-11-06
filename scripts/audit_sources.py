@@ -97,6 +97,25 @@ def audit_one(name: str, cfg, fetcher_delay: float = 0.3, conn=None) -> dict:
     def share(pred) -> float:
         return round(100 * sum(1 for p in postings if pred(p)) / len(postings), 0) if postings else 0.0
 
+    # A source may store no text and still be able to produce it on demand:
+    # the body is fetched when a card is opened, not at scan time. Measuring only
+    # the store would call that a broken connector, so ask the detail path too.
+    detail_prose = detail_tried = 0
+    mod = sources.REGISTRY[name]
+    for p in postings[:2]:
+        if (p.description or "").strip() or not p.url:
+            continue
+        detail_tried += 1
+        try:
+            if hasattr(mod, "fetch_detail"):
+                text = mod.fetch_detail(p, fetcher) or ""
+            else:
+                from jobscout import detail as detailmod
+                text = detailmod.html_detail(p.url, fetcher) or ""
+        except Exception:                                     # noqa: BLE001
+            text = ""
+        detail_prose += 1 if _prose(text) else 0
+
     links_ok = links_checked = 0
     for p in postings[:2]:
         if not p.url:
@@ -123,6 +142,8 @@ def audit_one(name: str, cfg, fetcher_delay: float = 0.3, conn=None) -> dict:
         "pct_location": share(lambda p: bool((p.location or "").strip())),
         "pct_posted": share(lambda p: bool(p.posted_at)),
         "links_ok": f"{links_ok}/{links_checked}" if links_checked else "-",
+        "detail_prose": detail_prose,
+        "detail_tried": detail_tried,
         "seconds": round(took, 1),
         "errors": list(fetcher.errors)[:2] + ([error] if error else []),
         "sample": [p.title[:60] for p in postings[:2]],
@@ -133,7 +154,10 @@ def verdict(row: dict) -> str:
     if row["count"] == 0:
         return "EMPTY" if not row["errors"] else "FAILED"
     if row["stored"] and row["stored_text"] == 0:
-        return "NO TEXT"
+        # The body exists but is fetched when a card is opened, not at scan time.
+        # That is a different problem from a connector that cannot read it at all,
+        # and it matters because scoring happens before anyone opens a card.
+        return "LAZY" if row.get("detail_prose") else "NO TEXT"
     if row["stored"] and row["stored_prose"] < row["stored_text"]:
         return "BAD TEXT"
     if row["count"] == 0:
@@ -164,14 +188,14 @@ def main() -> int:
 
     rows = []
     print(f"{'source':22s} {'live':>4s} {'stored':>6s} {'text':>5s} {'prose':>5s} "
-          f"{'chars':>6s} {'links':>6s}  verdict")
+          f"{'chars':>6s} {'detail':>6s} {'links':>6s}  verdict")
     for name in names:
         row = audit_one(name, cfg, args.delay, conn)
         row["verdict"] = verdict(row)
         rows.append(row)
         print(f"{row['source'][:22]:22s} {row['count']:4d} {row['stored']:6d} "
               f"{row['stored_text']:5d} {row['stored_prose']:5d} {row['stored_chars']:6d} "
-              f"{row['links_ok']:>6s}  {row['verdict']}")
+              f"{row['detail_prose']}/{row['detail_tried']:<2d} {row['links_ok']:>6s}  {row['verdict']}")
         if row["errors"]:
             for e in row["errors"]:
                 print(f"{'':24s} ! {e}")
