@@ -349,10 +349,24 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
         # fixed-term -> a 0-point reason, so listings can show a
         # "befristet" pill. "befristet" cannot simply be a scoring term:
         # it also sits inside "unbefristet", hence the elif.
-        if not any(str(lab).startswith("perm:") for lab, _ in s.reasons):
-            tmp = _first_hit(prefs.get("temporary_terms", []),
-                             f"{title} {desc}", strict=False)
-            if tmp:
+        tmp = _first_hit(prefs.get("temporary_terms", []),
+                         f"{title} {desc}", strict=False)
+        if tmp and not any(str(lab).startswith("perm:") for lab, _ in s.reasons):
+            s.reasons.append([f"tmp:{tmp}", 0])
+        elif tmp:
+            # Both words are there. "Festanstellung" is what German adverts call
+            # any employed job, while "Befristungsart Befristet" is the legal
+            # fact, so the explicit one wins. An explicit "unbefristet" still
+            # beats it, because that is a statement about the same fact.
+            perm = next((str(lab) for lab, _ in s.reasons
+                         if str(lab).startswith("perm:")), "")
+            term = norm(perm.split(":", 1)[1]) if ":" in perm else ""
+            if term in {"festanstellung", "feste anstellung", "feste stelle"}:
+                for i, (lab, pts) in enumerate(list(s.reasons)):
+                    if str(lab).startswith("perm:"):
+                        s.score -= pts
+                        s.reasons.pop(i)
+                        break
                 s.reasons.append([f"tmp:{tmp}", 0])
 
     # `locations_prefer` (preferred cities) is only a ranking boost; the legacy
