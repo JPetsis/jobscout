@@ -120,6 +120,14 @@ def _body(page: str) -> str:
         lines = [" ".join(l.split()) for l in text.splitlines()]
         out = "\n".join(l for l in lines if l)
         if len(out) > 400:
+            # The facts line ("Beschäftigungsart ... Befristungsart Befristet")
+            # sits above the body and is the only place a fixed-term contract is
+            # stated; without it the colloquial "Festanstellung" in the opening
+            # sentence was all the scorer ever saw.
+            facts = re.search(r"Beschäftigungsart[^\"<]{0,220}", page)
+            if facts:
+                line = html.unescape(re.sub(r"<[^>]+>", " ", facts.group(0)))
+                out = " ".join(line.split()) + "\n" + out
             return out
     return ""
 
