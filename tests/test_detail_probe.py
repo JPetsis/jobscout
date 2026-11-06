@@ -70,7 +70,8 @@ def test_a_shorter_fetch_is_a_failed_probe_not_a_new_teaser(tmp_path):
                                        {"left": 1}, None) is None
     row = conn.execute("SELECT description, detail_fetched_at, score "
                        "FROM postings WHERE id=?", (pid,)).fetchone()
-    assert row["description"] == full, "a failed probe must not shorten the advert"
+    # storage normalises whitespace now (clean_html_lines), so compare words
+    assert row["description"].split() == full.split(), "a failed probe must not shorten the advert"
     assert row["detail_fetched_at"] is None, "and must not close the once-only gate"
     assert row["score"] == sc.score
 

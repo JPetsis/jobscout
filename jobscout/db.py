@@ -13,7 +13,7 @@ from pathlib import Path
 from .models import Posting
 from .score import Score, prefs_hash, score_posting
 from . import geo
-from .textutil import norm, strip_null_runs
+from .textutil import clean_html_lines, norm, strip_null_runs
 
 # One connection is shared between the CLI (single-threaded) and the GUI, whose
 # pywebview `js_api` methods run in SEPARATE THREADS. Two consequences:
@@ -405,7 +405,7 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         desc = row["description"] or ""
         if _prefer_fresh(p.description, desc):
             desc = p.description
-        desc = strip_null_runs(desc)
+        desc = clean_html_lines(strip_null_runs(desc))
         # The STORED text can be richer than the fresh parse (the scan's
         # detail probe writes the full advert in). The score must describe
         # what is stored, or every re-scan demotes a promoted row back to
@@ -458,7 +458,7 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fp, ak, p.source, p.company, p.title, p.location, p.url, p.external_id, p.posted_at,
-            now, run_id, now, run_id, strip_null_runs(p.description), p.compensation,
+            now, run_id, now, run_id, clean_html_lines(strip_null_runs(p.description)), p.compensation,
             p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
             p.salary_annual_max, p.salary_raw, p.expires_at,
             1 if p.early_applicant else 0,
