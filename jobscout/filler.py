@@ -154,24 +154,28 @@ def run(cfg, conn, fetcher, *, limit: int = BATCH, seconds: float = SECONDS,
                 parked.add(host)
                 return
             text = _text_for(row, fetcher)
-            if text.strip():
-                body = clean_html_lines(text)
-                conn.execute("UPDATE postings SET description=? WHERE id=?",
-                             (body, row["id"]))
-                p = _posting(row)
-                p.description = body
-                sc = score_posting(cfg.prefs, p)
-                dbm.set_score(conn, row["id"], sc)
-                filled += 1
-            # Once ever, filled or not: a page with no body is a fact about that
-            # advert, and coming back to it on every run would spend the budget
-            # on the same failures.
-            conn.execute("UPDATE postings SET detail_fetched_at=? WHERE id=?",
-                         (datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                          row["id"]))
+            # One connection, several host threads: sqlite3 is not safe to use
+            # concurrently, and the writes are milliseconds against a request
+            # that takes a second, so serialising them costs nothing.
+            with dbm.LOCK:
+                if text.strip():
+                    body = clean_html_lines(text)
+                    conn.execute("UPDATE postings SET description=? WHERE id=?",
+                                 (body, row["id"]))
+                    p = _posting(row)
+                    p.description = body
+                    sc = score_posting(cfg.prefs, p)
+                    dbm.set_score(conn, row["id"], sc)
+                    filled += 1
+                # Once ever, filled or not: a page with no body is a fact about
+                # that advert, and coming back to it on every run would spend
+                # the budget on the same failures.
+                conn.execute("UPDATE postings SET detail_fetched_at=? WHERE id=?",
+                             (datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                              row["id"]))
+                if done % 10 == 0:
+                    conn.commit()
             done += 1
-            if done % 10 == 0:
-                conn.commit()
             if progress is not None:
                 progress(done, total, row["source"])
 

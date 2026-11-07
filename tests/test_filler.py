@@ -59,3 +59,31 @@ def test_a_filled_body_is_rescored_and_stamped(tmp_path, monkeypatch):
     assert "Laravel" in row["description"]
     assert row["detail_fetched_at"]
     assert row["score"] != 0
+
+
+def test_two_hosts_write_without_a_thread_error(tmp_path, monkeypatch):
+    """The first real run died here: one sqlite connection, several host threads.
+
+    sqlite3 raises "bad parameter or other API misuse" when a connection is used
+    concurrently, and the fill groups by host precisely so hosts can run in
+    parallel. The writes are guarded; this keeps them that way.
+    """
+    conn = dbm.connect(tmp_path / "t.db")
+    from jobscout.models import Posting
+    for name in ("Developer a", "Developer b"):
+        p = Posting(source="jobup", title=name, company="A", location="Berlin",
+                    url=f"https://{name.split()[-1]}.example/1", external_id=name)
+        sc = score_posting(PREFS, p)
+        run = dbm.start_run(conn)
+        dbm.upsert(conn, p, sc, run, "2026-11-06T00:00:00+00:00", PREFS)
+
+    from jobscout.sources import jobup
+    monkeypatch.setattr(jobup, "fetch_detail",
+                        lambda p, f: ("Developer Laravel PHP. " * 40), raising=False)
+
+    class F:
+        errors = []
+
+    out = filler.run(type("C", (), {"prefs": PREFS})(), conn, F(), limit=10,
+                     pacer=filler.Pacer(interval=0.0))
+    assert out["filled"] == 2 and out["done"] == 2
