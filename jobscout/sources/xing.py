@@ -109,7 +109,7 @@ def fetch(settings: dict, fetcher: Fetcher) -> list[Posting]:
             # parser drift look like "XING had fewer jobs today".
             dropped = len(_cards(text)) - len(got)
             if dropped:
-                fetcher.errors.append(
+                fetcher.notes.append(
                     f"xing: {dropped} of {len(_cards(text))} listings on page {page} "
                     f"for '{q.get('keywords')}' had no link and were skipped")
     return out

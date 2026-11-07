@@ -185,4 +185,7 @@ def test_xing_counts_what_it_dropped():
 
     out = xing.fetch({"queries": [{"keywords": "php", "pages": 1}]}, f)
     assert out == []
-    assert any("no link" in e for e in f.errors), f.errors
+    # A skipped card is a note, not a failure: it must not turn the health row
+    # or the scan summary into "XING is broken".
+    assert any("no link" in n for n in f.notes), f.notes
+    assert not any("no link" in e for e in f.errors), f.errors

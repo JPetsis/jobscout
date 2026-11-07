@@ -2902,25 +2902,37 @@ async function loadClosingWatch() {
 
 /* Completing advert bodies runs after a scan, on its own thread. This polls it
  * so a long queue is visible as a queue rather than as a stuck app. */
+let FILL_WAS_RUNNING = false;
+let FILL_DONE_SHOWN = false;
+
 async function pollFill() {
   let st = null;
   try { st = await pywebview.api.fill_status(); } catch (e) { return; }
   const bar = $('fill-bar');
   if (!bar) return;
-  if (!st || !st.running) {
-    bar.hidden = true;
-    if (st && st.filled) {
-      $('fill-line').textContent = 'completed ' + st.filled +
-        (st.filled === 1 ? ' advert' : ' adverts') + ' in the background';
-      bar.hidden = false;
-      setTimeout(() => { bar.hidden = true; }, 8000);
-    }
+
+  if (st && st.running) {
+    FILL_WAS_RUNNING = true;
+    FILL_DONE_SHOWN = false;
+    bar.hidden = false;
+    $('fill-line').textContent = 'completing adverts · ' + st.done + ' of ' +
+      st.total + (st.source ? ' · ' + st.source : '') +
+      (st.filled ? ' · ' + st.filled + ' filled' : '');
     return;
   }
-  bar.hidden = false;
-  $('fill-line').textContent = 'completing adverts · ' + st.done + ' of ' +
-    st.total + (st.source ? ' · ' + st.source : '') +
-    (st.filled ? ' · ' + st.filled + ' filled' : '');
+
+  bar.hidden = true;
+  if (FILL_WAS_RUNNING && !FILL_DONE_SHOWN && st && st.filled) {
+    // The bodies are in the store and the scores changed, so the grid has to
+    // read them again; without this the strong matches look untouched.
+    FILL_DONE_SHOWN = true;
+    FILL_WAS_RUNNING = false;
+    $('fill-line').textContent = 'completed ' + st.filled +
+      (st.filled === 1 ? ' advert' : ' adverts') + ' in the background';
+    bar.hidden = false;
+    setTimeout(() => { bar.hidden = true; }, 8000);
+    await reload();
+  }
 }
 
 /* ---------- the Applications pane ---------- */

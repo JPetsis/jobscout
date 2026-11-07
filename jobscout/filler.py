@@ -23,7 +23,7 @@ from . import sources
 from .score import score_posting
 from .textutil import clean_html_lines
 
-BATCH = 300
+BATCH = 2000
 SECONDS = 600
 HOST_INTERVAL = 1.0
 MAX_HOSTS = 3
@@ -105,6 +105,20 @@ def _posting(row: dict):
                    url=row["url"] or "", external_id=row["external_id"] or "")
 
 
+def _title_hit(prefs: dict, row: dict) -> bool:
+    """Would this posting match on its title alone?
+
+    The same gate the scan uses: a body is worth reading only for an advert the
+    profile could show, and a title with no hit is not a match by the scoring
+    rules anyway.
+    """
+    try:
+        sc = score_posting(prefs, _posting(row))
+    except Exception:                                         # noqa: BLE001
+        return False
+    return any(str(lab).startswith("title:") for lab, _ in sc.reasons)
+
+
 def _host(url: str) -> str:
     return urllib.parse.urlsplit(url or "").netloc
 
@@ -112,7 +126,9 @@ def _host(url: str) -> str:
 def run(cfg, conn, fetcher, *, limit: int = BATCH, seconds: float = SECONDS,
         progress=None, cancel=None, pacer: Pacer | None = None) -> dict:
     """Work the queue until it is empty, the budget is spent or time is up."""
-    rows = queue(conn, limit)
+    # Only postings this profile could match: filling bodies for the other
+    # fourteen thousand would spend hours on adverts that can never appear.
+    rows = [r for r in queue(conn, 100000) if _title_hit(cfg.prefs, r)][:int(limit)]
     total = len(rows)
     done = filled = 0
     parked: set[str] = set()

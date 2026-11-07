@@ -67,6 +67,10 @@ class Fetcher:
         self.ssl_context = ssl_context if ssl_context is not None else default_ssl_context()
         self.requests = 0
         self.errors: list[str] = []
+        #: Informational remarks (a card skipped, a fallback used). Kept apart
+        #: from errors so the health table and the scan summary do not call a
+        #: note a failure -- "1 of 21 listings had no link" is not a broken board.
+        self.notes: list[str] = []
         self._last: dict[str, float] = {}
         # Sources are fetched in parallel, and several of them can share a host
         # (nine company boards all sit on boards-api.greenhouse.io). The lock is
