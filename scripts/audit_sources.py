@@ -42,7 +42,11 @@ def _prose(text: str) -> bool:
     """Does this look like an advert rather than markup or a stylesheet?"""
     if not text or len(text) < 120:
         return False
-    if _HTML.search(text[:4000]) or _CODE.search(text[:2000]):
+    # An advert for a web developer may legitimately quote HTML; a page of
+    # markup is a different thing. Count the tags instead of forbidding them.
+    if len(re.findall(r"<[a-z][^>]{0,80}>", text[:8000], re.I)) > 10:
+        return False
+    if _CODE.search(text[:2000]):
         return False
     letters = sum(ch.isalpha() for ch in text)
     return letters / max(1, len(text)) > 0.5
@@ -102,8 +106,15 @@ def audit_one(name: str, cfg, fetcher_delay: float = 0.3, conn=None) -> dict:
     # the store would call that a broken connector, so ask the detail path too.
     detail_prose = detail_tried = 0
     mod = sources.REGISTRY[name]
+    # Measure the detail path for empty rows AND for teasers: a 45-character
+    # listing blurb is as useless for scoring as no text at all, and the question
+    # is whether the connector can do better when asked.
+    short = (not postings) or (
+        statistics.median([len(p.description or "") for p in postings]) < 400)
     for p in postings[:2]:
-        if (p.description or "").strip() or not p.url:
+        if not p.url:
+            continue
+        if (p.description or "").strip() and not short:
             continue
         detail_tried += 1
         try:
@@ -160,6 +171,16 @@ def verdict(row: dict) -> str:
         # That is a different problem from a connector that cannot read it at all,
         # and it matters because scoring happens before anyone opens a card.
         return "LAZY" if row.get("detail_prose") else "NO TEXT"
+    if row["stored"] and row["stored_chars"] < 400 and not row.get("detail_prose"):
+        # A teaser whose detail cannot be read either: the board republishes a
+        # page we cannot open (englishjobs points at Talent.com's client-rendered
+        # adverts). Nothing to fix in the parser; worth naming, not hiding.
+        return "LIMITED"
+    if row["stored"] and row["stored_chars"] < 400 and row.get("detail_prose"):
+        # The listing carries a blurb and the detail page carries the advert.
+        # The fill reads it for postings this profile can match, so this is a
+        # source that works on demand, not a broken reader.
+        return "TEASER"
     # A couple of odd rows out of a hundred is not a broken reader; a majority
     # of markup or stylesheet is. Judging on a share keeps one stray advert from
     # turning the whole connector red.
@@ -168,7 +189,10 @@ def verdict(row: dict) -> str:
     # The live fetch is judged by the stored rows above: a listing may ship HTML
     # that the store cleans on the way in, and counting that as bad text says
     # more about the board's markup than about what the app holds.
-    if row["pct_company"] < 90 or row["pct_url"] < 100:
+    # A missing company or place is informative, not a failure: some feeds do
+    # not carry them (wordpressjobs says so in its own docstring). A missing URL
+    # is a failure, because there is nothing to open.
+    if row["pct_url"] < 100:
         return "FIELDS"
     return "ok"
 

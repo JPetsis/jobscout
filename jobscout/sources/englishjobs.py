@@ -5,6 +5,12 @@ Category pages: `GET /jobs/<category>?page=N` (`remote`, `visa-sponsorship`,
 `?format=markdown`; HTML is parsed here because the markdown variant
 truncates long signed URLs in display.
 
+Measured 2026-11-06: those clickouts redirect to Talent.com, whose advert pages
+are client-rendered and yield no text to a plain client, and the signed links
+expire (403) after a while. The listing teaser is therefore all this source can
+give; the advert itself has to be read in a browser. Kept because the titles and
+places are real and the link still opens for a person while it lasts.
+
 Job links are SIGNED `/clickout/<hash>` redirects that answer 302 to the
 publisher's own page (seen live: stepstone.de and an employer ATS), so the
 stored URL is the absolute clickout link (browsers follow it fine, and
