@@ -100,6 +100,12 @@ document.documentElement.dataset.theme =
   <button id="closing-dismiss" class="ghost small" aria-label="Dismiss this notice">✕</button>
 </div>
 
+<!-- Completing advert bodies in the background: shown only while it runs. -->
+<div id="fill-bar" class="updatebar" hidden role="status">
+  <span class="up-text" id="fill-line"></span>
+  <button id="fill-cancel" class="ghost small">Stop</button>
+</div>
+
 <section class="filters" aria-label="Find and filter">
   <div class="find-row">
     <input type="search" id="q" placeholder="Search title, company, city…" autocomplete="off">

@@ -24,6 +24,9 @@ preferences:
   # though a university posting in English may still want the local language.
   # An advert whose text is too short to classify is KEPT, never guessed at.
   language_allow: []
+  # After a scan, read the advert of postings whose board sent only a title and
+  # a link, so they are scored on the text like every other board.
+  fill_after_scan: true
   # Only postings whose advert STATES that working with AI is a requirement.
   # A mention as a bonus ("Erfahrung mit KI von Vorteil") does not count, and
   # neither does an advert stored without its text: strict on purpose.

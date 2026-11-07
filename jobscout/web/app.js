@@ -94,6 +94,11 @@ async function boot() {
     render();
     loadAppsCount();            // the header badge, async and never blocking
     loadClosingWatch();         // what closes soon, async and never blocking
+    setInterval(pollFill, 2500); // background body completion
+    pollFill();
+    $('fill-cancel').addEventListener('click', () => {
+      pywebview.api.fill_cancel();
+    });
     checkForUpdates();          // async; never blocks the grid
     maybeAutoScan();            // async; the backend decides whether it is due
   } catch (e) {
@@ -2893,6 +2898,29 @@ async function loadClosingWatch() {
   $('closing-dismiss').addEventListener('click', () => {
     $('closing-bar').hidden = true;
   });
+}
+
+/* Completing advert bodies runs after a scan, on its own thread. This polls it
+ * so a long queue is visible as a queue rather than as a stuck app. */
+async function pollFill() {
+  let st = null;
+  try { st = await pywebview.api.fill_status(); } catch (e) { return; }
+  const bar = $('fill-bar');
+  if (!bar) return;
+  if (!st || !st.running) {
+    bar.hidden = true;
+    if (st && st.filled) {
+      $('fill-line').textContent = 'completed ' + st.filled +
+        (st.filled === 1 ? ' advert' : ' adverts') + ' in the background';
+      bar.hidden = false;
+      setTimeout(() => { bar.hidden = true; }, 8000);
+    }
+    return;
+  }
+  bar.hidden = false;
+  $('fill-line').textContent = 'completing adverts · ' + st.done + ' of ' +
+    st.total + (st.source ? ' · ' + st.source : '') +
+    (st.filled ? ' · ' + st.filled + ' filled' : '');
 }
 
 /* ---------- the Applications pane ---------- */

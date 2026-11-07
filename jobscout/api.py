@@ -617,6 +617,13 @@ SETTINGS = [
      "group": "How strict",
      "label": "Scan in the background when the last scan is older than",
      "help": "Hours. 0 means only when you press Scan."},
+    {"key": "preferences.fill_after_scan", "op": "scalar", "kind": "bool",
+     "default": True,
+     "group": "How strict",
+     "label": "Complete missing advert texts in the background",
+     "help": "After a scan, boards that send only a title and a link get their "
+             "advert read, so they are scored on the text like every other board. "
+             "Runs in the background, paced per host."},
     {"key": "preferences.require_ai", "op": "scalar", "kind": "bool",
      "default": False,
      "group": "How strict",
@@ -687,6 +694,7 @@ SECTION_OF = {
     "preferences.strong_threshold": ("matching", False),
     "preferences.max_age_days": ("matching", False),
     "preferences.closing_days": ("matching", False),
+    "preferences.fill_after_scan": ("matching", False),
     "preferences.require_ai": ("matching", False),
     "preferences.require_title_match": ("matching", False),
     "preferences.stack_needs_title_match": ("matching", False),

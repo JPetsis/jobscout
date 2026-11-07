@@ -395,6 +395,83 @@ class VerifyJob:
                     "error": self.error, "result": self.result}
 
 
+class FillJob:
+    """Completes missing advert bodies in the background, from the store.
+
+    Its own job for the same reason the verifier is: reading a few hundred
+    detail pages takes minutes, and pressing Scan must not mean waiting for it.
+    The queue is the store, not the board's listing, so a posting that scrolled
+    off the board still gets its turn.
+    """
+
+    def __init__(self, cfg) -> None:
+        self.cfg = cfg
+        self.lock = threading.Lock()
+        self.running = False
+        self.done = 0
+        self.total = 0
+        self.filled = 0
+        self.source = ""
+        self.error: str | None = None
+        self.result: dict | None = None
+        self._cancel = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self, limit: int = 300) -> dict:
+        with self.lock:
+            if self.running:
+                return {"started": False, "reason": "a fill is already running"}
+            self.running = True
+            self.done = self.total = self.filled = 0
+            self.error = None
+            self.result = None
+        self._thread = threading.Thread(target=self._run, args=(limit,),
+                                        daemon=True, name="jobscout-fill")
+        self._thread.start()
+        return {"started": True}
+
+    def cancel(self) -> dict:
+        if not self.running:
+            return {"cancelled": False, "reason": "nothing running"}
+        self._cancel.set()
+        return {"cancelled": True}
+
+    def _progress(self, done: int, total: int, source: str) -> None:
+        with self.lock:
+            self.done, self.total = done, total
+            self.source = source or self.source
+
+    def _run(self, limit: int) -> None:
+        conn = None
+        try:
+            from . import filler
+            from .http import Fetcher
+            conn = dbm.connect(self.cfg.root / "jobscout.db")
+            conn.execute("PRAGMA busy_timeout = 30000")
+            result = filler.run(self.cfg, conn, Fetcher(host_delay=0.4),
+                                limit=limit, progress=self._progress,
+                                cancel=self._cancel.is_set)
+            with self.lock:
+                self.result = result
+                self.filled = int(result.get("filled") or 0)
+                self.done = self.total = int(result.get("total") or 0)
+        except Exception as e:                                   # noqa: BLE001
+            with self.lock:
+                self.error = f"{type(e).__name__}: {e}"
+        finally:
+            if conn is not None:
+                conn.close()
+            with self.lock:
+                self.running = False
+
+    def status(self) -> dict:
+        with self.lock:
+            return {"running": self.running, "done": self.done,
+                    "total": self.total, "filled": self.filled,
+                    "source": self.source, "error": self.error,
+                    "result": self.result}
+
+
 SCAN: ScanJob | None = None
 
 
@@ -701,6 +778,7 @@ class JsApi:
         global SCAN
         if SCAN is None:
             SCAN = ScanJob(self.cfg)
+        self._fill_pending = True
         return SCAN.start({s for s in only.split(",") if s} if only else set(), force=force)
 
     def salary_report(self, words: str = "", city: str = "", days: int = 0) -> dict:
@@ -773,10 +851,39 @@ class JsApi:
     def scan_progress(self) -> dict:
         if SCAN is None:
             return {"running": False, "events": [], "summary": None, "error": None}
-        return SCAN.drain()
+        out = SCAN.drain()
+        # The scan is over and the person asked for bodies to be completed: start
+        # the fill here, where the window already polls, rather than making the
+        # scan thread wait for minutes of detail pages.
+        if (out.get("summary") and not out.get("running")
+                and getattr(self, "_fill_pending", False)):
+            self._fill_pending = False
+            if self.cfg.prefs.get("fill_after_scan", True):
+                self.fill_start()
+        return out
 
     def cancel_scan(self) -> dict:
         return SCAN.cancel() if SCAN is not None else {"cancelled": False}
+
+    def fill_start(self, limit: int = 0) -> dict:
+        """Complete missing advert bodies now, from the store."""
+        job = getattr(self, "_fill", None)
+        if job is None or not job.running:
+            job = FillJob(self.cfg)
+            self._fill = job
+            return job.start(int(limit or 300))
+        return {"started": False, "reason": "a fill is already running"}
+
+    def fill_status(self) -> dict:
+        job = getattr(self, "_fill", None)
+        if job is None:
+            return {"running": False, "done": 0, "total": 0, "filled": 0,
+                    "source": "", "error": None, "result": None}
+        return job.status()
+
+    def fill_cancel(self) -> dict:
+        job = getattr(self, "_fill", None)
+        return job.cancel() if job is not None else {"cancelled": False}
 
     def app_info(self) -> dict:
         """Which build this is, for the window to show.
