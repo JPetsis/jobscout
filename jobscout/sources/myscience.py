@@ -42,7 +42,22 @@ _DESC = re.compile(r'<span class="abs" itemprop="description">(.*?)</span>', re.
 # og/meta blurb (~330 chars), which hides most of the text -- measured on
 # the Leipzig DevOps row, whose rescore lost its PHP mention because the
 # blurb does not name the stack.
-_BODY = re.compile(r'itemprop="description"[^>]*>')
+# The advert lives in `<div id="Description" class="long_value">`. Taking
+# everything to the next <footer> swallowed the rest of the page, and a 6,000
+# character cap cut the advert before its "Unser Angebot" section -- which is
+# where a German university states whether the post is fixed-term.
+_BODY = re.compile(r'<div[^>]*id="Description"[^>]*>', re.I)
+_MAX_BODY = 20000
+
+
+def _div_end(text: str, start: int) -> int:
+    """Index just past the div that opens at `start`, counting nesting."""
+    depth = 1
+    for m in re.finditer(r"<div\b[^>]*>|</div>", text[start:], re.I):
+        depth += -1 if m.group(0).lower().startswith("</") else 1
+        if depth == 0:
+            return start + m.start()
+    return len(text)
 
 
 def parse(text: str) -> list[Posting]:
@@ -103,10 +118,9 @@ def fetch_detail(p: Posting, fetcher: Fetcher) -> str | None:
     if status == 200 and text:
         m = _BODY.search(text or "")
         if m:
-            end = text.find("<footer", m.end())
-            body = text[m.end(): end if end > 0 else len(text)]
+            body = text[m.end(): _div_end(text, m.start())]
             desc = clean_html(body)
             if len(desc) > 600:
-                return desc[:6000]
+                return desc[:_MAX_BODY]
     from .. import detail as detailmod
     return detailmod.html_detail(p.url, fetcher)
