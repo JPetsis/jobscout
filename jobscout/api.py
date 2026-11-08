@@ -93,6 +93,8 @@ def republished_as(conn, pid: int, source: str = "") -> list[dict]:
             continue
         if r["twin_source"] == r["parent_source"]:
             continue
+        if any(e["source"] == r["twin_source"] for e in out):
+            continue      # one pill per board, however many rows it holds
         out.append({"source": r["twin_source"], "seen_at": r["first_seen_at"],
                     "direct": sources.is_direct(r["twin_source"]),
                     "url": r["url"] or ""})
@@ -135,7 +137,13 @@ def republished_map(conn, rows: list[tuple[int, str]]) -> dict[int, list[dict]]:
             dup_of = int(r["dup_of"])
             if r["twin_source"] == r["parent_source"] or r["twin_source"] == src_of.get(dup_of):
                 continue
-            found.setdefault(dup_of, []).append(
+            bucket = found.setdefault(dup_of, [])
+            # One pill per board. A board can hold two rows for one advert (the
+            # same posting listed twice), and both pointed at the keeper, which
+            # rendered as "also on stepstone" twice.
+            if any(e["source"] == r["twin_source"] for e in bucket):
+                continue
+            bucket.append(
                 {"source": r["twin_source"], "seen_at": r["first_seen_at"],
                  "direct": sources.is_direct(r["twin_source"]), "url": r["url"] or ""})
         for r in conn.execute(

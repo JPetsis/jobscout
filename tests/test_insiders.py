@@ -425,3 +425,31 @@ def test_the_grid_gets_the_lead_report_without_asking_for_it(tmp_path):
     conn = _conn(tmp_path)
     out = api.stats(conn, {})
     assert out["lead"]["pairs"] == 0
+
+
+def test_one_pill_per_board_even_when_the_board_holds_two_rows(tmp_path):
+    """The Dresden advert arrived twice from Stepstone and once from XING. Both
+    Stepstone rows pointed at the XING keeper and the card said "also on
+    stepstone" twice."""
+    from jobscout import api, db as dbm
+    from jobscout.models import Posting
+    from jobscout.score import score_posting
+
+    conn = dbm.connect(tmp_path / "t.db")
+    prefs = {"title_terms": ["software"], "min_score": 0}
+    run = dbm.start_run(conn)
+
+    def store(url, source, title, company="clicks digital GmbH"):
+        p = Posting(source=source, title=title, company=company,
+                    location="Dresden", url=url, external_id=url)
+        pid, _, _ = dbm.upsert(conn, p, score_posting(prefs, p), run, "t")
+        return pid
+
+    xing = store("https://x/1", "xing", "Software-Entwickler PHP")
+    a = store("https://s/1", "stepstone", "Software-Entwickler PHP (m/w/d) in Dresden")
+    b = store("https://s/2", "stepstone", "Software-Entwickler PHP (m/w/d) in Dresden")
+    conn.execute("UPDATE postings SET dup_of=? WHERE id IN (?,?)", (xing, a, b))
+    conn.commit()
+    twins = api.republished_as(conn, xing)
+    assert [t["source"] for t in twins] == ["stepstone"]
+    assert api.republished_map(conn, [(xing, "xing")])[xing][0]["source"] == "stepstone"
