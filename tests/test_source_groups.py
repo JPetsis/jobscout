@@ -62,7 +62,7 @@ def test_options_arrive_sorted_by_group():
 def test_the_dach_group_is_the_regional_boards():
     """Spot-check the assignment that matters most to a German user."""
     for name in ("stepstone", "xing", "karriere_at", "jobs_ch", "ams", "jobsat",
-                 "jobware", "englishjobs"):
+                 "jobware"):
         assert group_of(name) == sources.GROUP_DACH, name
 
 

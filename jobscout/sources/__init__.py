@@ -19,9 +19,9 @@ SOURCE_NAMES = [
     "greenhouse", "ashby", "recruitee", "lever", "smartrecruiters", "workable",
     "themuse", "workday",
     "adzuna", "usajobs",
-    "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware", "talent",
+    "germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware",
     "interamt", "careers",
-    "englishjobs", "governmentjobs", "jobicy", "teamtailor", "join",
+    "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
     "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
     "theunijobs",
@@ -76,8 +76,8 @@ GROUPS = {
     "karriere_at": GROUP_DACH, "jobs_ch": GROUP_DACH, "arbeitnow": GROUP_DACH,
     "berlinstartupjobs": GROUP_DACH, "ams": GROUP_DACH, "jobsat": GROUP_DACH,
     "germantechjobs": GROUP_DACH, "swissdevjobs": GROUP_DACH, "jobup": GROUP_DACH,
-    "jobscout24": GROUP_DACH, "jobware": GROUP_DACH, "englishjobs": GROUP_DACH,
-    "talent": GROUP_DACH, "instaffo": GROUP_DACH, "interamt": GROUP_DACH,
+    "jobscout24": GROUP_DACH, "jobware": GROUP_DACH,
+    "instaffo": GROUP_DACH, "interamt": GROUP_DACH,
     # United States
     "themuse": GROUP_US, "usajobs": GROUP_US, "governmentjobs": GROUP_US, "dice": GROUP_US,
     # European Union
@@ -178,7 +178,7 @@ NOT_DIRECT = frozenset({
     # DACH boards and job centres: employers post here, and so do agencies and
     # republishers, so a per-row claim is impossible
     "stepstone", "xing", "stellenanzeigen", "karriere_at", "jobs_ch", "ams",
-    "jobsat", "jobscout24", "jobware", "englishjobs", "talent",
+    "jobsat", "jobscout24", "jobware",
     "berlinstartupjobs", "germantechjobs", "swissdevjobs", "jobup",
     "arbeitnow", "instaffo",
     # startup boards: the employer usually posts, but recruiters and agencies do

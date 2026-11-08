@@ -336,8 +336,6 @@ sources:
     - jobup
     - jobscout24
     - jobware
-    - talent
-    - englishjobs
     - governmentjobs
     - jobicy
     - wordpressjobs
@@ -529,16 +527,6 @@ sources:
     # sources/jobware.py before touching the parser.
     queries: []              # from your profile unless set
 
-  talent:
-    # talent.com (aggregator, German front); k/l/p query parameters.
-    queries: []              # from your profile unless set
-
-  englishjobs:
-    # English-speaking jobs in Germany. Category pages, not keyword search.
-    categories:              # e.g. remote, visa-sponsorship, part-time
-      - remote
-    pages: 2
-
   governmentjobs:
     # US public-sector board (NEOGOV), keyword search.
     queries: []              # from your profile unless set
@@ -701,8 +689,6 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "jobup": {"queries": []},
     "jobscout24": {"queries": []},
     "jobware": {"queries": []},
-    "talent": {"queries": []},
-    "englishjobs": {"categories": ["remote"], "pages": 2},
     "governmentjobs": {"queries": []},
     "jobicy": {"count": 50, "max_pages": 3},
     "teamtailor": {"max_pages": 2},

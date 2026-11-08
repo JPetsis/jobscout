@@ -47,13 +47,13 @@ import re
 
 # Sources verified to accept an empty keyword and return a recent-postings
 # sweep (measured 2026-10-03; extended 2026-10-15: jobup, jobscout24,
-# jobware, talent and governmentjobs all return a sweep for an empty
+# jobware and governmentjobs both return a sweep for an empty
 # keyword). A source not listed here simply gets no `broad` query, which is
 # safe: it keeps role/stack queries.
 BROAD_CAPABLE = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
-    "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
+    "jobup", "jobscout24", "jobware", "governmentjobs",
     "myscience",
 }
 
@@ -66,7 +66,7 @@ BROAD_CAPABLE = {
 QUERY_DRIVEN = {
     "stepstone", "xing", "stellenanzeigen", "karriere_at",
     "jobs_ch", "linkedin", "ams", "eures", "jobsat",
-    "jobup", "jobscout24", "jobware", "talent", "governmentjobs",
+    "jobup", "jobscout24", "jobware", "governmentjobs",
     "myscience", "interamt",
 }
 

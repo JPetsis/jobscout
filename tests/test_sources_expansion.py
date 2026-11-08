@@ -1,5 +1,5 @@
 """The 2026-10-15 source batch: germantechjobs, swissdevjobs, jobup,
-jobscout24, jobware, talent, englishjobs, governmentjobs, jobicy, teamtailor,
+jobscout24, jobware, governmentjobs, jobicy, teamtailor,
 join, wordpressjobs, pythonjobs, fossjobs.
 
 Fixtures are real slices captured live on 2026-10-15 (endpoints and gotchas:
@@ -9,13 +9,13 @@ behaviour is exercised against scripted HTTP responses.
 import datetime as _dt
 import json
 
-from jobscout.sources import (REGISTRY, SOURCE_NAMES, englishjobs, fossjobs,
+from jobscout.sources import (REGISTRY, SOURCE_NAMES, fossjobs,
                               germantechjobs, governmentjobs, jobicy, jobscout24,
                               jobup, jobware, join, pythonjobs, swissdevjobs,
-                              talent, teamtailor, wordpressjobs)
+                              teamtailor, wordpressjobs)
 
 NEW_SOURCES = ["germantechjobs", "swissdevjobs", "jobup", "jobscout24", "jobware",
-               "talent", "englishjobs", "governmentjobs", "jobicy", "teamtailor",
+               "governmentjobs", "jobicy", "teamtailor",
                "join", "wordpressjobs", "pythonjobs", "fossjobs"]
 
 
@@ -223,37 +223,6 @@ def test_governmentjobs(fixture_text):
     assert "$91,083.20" in p.compensation
     assert p.url == "https://www.governmentjobs.com/jobs/5516467-0/systems-engineer-ii"
     assert p.external_id == "5516467-0"
-
-
-def test_talent(fixture_text):
-    ps = talent.parse(fixture_text("talent_list.html"))
-    assert len(ps) == 1
-    p = ps[0]
-    assert p.title == "PHP Entwickler (m/w/d) - HR MasterData"
-    assert p.company == "PerZukunft Arbeitsvermittlung GmbH&Co.KG"
-    assert p.location == "Berlin, Deutschland"
-    assert p.url == "https://de.talent.com/view?id=534434318532478950"
-    assert p.posted_at == "2026-10-08"
-
-
-def test_englishjobs(fixture_text):
-    ps = englishjobs.parse(fixture_text("englishjobs_list.html"))
-    assert len(ps) == 1
-    p = ps[0]
-    assert p.title == "VP of Sales - Defence (m/f/d)"
-    assert p.company == "HAPEKO Deutschland GmbH"
-    assert p.location == "München"
-    assert p.url.startswith("https://englishjobs.de/clickout/")
-    assert "&amp;" not in p.url
-    assert p.external_id == "c029372a99e0bee8"
-
-
-def test_englishjobs_fetch_pages(fixture_text):
-    html = fixture_text("englishjobs_list.html")
-    f = FakeGet([(200, html), (200, html)])
-    englishjobs.fetch({"categories": ["remote"], "pages": 2}, f)
-    assert f.urls[0].endswith("/jobs/remote")
-    assert f.urls[1].endswith("/jobs/remote?page=2")
 
 
 def test_join(fixture_text):
