@@ -237,23 +237,6 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
     # Only the first 1,500 characters are read, which is plenty of evidence and
     # keeps a re-score of 45,000 rows from turning into a text-processing job.
     # An advert too short to classify is KEPT -- see language.allowed.
-    # A stated AI requirement, not a keyword. Strict on purpose: an advert we
-    # never read cannot state the requirement, and a shortlist polluted with
-    # postings that merely might mention it is not a shortlist. This is the one
-    # filter where silence is not kept, because the person asked to see only
-    # adverts that say it.
-    if prefs.get("require_ai"):
-        if reqs.ai_signal(p.description or "") != "required":
-            s.filtered, s.reason = True, "ai:not_stated"
-            return s
-
-    allow = prefs.get("language_allow") or []
-    if allow:
-        s.lang = detect(f"{p.title}. {(p.description or '')[:1500]}")
-        if not lang_allowed(s.lang, allow):
-            s.filtered, s.reason = True, f"lang:{s.lang}"
-            return s
-
     max_age = _num(prefs, "max_age_days", 0)
     d = date_part(p.posted_at)
     if max_age and d:
@@ -444,6 +427,20 @@ def score_posting(prefs: dict, p: Posting, today: date | None = None) -> Score:
         bonus = _num(prefs, "remote_bonus", 0)
         s.score += bonus
         s.reasons.append(["remote", bonus])
+
+    # Gates LAST. The score is what the advert is worth; the filter is a separate
+    # decision about showing it. Applied first, as they were, every filtered row
+    # kept score 0 -- which made a whole board read as "consistently very low"
+    # when its adverts were merely hidden, and made the stats a lie.
+    if prefs.get("require_ai") and reqs.ai_signal(p.description or "") != "required":
+        if not s.filtered:
+            s.filtered, s.reason = True, "ai:not_stated"
+
+    allow = prefs.get("language_allow") or []
+    if allow:
+        s.lang = detect(f"{p.title}. {(p.description or '')[:1500]}")
+        if not lang_allowed(s.lang, allow) and not s.filtered:
+            s.filtered, s.reason = True, f"lang:{s.lang}"
 
     return s
 
