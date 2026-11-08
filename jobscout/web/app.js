@@ -12,7 +12,7 @@ let STATS = {};               // header numbers
  * something applied is the START of a relationship you are tracking, and a
  * board that hides it at that moment loses the role you care most about. */
 const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
-            text: false, closing: false };
+            text: false, closing: false, isNew: false };
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
 let TEXT_TIMER = null;        // debounce for typing
@@ -351,6 +351,7 @@ function wireFilters() {
   $('status').addEventListener('change', (e) => { F.status = e.target.value; render(); });
   $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
   $('closing').addEventListener('change', (e) => { F.closing = e.target.checked; render(); });
+  $('newonly').addEventListener('change', (e) => { F.isNew = e.target.checked; render(); });
 
   for (const b of document.querySelectorAll('#band button')) {
     b.addEventListener('click', () => {
@@ -416,6 +417,7 @@ function visible() {
     if (F.source !== 'all' && r.source !== F.source) return false;
     if (F.band === 'strong' && r.score < strongTh) return false;
     if (F.band === 'match' && r.score < minSc) return false;
+    if (F.isNew && !r.is_new) return false;
     if (F.fresh && !freshFromSource(r)) return false;
     if (F.closing && !closingSoon(r)) return false;
     if (F.q) {
@@ -458,6 +460,8 @@ function render() {
   $('fresh-text').textContent = nFresh
     ? 'Fresh from the source (' + nFresh + ')'
     : 'Fresh from the source';
+  const nNew = ALL.filter((r) => r.is_new).length;
+  $('newonly-text').textContent = nNew ? 'New (' + nNew + ')' : 'New';
   const nClosing = ALL.filter(closingSoon).length;
   $('closing-text').textContent = nClosing
     ? 'Closing soon (' + nClosing + ')'

@@ -83,3 +83,17 @@ def test_the_filters_are_the_controls_the_tests_look_for():
     for control in ('id="q"', 'id="qtext"', 'id="fresh"', 'id="closing"',
                     'id="pay-words"', 'id="pay-city"'):
         assert control in HTML, f"{control} is gone"
+
+
+def test_the_new_badge_has_its_own_filter():
+    """Two different words were sharing "New": the status of an untouched
+    posting and the badge for one that arrived recently. The dropdown now says
+    Untouched, and the badge has a filter of its own."""
+    from pathlib import Path
+    web = Path(__file__).resolve().parent.parent / "jobscout" / "web"
+    html = (web / "index.html").read_text(encoding="utf-8")
+    js = (web / "app.js").read_text(encoding="utf-8")
+    assert ">Untouched<" in html
+    assert 'id="newonly"' in html
+    assert "F.isNew && !r.is_new" in js
+    assert "pywebview.api" in js  # sanity: the file we read is the window
