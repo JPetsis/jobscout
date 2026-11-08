@@ -701,12 +701,15 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     one, so the honest answer is to pick one board per market rather than to
     guess. See `sources/__init__.py` for what each board covers.
 
-    The employer's own board wins when one of the rows came from it; otherwise
-    the row seen first stays, so the original advert keeps its id and history.
+    The row that survives is the best one, not the first one scanned: the
+    employer's own board wins when one of the rows came from it, then the fullest
+    advert, then the higher score, then the older id. "First stored" is an
+    artefact of scan order and picked the thinner copy as often as the better.
     """
     groups: dict[tuple[str, str], list] = {}
     rows = conn.execute(
-        "SELECT id, source, title, company, location FROM postings "
+        "SELECT id, source, title, company, location, "
+        "length(coalesce(description, '')) AS desc_len, score FROM postings "
         "WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id"
     ).fetchall()
     for r in rows:
@@ -723,7 +726,8 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
         if len(title) < 18 or len(company) < 6 or not place:
             continue
         groups.setdefault((place, title), []).append(
-            {"id": r["id"], "source": r["source"], "company": company})
+            {"id": r["id"], "source": r["source"], "company": company,
+             "desc_len": r["desc_len"] or 0, "score": r["score"] or 0})
     marked = 0
     for items in groups.values():
         if len(items) < 2:
@@ -744,7 +748,14 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
         for bucket in buckets:
             if len({it["source"] for it in bucket}) < 2:
                 continue
-            keeper = next((it for it in bucket if it["source"] in direct), bucket[0])
+            # Which row survives decides what the card shows, so it is the best
+            # row, not the first one scanned: the employer's own board first,
+            # then the fullest advert, then the higher score, then the older id.
+            # "First stored" is an artefact of scan order and picked the thinner
+            # copy of a post as often as the better one.
+            keeper = max(bucket, key=lambda it: (
+                1 if it["source"] in direct else 0, it["desc_len"], it["score"],
+                -it["id"]))
             for it in bucket:
                 if it is keeper:
                     continue
