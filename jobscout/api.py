@@ -155,7 +155,8 @@ def republished_map(conn, rows: list[tuple[int, str]]) -> dict[int, list[dict]]:
     return found
 
 
-def posting_dict(row, twins: list[dict] | None = None) -> dict:
+def posting_dict(row, twins: list[dict] | None = None,
+                 new_hours: int = 24) -> dict:
     """One stored posting as a JSON-safe dict.
 
     `reasons` is stored as JSON *text* in the DB; the UI needs the parsed list
@@ -167,6 +168,21 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
     which is the only version of an insider tip this data can honestly support.
     """
     out = {k: row[k] for k in row.keys()} if hasattr(row, "keys") else dict(row)
+    # "New" is a fact about the person's attention, not about the scan: a scan
+    # every hour would otherwise make every badge vanish within the hour, and a
+    # scan every three days would keep three days of adverts unmarked. A window
+    # in hours is independent of both and can be read off the card.
+    out["is_new"] = False
+    if new_hours:
+        try:
+            seen = datetime.fromisoformat(str(out.get("first_seen_at") or "")
+                                          .replace("Z", "+00:00"))
+            if seen.tzinfo is None:
+                seen = seen.replace(tzinfo=timezone.utc)
+            out["is_new"] = (datetime.now(timezone.utc) - seen).total_seconds() \
+                < int(new_hours) * 3600
+        except (TypeError, ValueError):
+            out["is_new"] = False
     raw = out.get("reasons") or ""
     try:
         parsed = json.loads(raw) if raw else []
@@ -203,7 +219,7 @@ def posting_dict(row, twins: list[dict] | None = None) -> dict:
 
 
 def list_matches(conn, *, min_score=None, status=None, source=None,
-                 limit=None) -> list[dict]:
+                 limit=None, new_hours: int = 24) -> list[dict]:
     """Stored postings that survived the rule engine, best first.
 
     Excludes filtered rows and duplicates by default so the count in the window
@@ -218,7 +234,7 @@ def list_matches(conn, *, min_score=None, status=None, source=None,
         keep = [r for r in rows if not r["filtered"] and r["dup_of"] is None]
         # one query for every republished twin on the page, not one per card
         twins = republished_map(conn, [(r["id"], r["source"]) for r in keep])
-        out = [posting_dict(r, twins.get(r["id"])) for r in keep]
+        out = [posting_dict(r, twins.get(r["id"]), new_hours) for r in keep]
         # ...and one for the applications, so a card can say "applied" without
         # a query per row. A posting with no application gets None, not {}.
         tracked = applications_map(conn, [r["id"] for r in keep])
@@ -617,6 +633,11 @@ SETTINGS = [
      "group": "How strict",
      "label": "Scan in the background when the last scan is older than",
      "help": "Hours. 0 means only when you press Scan."},
+    {"key": "preferences.new_badge_hours", "op": "scalar", "kind": "number",
+     "default": 24,
+     "group": "How strict",
+     "label": "Mark an advert new for this many hours after it first appears",
+     "help": "Independent of how often you scan. 0 turns the badge off."},
     {"key": "preferences.fill_after_scan", "op": "scalar", "kind": "bool",
      "default": True,
      "group": "How strict",
@@ -694,6 +715,7 @@ SECTION_OF = {
     "preferences.strong_threshold": ("matching", False),
     "preferences.max_age_days": ("matching", False),
     "preferences.closing_days": ("matching", False),
+    "preferences.new_badge_hours": ("matching", False),
     "preferences.fill_after_scan": ("matching", False),
     "preferences.require_ai": ("matching", False),
     "preferences.require_title_match": ("matching", False),

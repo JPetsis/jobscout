@@ -24,6 +24,9 @@ preferences:
   # though a university posting in English may still want the local language.
   # An advert whose text is too short to classify is KEPT, never guessed at.
   language_allow: []
+  # How long an advert keeps the "new" badge after it first appears, in hours.
+  # Independent of the scan rhythm: 0 turns it off.
+  new_badge_hours: 24
   # After a scan, read the advert of postings whose board sent only a title and
   # a link, so they are scored on the text like every other board.
   fill_after_scan: true

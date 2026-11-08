@@ -287,6 +287,7 @@ body {
 /* "direct" means the employer publishes here themselves. The fresh variant is
    the one that matters: recent, and no board has republished it yet. */
 .chip.direct { color: var(--blue); border-color: transparent; background: var(--chip); }
+.chip.new { border-color: var(--cta); color: var(--cta); font-weight: 600; }
 .chip.direct.fresh { color: var(--ok); border-color: transparent; background: rgba(26,127,55,.14); font-weight: 600; }
 .chip.also { color: var(--muted); border-style: dashed; }
 /* A stated application deadline. "soon" is the one that must not be missed;

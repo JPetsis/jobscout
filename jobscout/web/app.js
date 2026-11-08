@@ -489,6 +489,13 @@ function card(r, strongTh) {
   const top = el('div', 'top');
   top.appendChild(el('span', 'score' + (r.score >= strongTh ? ' strong' : ''), String(Math.round(r.score))));
   top.appendChild(el('span', 'chip', r.source));
+  // Arrived within the window the person set, whatever the scan rhythm was.
+  if (r.is_new) {
+    const fresh = el('span', 'chip new', 'new');
+    fresh.title = 'First seen ' + String(r.first_seen_at || '').slice(0, 10) +
+      '. Stays marked for the window set in Settings.';
+    top.appendChild(fresh);
+  }
   // Where the vacancy comes from, and how young. "fresh" is the badge that
   // means something: the employer's own board, recent, nobody republishing it.
   if (r.direct) {

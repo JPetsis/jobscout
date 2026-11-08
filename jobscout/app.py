@@ -505,6 +505,7 @@ class JsApi:
                 self.conn,
                 min_score=float(self.cfg.prefs.get("min_score", 6)),
                 limit=int(limit),
+                new_hours=int(self.cfg.prefs.get("new_badge_hours", 24) or 0),
             )
 
     def stats(self) -> dict:
