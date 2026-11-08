@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import sqlite3
@@ -662,11 +663,32 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
     return marked
 
 
+#: Boards decorate the same title differently: "(m/w/d)", "(all gender)", a
+#: hyphen inside a compound, or the city appended. Left in, the comparison never
+#: sees two identical titles and the duplicate stays.
+_GENDER = re.compile(r"\((?:[mwdfx]\s*/\s*){1,3}[mwdfx]\)|\[(?:[mwdfx]\s*/\s*){1,3}[mwdfx]\]"
+                     r"|\(all gender\)|\ball gender\b", re.I)
+_NON_WORD = re.compile(r"[^a-z0-9]+")
+
+
+def dedupe_title(title: str, place: str) -> str:
+    """The title as a board-independent key: no gender marker, no city, no
+    punctuation. "Software-Entwickler PHP (m/w/d) in Dresden" and
+    "Softwareentwickler PHP (m/w/d)" both become "softwareentwicklerphp"."""
+    t = (title or "").lower()
+    t = _GENDER.sub(" ", t)
+    if place:
+        t = re.sub(r"\s+(?:in|bei)\s+" + re.escape(place) + r"\b.*$", " ", t)
+    return _NON_WORD.sub("", t)
+
+
 def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     """Boards advertising one post: keep a single row. Returns how many went.
 
-    Deliberately narrow. It merges only when the title is IDENTICAL after
-    normalisation, the place matches and one company name contains the other,
+    Deliberately narrow. It merges only when the title is identical after the
+    decorations boards add are removed (gender markers, a hyphen inside a
+    compound, the city appended), the place matches and one company name contains
+    the other,
     because a wrong merge hides a job the user could have applied to. It caught
     the Cambridge museum directorship, advertised with the same wording by
     jobs.ac.uk and THE, from two different boards.
@@ -690,9 +712,15 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     for r in rows:
         # boards disagree about how much of the address to print ("Cambridge"
         # vs "Cambridge, United Kingdom"), so only the first segment is compared
-        place = norm((r["location"] or "").split(",")[0])
-        title, company = norm(r["title"]), norm(r["company"])
-        if len(title) < 30 or len(company) < 6 or not place:
+        # boards disagree about how much of the address to print ("Bremen" vs
+        # "Bremen (DE)" vs "Bremen, Germany"), so only the first segment counts
+        # and a trailing country code is dropped
+        place = re.sub(r"\s*\([a-z]{2}\)$", "",
+                       norm((r["location"] or "").split(",")[0]))
+        # one board sends "GmbH & Co. KG", another "GmbH &amp; Co. KG"
+        title = dedupe_title(html.unescape(r["title"] or ""), place)
+        company = norm(html.unescape(r["company"] or ""))
+        if len(title) < 18 or len(company) < 6 or not place:
             continue
         groups.setdefault((place, title), []).append(
             {"id": r["id"], "source": r["source"], "company": company})
@@ -700,12 +728,31 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     for items in groups.values():
         if len(items) < 2:
             continue
-        keeper = next((it for it in items if it["source"] in direct), items[0])
+        # One title can belong to several employers in the same city ("Software-
+        # entwickler PHP" is both endigo and Orange Engineering in Bremen), so
+        # the company decides the bucket, not the title alone. Comparing every
+        # row against a single keeper let the first employer block the others.
+        buckets: list[list[dict]] = []
         for it in items:
-            if it is keeper:
+            for bucket in buckets:
+                a, b = bucket[0]["company"], it["company"]
+                if a.startswith(b) or b.startswith(a):
+                    bucket.append(it)
+                    break
+            else:
+                buckets.append([it])
+        for bucket in buckets:
+            if len({it["source"] for it in bucket}) < 2:
                 continue
-            a, b = keeper["company"], it["company"]
-            if a.startswith(b) or b.startswith(a):
+            keeper = next((it for it in bucket if it["source"] in direct), bucket[0])
+            for it in bucket:
+                if it is keeper:
+                    continue
+                # Same-source repeats are the same board's own business, handled
+                # by the same-source pass; two rows from one board with one title
+                # are more often two teams than one advert copied.
+                if it["source"] == keeper["source"]:
+                    continue
                 conn.execute("UPDATE postings SET dup_of=? WHERE id=?",
                              (keeper["id"], it["id"]))
                 marked += 1
