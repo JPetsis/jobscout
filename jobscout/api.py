@@ -636,6 +636,13 @@ SETTINGS = [
      "group": "How strict",
      "label": "Hide postings older than",
      "help": "Days. Older postings stay stored; they are just not shown."},
+    {"key": "preferences.retention_days", "op": "scalar", "kind": "number",
+     "default": 30,
+     "group": "How strict",
+     "label": "Delete hidden postings after",
+     "help": "Days. Applies to postings that are filtered out and were never "
+             "saved or applied to. 0 keeps everything. Hidden postings that can "
+             "never be shown again are removed at every scan whatever this says."},
     {"key": "preferences.scan_if_older_hours", "op": "scalar", "kind": "number",
      "default": 24,
      "group": "How strict",
@@ -722,6 +729,7 @@ SECTION_OF = {
     "preferences.min_score": ("matching", False),
     "preferences.strong_threshold": ("matching", False),
     "preferences.max_age_days": ("matching", False),
+    "preferences.retention_days": ("matching", False),
     "preferences.closing_days": ("matching", False),
     "preferences.new_badge_hours": ("matching", False),
     "preferences.fill_after_scan": ("matching", False),

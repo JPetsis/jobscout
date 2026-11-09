@@ -18,6 +18,11 @@ DEFAULT_CONFIG = '''\
 
 preferences:
   max_age_days: 21        # drop postings older than this when a date is known
+  # Hidden postings older than this are deleted, so the store does not grow
+  # without bound. Visible ones and anything you saved or applied to are never
+  # touched; 0 keeps everything. Postings the freshness rule has already ruled
+  # out are removed at every scan regardless.
+  retention_days: 30
   # The languages an advert may be written in, as two-letter codes. Empty means
   # no filter at all. Set, it drops an advert that is clearly written in another
   # language -- the language of the advert is usually the language of the job,

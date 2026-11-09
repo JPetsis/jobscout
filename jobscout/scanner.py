@@ -428,6 +428,13 @@ def scan(cfg, conn, fetcher, *,
     deduped += dbm.dedupe_cross_source(conn, set(DIRECT_SOURCES))
     if deduped:
         stats["deduped"] = deduped
+    # Housekeeping, once per scan and after the duplicates are settled: a row the
+    # freshness rule has already ruled out can never be shown again, and a hidden
+    # row past the retention window is dead weight. The store is what a re-score
+    # has to walk, so its size is a feature, not a detail.
+    house = dbm.maintain(conn, cfg.prefs)
+    if house["stale"] or house["old"]:
+        stats["purged"] = house
     dbm.finish_run(conn, run_id, stats)
     m_all, s_all = dbm.count_matches(conn, min_score, strong_th)
 

@@ -196,6 +196,10 @@ def connect(path: Path) -> sqlite3.Connection:
     # opening more connections -- see the note above LOCK.
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # A scan's housekeeping can VACUUM, which holds the write lock for a second
+    # or two; without a timeout the window's next query would fail with "database
+    # is locked" instead of waiting its turn.
+    conn.execute("PRAGMA busy_timeout=10000")
     with LOCK:
         conn.executescript(SCHEMA)
         _migrate(conn)
@@ -387,6 +391,14 @@ def _prefer_fresh(fresh: str, stored: str) -> bool:
     return "\n" in fresh and "\n" not in stored and _same_words(fresh, stored)
 
 
+#: A row whose title matches none of the profile's titles is hidden whatever its
+#: advert says, so keeping the whole body is paying rent on a room nobody enters.
+#: This much is enough to recognise the advert; the fill job reads the body again
+#: if the row ever becomes a candidate (the title list changed, or the gate is
+#: off), and the row is purged with the rest when it ages out.
+TEASER_CHARS = 300
+
+
 def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: str,
            prefs: dict | None = None):
     """Insert or refresh a posting.
@@ -414,6 +426,8 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
         # and 13 -> 9 on the next scan before this line existed.
         if prefs and desc and desc != (p.description or ""):
             sc = score_posting(prefs, replace(p, description=desc))
+        if sc.reason == "no_title_hit":
+            desc = desc[:TEASER_CHARS]
         # Seen in a board's listing means open, as of now, for free. It also
         # revives a row that was marked dead and has been re-advertised: before
         # this, `verify_status` was never touched by a scan, so a re-posted role
@@ -459,7 +473,10 @@ def upsert(conn: sqlite3.Connection, p: Posting, sc: Score, run_id: int, now: st
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             fp, ak, p.source, p.company, p.title, p.location, p.url, p.external_id, p.posted_at,
-            now, run_id, now, run_id, clean_html_lines(strip_null_runs(p.description)), p.compensation,
+            now, run_id, now, run_id,
+            clean_html_lines(strip_null_runs(p.description))[
+                :TEASER_CHARS] if sc.reason == "no_title_hit"
+            else clean_html_lines(strip_null_runs(p.description)), p.compensation,
             p.salary_min, p.salary_max, p.salary_currency, p.salary_period,
             p.salary_annual_max, p.salary_raw, p.expires_at,
             1 if p.early_applicant else 0,
@@ -937,31 +954,173 @@ def postings_to_check(conn: sqlite3.Connection, min_score: float, *,
     return conn.execute(sql, params).fetchall()
 
 
+#: Reasons a score reaches without reading the advert. A row filtered for one of
+#: these is decided by its title, employer, place or date, so a re-score does not
+#: have to lift its body off the disk. Everything else -- description denies, stack
+#: minimums, the AI and language gates -- can change verdict when the body is read,
+#: so those rows are scored again in a second pass.
+_TEXT_FREE = ("no_title_hit", "title_deny:", "academic:", "stale:", "salary:below-")
+
+#: Every column a Posting needs except the body, which is the expensive one.
+_LIGHT_COLS = (
+    "id, source, title, company, location, url, external_id, posted_at, "
+    "compensation, early_applicant, salary_min, salary_max, salary_currency, "
+    "salary_period, salary_annual_max, salary_raw, score, reasons, filtered, "
+    "filtered_reason, lang")
+
+
+def _text_free(reason: str) -> bool:
+    return any(reason == r or (r.endswith(":") and reason.startswith(r))
+               for r in _TEXT_FREE)
+
+
+def _score_differs(row, sc: Score) -> bool:
+    return (sc.score != row["score"]
+            or json.dumps(sc.reasons) != (row["reasons"] or "[]")
+            or bool(sc.filtered) != bool(row["filtered"])
+            or sc.reason != (row["filtered_reason"] or "")
+            or (sc.lang or "") != (row["lang"] or ""))
+
+
+def _write_score(conn, pid: int, sc: Score) -> None:
+    """The bulk version of `set_score`: no commit, the caller decides when."""
+    conn.execute(
+        "UPDATE postings SET score=?, reasons=?, filtered=?, filtered_reason=?, lang=? "
+        "WHERE id=?",
+        (sc.score, json.dumps(sc.reasons), 1 if sc.filtered else 0, sc.reason,
+         sc.lang, pid))
+
+
 def rescore_all(conn: sqlite3.Connection, prefs: dict, progress=None) -> tuple[int, int]:
     """Re-apply the current preferences to every stored posting.
 
     Returns (total, changed). Used by `jobscout rescore`, by `jobscout scan` when
     it detects the preferences changed, and by the window's re-score button.
 
-    `progress(done, total, changed)` is called every few hundred rows: a real
-    store of 38,000 postings takes about 25 seconds, so a caller with a window
-    has to be able to say how far it has got.
+    Two passes, because the advert body is what costs. The first scores every row
+    with an empty body: the title, employer, place and date gates never read the
+    text, so their verdicts are final and 58,000 rows take seconds instead of
+    loading 220 MB. Only rows whose verdict can depend on the advert go to the
+    second pass, which reads their bodies in chunks. On a real store that is
+    58,987 rows in about 10 seconds instead of 37, and the cost now follows the
+    candidates rather than the whole table.
+
+    `progress(done, total, changed)` counts the second pass, where the work is.
     """
-    rows = all_postings(conn)
-    total = len(rows)
+    total = conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
     changed = 0
-    for i, row in enumerate(rows, 1):
+    need_body: list[int] = []
+    for row in conn.execute(f"SELECT {_LIGHT_COLS}, '' AS description FROM postings "
+                            "ORDER BY id"):
         sc = score_posting(prefs, row_to_posting(row))
-        if (sc.score != row["score"] or json.dumps(sc.reasons) != (row["reasons"] or "[]")
-                or bool(sc.filtered) != bool(row["filtered"])
-                or sc.reason != (row["filtered_reason"] or "")
-                or (sc.lang or "") != (row["lang"] or "")):
-            set_score(conn, row["id"], sc)
-            changed += 1
-        if progress is not None and (i % 250 == 0 or i == total):
-            progress(i, total, changed)
+        if sc.filtered and _text_free(sc.reason):
+            if _score_differs(row, sc):
+                _write_score(conn, row["id"], sc)
+                changed += 1
+        else:
+            need_body.append(row["id"])
     conn.commit()
+
+    done = 0
+    for start in range(0, len(need_body), 400):
+        chunk = need_body[start:start + 400]
+        marks = ",".join("?" * len(chunk))
+        for row in conn.execute(
+                f"SELECT {_LIGHT_COLS}, description FROM postings "
+                f"WHERE id IN ({marks}) ORDER BY id", chunk):
+            sc = score_posting(prefs, row_to_posting(row))
+            if _score_differs(row, sc):
+                _write_score(conn, row["id"], sc)
+                changed += 1
+        conn.commit()
+        done += len(chunk)
+        if progress is not None:
+            progress(done, len(need_body), changed)
+    if progress is not None and not need_body:
+        progress(0, 0, changed)
     return total, changed
+
+# ---------------------------------------------------------------- retention
+
+#: Rows a purge may never take: what the person saved or applied to is a record
+#: of their own work, not a cache entry.
+_KEEP_ROW = ("status NOT IN ('saved','applied') "
+             "AND id NOT IN (SELECT posting_id FROM applications)")
+
+
+def _chunks(seq, size: int = 400):
+    for start in range(0, len(seq), size):
+        yield seq[start:start + size]
+
+
+def purge_where(conn: sqlite3.Connection, where: str, params=()) -> int:
+    """Delete rows matching `where` that were never acted on, and their twins.
+
+    A duplicate whose keeper goes must go with it, or the grid would resurrect a
+    copy of a deleted advert. The exception is a duplicate the person saved or
+    applied to: that one survives, detached, because their action outranks the
+    housekeeping.
+    """
+    ids = [r[0] for r in conn.execute(
+        f"SELECT id FROM postings WHERE ({where}) AND {_KEEP_ROW}", params)]
+    removed = 0
+    for chunk in _chunks(ids):
+        marks = ",".join("?" * len(chunk))
+        removed += conn.execute(
+            f"DELETE FROM postings WHERE dup_of IN ({marks}) AND {_KEEP_ROW}",
+            chunk).rowcount
+        conn.execute(f"UPDATE postings SET dup_of=NULL WHERE dup_of IN ({marks})", chunk)
+        removed += conn.execute(
+            f"DELETE FROM postings WHERE id IN ({marks})", chunk).rowcount
+    conn.commit()
+    return removed
+
+
+def purge_stale(conn: sqlite3.Connection) -> int:
+    """Rows the freshness rule has already ruled out.
+
+    `stale:<date>` is decided by the advert's publication date, so it only gets
+    truer with time; the row can never be shown again. A board that still lists
+    the advert will return it on the next scan, and if it has been re-dated it
+    comes back as a fresh row.
+    """
+    return purge_where(conn, "filtered_reason LIKE 'stale:%'")
+
+
+def purge_old_filtered(conn: sqlite3.Connection, days: int) -> int:
+    """Retention for hidden rows: a filtered posting older than `days` goes.
+
+    Visible rows are never touched, and neither are saved or applied ones. The
+    point is that changing a profile later does not resurrect two months of
+    adverts that no longer exist on the board anyway.
+    """
+    if not days or int(days) <= 0:
+        return 0
+    return purge_where(
+        conn,
+        "filtered=1 AND substr(first_seen_at,1,10) < date('now', ?)",
+        (f"-{int(days)} days",))
+
+
+def maintain(conn: sqlite3.Connection, prefs: dict) -> dict:
+    """Housekeeping after a scan: drop what can never be shown, then reclaim.
+
+    Returns what it did, for the scan summary. VACUUM only runs when a meaningful
+    share of the file is free pages, because it rewrites the whole database and
+    is not worth it for a few hundred rows.
+    """
+    stale = purge_stale(conn)
+    old = purge_old_filtered(conn, int(prefs.get("retention_days", 30) or 0))
+    vacuumed = False
+    if stale or old:
+        free = conn.execute("PRAGMA freelist_count").fetchone()[0]
+        pages = conn.execute("PRAGMA page_count").fetchone()[0]
+        if pages and free and free / pages > 0.15:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.execute("VACUUM")
+            vacuumed = True
+    return {"stale": stale, "old": old, "vacuumed": vacuumed}
+
 
 # ------------------------------------------------------------- applications
 

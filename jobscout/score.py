@@ -50,6 +50,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from functools import lru_cache
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -99,24 +100,90 @@ def _term_re(term: str, strict: bool) -> re.Pattern:
     return pat
 
 
+@lru_cache(maxsize=4096)
+def _norm_term(term: str) -> str:
+    """A term normalised once, not once per row.
+
+    A re-score calls _hit about a hundred times per posting, and each call used to
+    lowercase and collapse the same term again: 1.47 million `norm` calls on a
+    58,000-row store, a third of the wall time in the text pass.
+    """
+    return norm(term)
+
+
+#: A word in normalized text. Terms that are a single word are matched against
+#: this set instead of running one regex per term per posting: a profile has well
+#: over a hundred terms, and 218 regex searches over the same 4 KB advert was 89%
+#: of a re-score's wall time, measured.
+_WORD = re.compile(r"[0-9a-z]+")
+
+
+def _loose_in(text: str, term: str) -> bool:
+    """The loose match, without a regex: a term at either boundary counts.
+
+    Same answer as `(?:(?<![0-9a-z])term|term(?![0-9a-z]))`, but `str.find` is C
+    and the boundary check is two character tests. Only a term buried in another
+    word on both sides is rejected.
+    """
+    start = text.find(term)
+    while start != -1:
+        end = start + len(term)
+        before = text[start - 1] if start else ""
+        after = text[end] if end < len(text) else ""
+        if not (_ascii_word(before) and _ascii_word(after)):
+            return True
+        start = text.find(term, start + 1)
+    return False
+
+
+def _ascii_word(ch: str) -> bool:
+    return bool(ch) and ch.isascii() and ch.isalnum()
+
+
+def _hits(terms, text: str, strict: bool = False) -> set[int]:
+    """Indexes of the terms that hit.
+
+    Single-word terms take the word-set path, which is the same test as the
+    whole-word regex for normalized text. Terms with punctuation or spaces
+    ("c++", "front-end", "software engineer") keep the regex, because the word
+    set cannot represent them.
+    """
+    words: set[str] | None = None
+    found: set[int] = set()
+    for i, term in enumerate(terms):
+        tn = _norm_term(term)
+        if not tn:
+            continue
+        if tn.isalnum():
+            if strict:
+                if words is None:
+                    words = set(_WORD.findall(text))
+                if tn in words:
+                    found.add(i)
+            elif _loose_in(text, tn):
+                found.add(i)
+        elif _term_re(tn, strict).search(text) is not None:
+            found.add(i)
+    return found
+
+
 def _hit(text: str, term: str, strict: bool = False) -> bool:
     """Match an already-normalized term against already-normalized text."""
-    tn = norm(term)
+    tn = _norm_term(term)
     return bool(tn) and _term_re(tn, strict).search(text) is not None
 
 
 def _first_hit(terms, text: str, strict: bool = True) -> str | None:
-    for term in terms:
-        if _hit(text, term, strict=strict):
-            return term
-    return None
+    hits = _hits(terms, text, strict)
+    return terms[min(hits)] if hits else None
 
 
 def _boost(s: Score, terms, text: str, label: str, weight: float, cap: float) -> float:
     """Score distinct term hits, each worth ``weight``, in total capped at ``cap``."""
+    hits = _hits(terms, text)
     used = 0.0
-    for term in terms:
-        if not _hit(text, term):
+    for i, term in enumerate(terms):
+        if i not in hits:
             continue
         add = min(weight, cap - used)
         if add <= 0:
@@ -128,7 +195,7 @@ def _boost(s: Score, terms, text: str, label: str, weight: float, cap: float) ->
 
 
 def _count_hits(terms, text: str) -> int:
-    return sum(1 for term in terms if _hit(text, term))
+    return len(_hits(terms, text))
 
 
 def _stack_preferred(prefs: dict) -> dict:

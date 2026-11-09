@@ -41,6 +41,7 @@ def queue(conn, limit: int = BATCH) -> list[dict]:
     rows = conn.execute(
         "SELECT id, source, url, title, company, location, external_id, score "
         "FROM postings WHERE length(description) < ? AND detail_fetched_at IS NULL "
+        "AND (filtered_reason IS NULL OR filtered_reason NOT LIKE 'no_title_hit%') "
         "AND dup_of IS NULL AND verify_status != 'dead' "
         "ORDER BY score DESC, id DESC LIMIT ?", (MIN_BODY, int(limit))).fetchall()
     return [dict(r) for r in rows]
