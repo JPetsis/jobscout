@@ -348,14 +348,18 @@ def _same_source_twin(conn: sqlite3.Connection, p: Posting) -> int | None:
         "AND lower(location) = lower(?)",
         (p.source, p.location),
     ).fetchall()
-    title, company = norm(p.title), norm(p.company)
-    if len(title) < 30 or len(company) < 4:
+    title = dedupe_title(p.title, norm(p.location))
+    company = norm(p.company)
+    if len(title) < 18 or len(company) < 3:
         return None
     for r in rows:
-        other_title, other_company = norm(r["title"]), norm(r["company"])
-        if len(other_title) < 30:
+        other_title = dedupe_title(r["title"], norm(p.location))
+        other_company = norm(r["company"])
+        if len(other_title) < 18:
             continue
-        if not (title.startswith(other_title) or other_title.startswith(title)):
+        # Equality after decorations, or a board's 100-character cut -- not a
+        # shared prefix, which also matches "… - Midwest" against the national ad.
+        if not _title_twin(title, other_title):
             continue
         if company.startswith(other_company) or other_company.startswith(company):
             return r["id"]
@@ -644,6 +648,20 @@ def set_description(conn, pid: int, description: str) -> None:
     conn.commit()
 
 
+def _title_twin(a: str, b: str) -> bool:
+    """Same title, allowing a board that cuts one at 100 characters.
+
+    XING published the Landesverwaltungsamt role twice, the second time with the
+    title one character short. A prefix is only accepted when the difference is
+    that small; "Senior Account Executive" and "Senior Account Executive -
+    Midwest" share a prefix and are different jobs.
+    """
+    if a == b:
+        return True
+    short, long = sorted((a, b), key=len)
+    return len(short) >= len(long) - 3 and long.startswith(short)
+
+
 def dedupe_same_source(conn: sqlite3.Connection) -> int:
     """Mark republished rows from one board as duplicates. Returns how many.
 
@@ -658,14 +676,20 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
     ).fetchall()
     marked = 0
     for r in rows:
-        title, company = norm(r["title"]), norm(r["company"])
-        if len(title) < 30 or len(company) < 4:
+        place = norm((r["location"] or "").split(",")[0])
+        title = dedupe_title(r["title"], place)
+        company = norm(r["company"])
+        # A place is not required here: one board, one employer and one title
+        # are enough, and a board that sends no city must not escape the pass.
+        # Three-character employers are real (n8n, B12, SAP); the title is the
+        # evidence, not the length of the name.
+        if len(title) < 18 or len(company) < 3:
             continue
-        bucket = groups.setdefault((r["source"], norm(r["location"])), [])
+        bucket = groups.setdefault((r["source"], place), [])
         twin = None
         for other in bucket:
-            o_title, o_company = other["title"], other["company"]
-            if not (title.startswith(o_title) or o_title.startswith(title)):
+            o_company = other["company"]
+            if not _title_twin(title, other["title"]):
                 continue
             if company.startswith(o_company) or o_company.startswith(company):
                 twin = other["id"]
@@ -675,6 +699,92 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
             marked += 1
             continue                     # a duplicate is not a yardstick itself
         bucket.append({"id": r["id"], "title": title, "company": company})
+    if marked:
+        conn.commit()
+    return marked
+
+
+def _text_overlap(a: str, b: str) -> float:
+    """How much two advert bodies share, by word set (0..1).
+
+    On the first 4,000 characters: a repost keeps the opening and the body, and
+    an edited advert still shares almost every word.
+    """
+    a, b = norm(a)[:4000], norm(b)[:4000]
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    wa, wb = set(a.split()), set(b.split())
+    return len(wa & wb) / max(1, len(wa | wb))
+
+
+def dedupe_reposts(conn: sqlite3.Connection) -> int:
+    """One board republishing an advert with an edited title, under a new slug.
+
+    arbeitnow does exactly this: the Girona advert appeared on 9 November as
+    "… – PHP/Symfony & React" and on 11 November as "… – Hybrid PHP/Symfony &
+    React", same body to the character and a new id in the URL. The exact-title
+    pass cannot see it, because the insertion sits in the middle of the title and
+    prefix matching stops there.
+
+    Merged only when the board, the employer and the place are identical, one
+    title contains the other, and the bodies agree almost word for word. The more
+    specific title is kept (the repost usually adds a qualifier such as "Hybrid"),
+    and rows that pointed at the hidden copy are repointed, so no chain forms.
+    """
+    groups: dict[tuple[str, str, str], list] = {}
+    rows = conn.execute(
+        "SELECT id, source, title, company, location, description FROM postings "
+        "WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id").fetchall()
+    for r in rows:
+        title = norm(r["title"])
+        company = norm(r["company"])
+        place = norm((r["location"] or "").split(",")[0])
+        if len(title) < 20 or len(company) < 4 or not place:
+            continue
+        groups.setdefault((r["source"], place, company), []).append(
+            {"id": r["id"], "title": title, "desc": r["description"] or ""})
+    gone: set[int] = set()
+    marked = 0
+    for items in groups.values():
+        if len(items) < 2:
+            continue
+        for i in range(len(items)):
+            a = items[i]
+            if a["id"] in gone:
+                continue
+            for j in range(i + 1, len(items)):
+                b = items[j]
+                if b["id"] in gone:
+                    continue
+                # Word containment, not substring: a repost inserts a qualifier
+                # in the middle ("– Hybrid PHP…"), which prefix matching misses.
+                ta, tb = set(a["title"].split()), set(b["title"].split())
+                # An edit that only changes a number is the same advert: sifamo
+                # went from "bis zu 90% remote" to "bis zu 95%". The body is
+                # still required, so a changed number cannot merge two jobs on
+                # its own.
+                only = ta ^ tb
+                numbers_only = bool(only) and all(
+                    any(ch.isdigit() for ch in tok) for tok in only)
+                if not (ta <= tb or tb <= ta or numbers_only):
+                    continue
+                # The body is the second witness, never the only one: vivenu
+                # advertises an Enterprise Account Executive and a BDR with the
+                # same boilerplate body, word for word, and a body-only rule
+                # merged two different jobs.
+                if _text_overlap(a["desc"], b["desc"]) < 0.9:
+                    continue
+                keeper, dead = (b, a) if len(b["title"]) > len(a["title"]) else (a, b)
+                conn.execute("UPDATE postings SET dup_of=? WHERE dup_of=?",
+                             (keeper["id"], dead["id"]))
+                conn.execute("UPDATE postings SET dup_of=? WHERE id=?",
+                             (keeper["id"], dead["id"]))
+                gone.add(dead["id"])
+                marked += 1
+                if dead is a:
+                    break
     if marked:
         conn.commit()
     return marked

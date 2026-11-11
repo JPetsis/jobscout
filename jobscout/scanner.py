@@ -434,6 +434,9 @@ def scan(cfg, conn, fetcher, *,
     # it. One pass over the table catches those pairs; doing it per upsert would
     # repeat the same comparison for every row of a 45,000-row store.
     deduped = dbm.dedupe_same_source(conn)
+    # The same board can republish an advert with an edited title and a new slug;
+    # the exact-title pass cannot see an insertion in the middle of a title.
+    deduped += dbm.dedupe_reposts(conn)
     # Two boards can carry one post word for word (jobs.ac.uk and THE both ran
     # the Cambridge museum directorship). Same-source passes cannot see that;
     # this one can, and prefers the employer's own board when either is direct.
