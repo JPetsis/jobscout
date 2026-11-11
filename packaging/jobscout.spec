@@ -102,7 +102,8 @@ SOURCE_MODULES = [
     "interamt", "careers",
     "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
-    "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
+    "academics", "wissenschaftskarriere", "euraxess", "myscience", "maxplanck",
+    "jobsacuk",
     "theunijobs",
     "instaffo", "ycombinator", "wellfound", "dice",
 ]
