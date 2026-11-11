@@ -23,7 +23,8 @@ SOURCE_NAMES = [
     "interamt", "careers",
     "governmentjobs", "jobicy", "teamtailor", "join",
     "wordpressjobs", "pythonjobs", "fossjobs",
-    "academics", "wissenschaftskarriere", "euraxess", "myscience", "jobsacuk",
+    "academics", "wissenschaftskarriere", "euraxess", "myscience", "maxplanck",
+    "jobsacuk",
     "theunijobs",
     "instaffo", "ycombinator", "wellfound", "dice",
 ]
@@ -95,6 +96,7 @@ GROUPS = {
     "academics": GROUP_ACADEMIC,
     "wissenschaftskarriere": GROUP_ACADEMIC,
     "myscience": GROUP_ACADEMIC,
+    "maxplanck": GROUP_ACADEMIC,
     "jobsacuk": GROUP_UK,
     "theunijobs": GROUP_UK,
     # per-company boards: you choose the employers, and they can be anywhere
@@ -152,6 +154,7 @@ DIRECT_SOURCES = {
     "academics": "the UK academic board, where institutions publish their own vacancies",
     "myscience": "the German research portal, where institutions publish their own vacancies",
     "wissenschaftskarriere": "the German academic board, where institutions publish their own vacancies",
+    "maxplanck": "the employer's own board",
     # public sector: the state's own hiring site for its own vacancies
     "usajobs": "the US government's own hiring site",
     "governmentjobs": "the public-sector hiring system employers publish into",

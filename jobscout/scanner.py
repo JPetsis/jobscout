@@ -198,10 +198,22 @@ def _store_source(cfg, conn, mod, item: dict, *, run_id, min_score: float,
                 dbm.set_score(conn, pid, sc)
                 probe_budget["left"] = probe_budget.get("left", 0) - 1
                 if is_new:
-                    match_count += 1 if (not sc.filtered and dup is None and sc.score >= min_score) else 0
-                    if not sc.filtered and dup is None and sc.score >= min_score:
-                        found.append((pid, sc.score, p.title, p.company, p.location,
-                                      contract_label_from_reasons(sc.reasons)))
+                    # The teaser may already have put this row in `found`; the
+                    # body is a better verdict on the same posting, not a second
+                    # match. Replacing it keeps the summary from printing one
+                    # advert twice (and from counting it twice).
+                    hit = not sc.filtered and dup is None and sc.score >= min_score
+                    entry = (pid, sc.score, p.title, p.company, p.location,
+                             contract_label_from_reasons(sc.reasons))
+                    at = next((i for i, m in enumerate(found) if m[0] == pid), None)
+                    if hit and at is None:
+                        found.append(entry)
+                        match_count += 1
+                    elif hit and at is not None:
+                        found[at] = entry
+                    elif at is not None:
+                        found.pop(at)
+                        match_count -= 1
 
         probed = _maybe_probe_detail(conn, cfg, mod, p, pid, sc, fetcher,
                                      probe_budget, dup, deadline_budget)

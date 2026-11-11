@@ -353,6 +353,7 @@ sources:
     - wissenschaftskarriere
     - euraxess
     - myscience
+    - maxplanck
 
   linkedin:
     # LinkedIn's public guest search (no login). Keep the budget small or
@@ -576,6 +577,13 @@ sources:
     # location parameter.
     queries: []              # from your profile unless set
 
+  maxplanck:
+    # The Max Planck Society's own jobboard: every institute, every discipline.
+    # No keyword search; the board is walked newest-first, 20 per request, and
+    # the profile filters afterwards. Detail pages are server-rendered, so the
+    # fill job can read the advert.
+    max_pages: 5             # 20 per page; 5 covers the whole board today
+
   jobsacuk:
     # jobs.ac.uk: the UK higher-education board. Server-rendered, no key. Cards
     # carry the department, the salary band and a CLOSING date, which becomes
@@ -708,6 +716,7 @@ SOURCE_DEFAULTS: dict[str, dict] = {
     "wissenschaftskarriere": {},
     "euraxess": {"pages": 2},
     "myscience": {"queries": []},
+    "maxplanck": {"limit": 20, "max_pages": 5},
 }
 
 
