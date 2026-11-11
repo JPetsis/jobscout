@@ -50,3 +50,29 @@ def test_one_title_at_three_employers_merges_the_pair_it_belongs_to(tmp_path):
             conn.execute("SELECT id, dup_of FROM postings")}
     assert rows[jobware] == xing
     assert rows[xing] is None and rows[endigo] is None
+
+
+def test_one_advert_open_in_several_cities_matches_its_single_city_copy(tmp_path):
+    """TOUGH advertised one job as "Essen, Würzburg" on Stepstone and "Würzburg
+    oder Essen" on Jobware; bayoonet's five-city advert was on Stellenanzeigen
+    and XING with Berlin only. Comparing the location string verbatim split
+    both pairs."""
+    conn = dbm.connect(tmp_path / "t.db")
+    a = _store(conn, url="https://s/1", source="stepstone",
+               title="Backend-Developer (m/w/d) Cloud & Fullstack",
+               company="Tough Training Gmbh", location="Essen, Würzburg")
+    b = _store(conn, url="https://j/1", source="jobware",
+               title="Backend-Developer (m/w/d) Cloud & Fullstack",
+               company="TOUGH Training GmbH", location="Würzburg oder Essen")
+    assert dbm.dedupe_cross_source(conn) == 1
+    rows = {r["id"]: r["dup_of"] for r in conn.execute("SELECT id, dup_of FROM postings")}
+    assert rows[a] == b or rows[b] == a
+
+
+def test_two_cities_with_no_overlap_stay_two_jobs(tmp_path):
+    conn = dbm.connect(tmp_path / "t.db")
+    _store(conn, url="https://s/1", source="stepstone", title="Softwareentwickler PHP",
+           company="ACME GmbH", location="Berlin")
+    _store(conn, url="https://x/1", source="xing", title="Softwareentwickler PHP",
+           company="ACME GmbH", location="München")
+    assert dbm.dedupe_cross_source(conn) == 0

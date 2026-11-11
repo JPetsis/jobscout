@@ -648,6 +648,26 @@ def set_description(conn, pid: int, description: str) -> None:
     conn.commit()
 
 
+#: A location list, as boards write it: "Essen, Würzburg", "Würzburg oder Essen",
+#: "Darmstadt | Köln". An advert can be open in several places at once.
+_CITY_SPLIT = re.compile(r"\s*(?:,|/|\||\+|\boder\b|\bund\b|&)\s*", re.I)
+
+
+def place_set(location: str) -> set[str]:
+    """The cities an advert names, as a set.
+
+    Boards disagree about the list ("Essen, Würzburg" against "Würzburg oder
+    Essen"), and a multi-city advert must not look like a different job from its
+    single-city copy on another board.
+    """
+    out: set[str] = set()
+    for part in _CITY_SPLIT.split(location or ""):
+        part = re.sub(r"\s*\([a-z]{2}\)$", "", norm(part))
+        if part:
+            out.add(part)
+    return out
+
+
 def _title_twin(a: str, b: str) -> bool:
     """Same title, allowing a board that cuts one at 100 characters.
 
@@ -833,28 +853,24 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     advert, then the higher score, then the older id. "First stored" is an
     artefact of scan order and picked the thinner copy as often as the better.
     """
-    groups: dict[tuple[str, str], list] = {}
+    groups: dict[str, list] = {}
     rows = conn.execute(
         "SELECT id, source, title, company, location, "
         "length(coalesce(description, '')) AS desc_len, score FROM postings "
         "WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id"
     ).fetchall()
     for r in rows:
-        # boards disagree about how much of the address to print ("Cambridge"
-        # vs "Cambridge, United Kingdom"), so only the first segment is compared
-        # boards disagree about how much of the address to print ("Bremen" vs
-        # "Bremen (DE)" vs "Bremen, Germany"), so only the first segment counts
-        # and a trailing country code is dropped
-        place = re.sub(r"\s*\([a-z]{2}\)$", "",
-                       norm((r["location"] or "").split(",")[0]))
+        cities = place_set(html.unescape(r["location"] or ""))
         # one board sends "GmbH & Co. KG", another "GmbH &amp; Co. KG"
-        title = dedupe_title(html.unescape(r["title"] or ""), place)
+        title = dedupe_title(html.unescape(r["title"] or ""),
+                             sorted(cities)[0] if cities else "")
         company = norm(html.unescape(r["company"] or ""))
-        if len(title) < 18 or len(company) < 6 or not place:
+        if len(title) < 18 or len(company) < 6 or not cities:
             continue
-        groups.setdefault((place, title), []).append(
+        groups.setdefault(title, []).append(
             {"id": r["id"], "source": r["source"], "company": company,
-             "desc_len": r["desc_len"] or 0, "score": r["score"] or 0})
+             "cities": cities, "desc_len": r["desc_len"] or 0,
+             "score": r["score"] or 0})
     marked = 0
     for items in groups.values():
         if len(items) < 2:
@@ -891,6 +907,14 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
                 # are more often two teams than one advert copied.
                 if it["source"] == keeper["source"]:
                     continue
+                # One advert open in several cities is one advert: the lists must
+                # share at least one place, but need not be identical.
+                if not (keeper["cities"] & it["cities"]):
+                    continue
+                # Rows that pointed at this copy follow it to the keeper, or the
+                # table ends up with a chain the grid cannot resolve.
+                conn.execute("UPDATE postings SET dup_of=? WHERE dup_of=?",
+                             (keeper["id"], it["id"]))
                 conn.execute("UPDATE postings SET dup_of=? WHERE id=?",
                              (keeper["id"], it["id"]))
                 marked += 1
