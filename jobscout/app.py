@@ -529,6 +529,15 @@ class JsApi:
         with dbm.LOCK:
             return api.source_counts(self.conn)
 
+    def boards_count(self) -> dict:
+        """How many boards are on, for the rail's Sources line.
+
+        The rail shows it before Settings is ever opened, and `read_settings`
+        reads the file for sixty rows; the config already knows the answer.
+        """
+        from . import sources as src
+        return {"on": len(self.cfg.enabled), "total": len(src.REGISTRY)}
+
     def mark(self, pid: int, status: str) -> dict:
         with dbm.LOCK:
             return api.mark_posting(self.conn, int(pid), str(status))

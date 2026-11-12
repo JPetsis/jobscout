@@ -253,9 +253,11 @@ def test_the_rail_holds_the_views_and_the_header_holds_the_work():
     rail = page.split('<aside class="rail"', 1)[1].split("</aside>", 1)[0]
     head = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
 
-    # The workspace sits at the top of the rail: everything below it is read in
-    # that profile.
+    # The wordmark, then the profile menu: everything below is read in that
+    # profile.
+    assert 'class="rail-brand"' in rail and "jobscout" in rail
     assert 'id="profile-btn"' in rail and 'id="profile-name"' in rail
+    assert rail.index('class="rail-brand"') < rail.index('id="profile-btn"')
     assert rail.index('id="profile-btn"') < rail.index('id="matches-btn"')
 
     # Views, in the order asked for: Pay before Applications.
@@ -263,9 +265,10 @@ def test_the_rail_holds_the_views_and_the_header_holds_the_work():
         assert 'id="%s"' % key in rail, key
     assert rail.index('id="pay-btn"') < rail.index('id="apps-btn"')
 
-    # Settings and the theme switch are tools, below the views.
-    assert 'id="settings-btn"' in rail and 'id="theme"' in rail
+    # Settings and Sources are the workspace group, below the views.
+    assert 'id="settings-btn"' in rail and 'id="sources-btn"' in rail
     assert rail.index('id="shortlists-btn"') < rail.index('id="settings-btn"')
+    assert rail.index('id="settings-btn"') < rail.index('id="sources-btn"')
 
     # The work stays in the header, immediately available; the views do not.
     assert 'id="scan-btn"' in head and 'id="check-btn"' in head
@@ -274,7 +277,10 @@ def test_the_rail_holds_the_views_and_the_header_holds_the_work():
 
     # And the rail is a real column, not a restyled row.
     assert ".rail {" in css and ".rail-item" in css and ".workspace" in css
-    assert ".rail-item.on" in css
+    assert ".rail-item.on" in css and ".rail-theme" in css
+    # the scheme is three squares in the rail, not the header's segmented track
+    assert 'class="rail-theme"' in rail
+    assert 'class="seg theme"' not in rail
 
 
 def test_the_window_does_not_ask_for_a_fixed_number(ws):

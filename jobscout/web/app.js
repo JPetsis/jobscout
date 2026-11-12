@@ -111,7 +111,8 @@ async function boot() {
     // grid drawn before the list arrives shows "+" on adverts already in it.
     await loadShortlists();
     render();
-    loadAppsCount();            // the header badge, async and never blocking
+    loadAppsCount();            // the rail's badges, async and never blocking
+    loadBoardsCount();
     loadClosingWatch();         // what closes soon, async and never blocking
     setInterval(pollFill, 2500); // background body completion
     pollFill();
@@ -1028,6 +1029,7 @@ function wirePanes() {
   });
   $('settings-btn').addEventListener('click', openSettings);
   $('matches-btn').addEventListener('click', closePanes);
+  $('sources-btn').addEventListener('click', () => openSettings('boards', 'sources-btn'));
   $('profile-btn').addEventListener('click', () => openPicker());
   $('apps-btn').addEventListener('click', openApps);
   $('apps-close').addEventListener('click', closePanes);
@@ -1046,7 +1048,8 @@ function wirePanes() {
 
 /* The rail says where you are. Only one destination can be current, and the
    grid is a destination too: closing every pane is "Matches", not "nowhere". */
-const RAIL_VIEWS = ['matches-btn', 'pay-btn', 'apps-btn', 'shortlists-btn', 'settings-btn'];
+const RAIL_VIEWS = ['matches-btn', 'pay-btn', 'apps-btn', 'shortlists-btn',
+                    'settings-btn', 'sources-btn'];
 
 function markView(id) {
   for (const key of RAIL_VIEWS) {
@@ -1449,9 +1452,13 @@ function setNote(text, bad) {
   n.classList.toggle('warn', !!bad);
 }
 
-async function openSettings() {
+/* `section` and `fromId` are how Sources opens the same pane on the boards
+   tab without the rail claiming you went to Settings. Guarded by type because
+   this is also a click handler, and a click event is not a section name. */
+async function openSettings(section, fromId) {
+  if (typeof section === 'string' && section) SET.section = section;
   $('settings').hidden = false;
-  markView('settings-btn');
+  markView(typeof fromId === 'string' && fromId ? fromId : 'settings-btn');
   $('detail').hidden = true;
   $('apps').hidden = true;
   $('shortlists').hidden = true;
@@ -3225,6 +3232,17 @@ async function pollFill() {
 /* ---------- the Applications pane ---------- */
 
 let APPS_FILTER = 'open';
+
+async function loadBoardsCount() {
+  try {
+    const b = await pywebview.api.boards_count();
+    const n = (b && b.on) || 0;
+    $('sources-n').textContent = n ? n + ' on' : '';
+    $('sources-btn').title = n
+      ? n + ' of ' + b.total + " boards on — open Settings, Job boards"
+      : 'Which job boards are on';
+  } catch (e) { /* a count must never break the rail */ }
+}
 
 async function loadAppsCount() {
   try {
