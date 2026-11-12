@@ -1121,3 +1121,14 @@ def test_app_info_never_raises(upd_api, monkeypatch):
 
     assert info["version"]
     assert info["frozen"] is False
+
+
+def test_the_grid_is_painted_knowing_the_shortlist():
+    """Reported: adverts already in a shortlist showed a + after a restart. The
+    first render happened before the list arrived, and nothing repainted it."""
+    js = (Path(__file__).resolve().parents[1] / "jobscout" / "web" / "app.js"
+          ).read_text(encoding="utf-8")
+    boot = js.split("async function boot()", 1)[1].split("\n}", 1)[0]
+    assert "await loadShortlists();" in boot
+    assert boot.index("await loadShortlists();") < boot.index("    render();")
+    assert "syncPickButtons();" in js

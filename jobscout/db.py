@@ -956,6 +956,7 @@ def purge_dead(conn: sqlite3.Connection, keep_statuses=("saved", "applied")) -> 
         "AND id NOT IN (SELECT posting_id FROM applications)",
         (*keep_statuses,),
     )
+    _drop_orphan_shortlist_items(conn)
     conn.commit()
     return cur.rowcount
 
@@ -1224,8 +1225,21 @@ def purge_where(conn: sqlite3.Connection, where: str, params=()) -> int:
         conn.execute(f"UPDATE postings SET dup_of=NULL WHERE dup_of IN ({marks})", chunk)
         removed += conn.execute(
             f"DELETE FROM postings WHERE id IN ({marks})", chunk).rowcount
+    _drop_orphan_shortlist_items(conn)
     conn.commit()
     return removed
+
+
+def _drop_orphan_shortlist_items(conn: sqlite3.Connection) -> None:
+    """A membership whose advert is gone is not a shortlist entry.
+
+    Without this the list's count drifts from what it can show: the item is
+    skipped when the rows are read, but it still sits in `shortlist_items` and is
+    counted by the select. The store deletes postings on purpose, so the relation
+    has to follow.
+    """
+    conn.execute("DELETE FROM shortlist_items "
+                 "WHERE posting_id NOT IN (SELECT id FROM postings)")
 
 
 def purge_stale(conn: sqlite3.Connection) -> int:

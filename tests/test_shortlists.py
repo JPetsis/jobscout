@@ -93,3 +93,19 @@ def test_counts_follow_membership(tmp_path):
         shortlists.add(conn, sid, _posting(conn, i))
     assert shortlists.count(conn, sid) == 2
     assert shortlists.all_lists(conn)[0]["n"] == 2
+
+
+def test_a_purged_advert_leaves_no_membership(tmp_path):
+    """The store deletes postings (retention, dead links); the relation has to
+    follow, or the select counts adverts the list cannot show."""
+    conn = dbm.connect(tmp_path / "t.db")
+    sid = shortlists.ensure_default(conn)
+    keep = _posting(conn, 1)
+    gone = _posting(conn, 2)
+    shortlists.add(conn, sid, keep)
+    shortlists.add(conn, sid, gone)
+    conn.execute("UPDATE postings SET verify_status='dead' WHERE id=?", (gone,))
+    conn.commit()
+    dbm.purge_dead(conn)
+    assert shortlists.ids(conn, sid) == [keep]
+    assert shortlists.count(conn, sid) == 1

@@ -104,8 +104,10 @@ async function boot() {
     wireProfiles(launch);
     wireFilters();
     wirePanes();
+    // Before the first paint: a card's + is a fact about the stored list, and a
+    // grid drawn before the list arrives shows "+" on adverts already in it.
+    await loadShortlists();
     render();
-    loadShortlists();           // the bar and the screen, async and never blocking
     loadAppsCount();            // the header badge, async and never blocking
     loadClosingWatch();         // what closes soon, async and never blocking
     setInterval(pollFill, 2500); // background body completion
@@ -546,7 +548,21 @@ function applyShortlistState(st) {
   PICKED.clear();
   for (const id of SL.ids) PICKED.add(id);
   updateShortlist();
+  syncPickButtons();
   if (!$('shortlists').hidden) renderShortlists();
+}
+
+function syncPickButtons() {
+  for (const btn of document.querySelectorAll('.card .pick')) {
+    const card = btn.closest('.card');
+    if (!card) continue;
+    const on = PICKED.has(Number(card.dataset.id));
+    btn.classList.toggle('on', on);
+    btn.innerHTML = on ? PICK_TICK : PICK_PLUS;
+    btn.title = on ? 'Remove from the shortlist' : 'Add to the shortlist';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    card.classList.toggle('picked', on);
+  }
 }
 
 async function loadShortlists() {
@@ -673,7 +689,8 @@ function card(r, strongTh) {
   const expired = r.closes_in_days !== null && r.closes_in_days !== undefined &&
                   r.closes_in_days < 0;
   const c = el('div', 'card' + (r.status !== 'new' ? ' done' : '') +
-                      (expired ? ' expired' : ''));
+                      (expired ? ' expired' : '') +
+                      (PICKED.has(r.id) ? ' picked' : ''));
   c.dataset.id = r.id;
   c.title = (r.reasons || []).map(([l, p]) => l + ' +' + p).join(' · ') || '';
 
