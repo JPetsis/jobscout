@@ -1101,8 +1101,8 @@ class JsApi:
         name = self.cfg.root.name
         profile = "Default" if name.startswith(".") else name
         path = shortlist.default_path(self.cfg.root)
-        shortlist.build_pdf(rows, f"{profile} · {name_row['name'] if name_row else 'Shortlist'}",
-                            path)
+        shortlist.build_pdf(rows, profile, path,
+                            name=(name_row["name"] if name_row else "Shortlist"))
         _open_path(path)
         return {"path": str(path), "count": len(rows)}
 

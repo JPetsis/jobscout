@@ -35,7 +35,7 @@ def test_the_pdf_carries_the_facts_and_the_note(tmp_path):
     assert "Müller & Söhne" in text
     assert "München" in text
     assert "permanent" in text
-    assert "Closes 2026-12-23" in text
+    assert "Deadline 2026-12-23" in text
     assert "Nähe zu Hause" in text
     assert "example.test" in text
 
@@ -79,3 +79,22 @@ def test_the_file_lands_somewhere_a_person_looks():
     assert path.name.startswith("jobscout-shortlist-")
     assert path.suffix == ".pdf"
     assert path.parent in (Path.home() / "Downloads", Path.home())
+
+
+def test_the_link_is_a_short_label_and_the_url_is_an_annotation(tmp_path):
+    """A 130-character board URL used to print and wrap, and only its first line
+    came out clickable because reportlab anchors each fragment separately. The
+    label is short now; the full URL lives in the link annotation."""
+    row = dict(ROW)
+    row["url"] = "https://www.example.test/jobs/" + "x" * 90
+    out = build_pdf([row], "Default", tmp_path / "s.pdf")
+    page = PdfReader(str(out)).pages[0]
+    text = page.extract_text() or ""
+    assert "example.test · open advert" in text
+    assert "https://www.example.test" not in text
+    uris = []
+    for ref in page.get("/Annots") or []:
+        action = ref.get_object().get("/A")
+        if action and action.get("/URI"):
+            uris.append(str(action["/URI"]))
+    assert "https://www.example.test/jobs/" + "x" * 90 in uris
