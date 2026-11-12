@@ -13,8 +13,8 @@ markdown digest.
 
 It ships set up for DACH and remote roles, which is a default rather than a
 scope: the titles, the skills, the countries and the boards all live in
-`config.yaml`, the source list covers the US and the EU as well, and a profile in
-another field starts from an empty template.
+`config.yaml`, the source list covers the US, the UK and the EU as well, and a
+profile in another field starts from an empty template.
 
 **No API keys, no accounts, no metered calls.** Every source is a public endpoint
 that a browser also uses. Your data (preferences, postings, digests) lives in
@@ -67,7 +67,7 @@ non-technical user needs is in it:
   reporting zero jobs and leaving you to guess.
 - **Choose which boards to scan.** Settings has a checkbox per job board, with
   real names rather than config keys, grouped by the market each serves (DACH,
-  US, Europe, global/remote, academic, and the per-company boards). Tick what
+  US, EU, UK, global/remote, academic, and the per-company boards). Tick what
   you want. Your existing order is preserved, and selecting nothing warns you
   instead of letting a scan quietly do nothing.
 - **Edit your profile.** The job titles you want, your skills and how much you
@@ -410,7 +410,7 @@ demand. German and English phrasings are understood; start dates deliberately
 are not.
 
 **Fresh from the source.** Postings from a channel the employer publishes into
-themselves (nine ATS families, four academic portals, two public-sector sites)
+themselves (nine ATS families, five academic portals, two public-sector sites)
 are marked, and *Fresh from the source* filters to the recent ones nobody has
 republished yet. The reason is that the same role rarely appears on two boards
 at once, so the employer's own channel is usually the only place it is listed.
@@ -508,7 +508,9 @@ of who published the file, because there is no signature to check. See
 ## Sources
 
 Working today (all verified live, all free). The `market` column is the same
-grouping the Settings screen uses, so the two read the same way:
+grouping the Settings screen uses, abbreviated: the window names each group in
+full (Germany, Austria & Switzerland; United States; European Union; United
+Kingdom; Global & remote; Academic & research; Company boards).
 
 | source | market | how |
 |---|---|---|
@@ -526,9 +528,8 @@ grouping the Settings screen uses, so the two read the same way:
 | `jobup` | DACH | Public search API, JSON |
 | `jobscout24` | DACH | Server-rendered search, no key |
 | `jobware` | DACH | German job board, server-rendered (Qwik) |
-| `talent` | DACH | Global job aggregator with a German front (de.talent.com) |
-| `englishjobs` | DACH | English-speaking jobs in Germany |
 | `instaffo` | DACH | The public board behind app.instaffo.com — ten cards a list page, no login |
+| `interamt` | DACH | The German public-sector board — universities advertise their IT staff there |
 | `themuse` | US | Public jobs API, no key required |
 | `usajobs` | US | US federal job announcements (requires a free Authorization-Key) |
 | `governmentjobs` | US | US public-sector job board, server-rendered |
@@ -554,6 +555,9 @@ grouping the Settings screen uses, so the two read the same way:
 | `academics` | academic | Germany's academic jobs board (ZEIT group) |
 | `wissenschaftskarriere` | academic | Academic jobs portal (DE/AT/CH) |
 | `myscience` | academic | Science jobs in Germany, Switzerland and Austria |
+| `maxplanck` | academic | The Max Planck Society's own vacancies, every institute |
+| `jobsacuk` | UK | UK higher-education board — server-rendered search, closing dates read from the card |
+| `theunijobs` | UK | Times Higher Education's academic board, UK-based and worldwide |
 | `greenhouse` | Company boards | Public job board API |
 | `ashby` | Company boards | Public posting API |
 | `recruitee` | Company boards | Public company boards API (`<host>/api/offers/`) |
@@ -563,6 +567,7 @@ grouping the Settings screen uses, so the two read the same way:
 | `workday` | Company boards | CXS — the per-company job API behind Fortune 500 careers sites |
 | `teamtailor` | Company boards | Per-company boards with a public JSON Feed |
 | `join` | Company boards | DACH SMB ATS with public per-company boards |
+| `careers` | Company boards | Employers' own careers pages, for firms that run no ATS — advert links read from one page |
 
 The two keyed sources ship **disabled**. Enable them in Settings once you have a
 key. If you enable one without a key, the scan says so by name and prints the
@@ -597,7 +602,8 @@ Known limitations, on purpose:
   The academic boards jobvector.de, hochschul-jobs.de and
   science-jobs-de.de answer the same interactive check to plain HTTP;
   the reachable academic sources are `academics`,
-  `wissenschaftskarriere`, `euraxess` and `myscience`.
+  `wissenschaftskarriere`, `euraxess`, `myscience` and `maxplanck`, with
+  `jobsacuk` and `theunijobs` covering the UK.
 - XING/StepStone don't show per-card dates for some layouts — those postings
   simply have no `posted` date (they're never dropped for it).
 
@@ -702,7 +708,7 @@ What the spec puts in, and why it matters:
 | `jobscout/web/*` (`index.html`, `app.js`, `styles.css`) | loaded from disk at runtime (`app.py`); miss it and the window is blank |
 | `geonamescache` data (`cities*.json`) | offline location resolution (`geo.py` tier 2) |
 | `certifi`'s CA bundle | the TLS context used for `europa.eu` sources |
-| `hiddenimports` for all 47 `jobscout.sources.*` adapters | they are imported by name at runtime, so static analysis cannot see them |
+| `hiddenimports` for all 54 `jobscout.sources.*` adapters | they are imported by name at runtime, so static analysis cannot see them |
 | the pywebview backend for the build platform | also resolved by name at runtime (`webview/guilib.py`) |
 
 **Never bundled:** `~/.jobscout/config.yaml`, `~/.jobscout/jobscout.db` and
