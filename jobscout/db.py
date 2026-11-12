@@ -151,6 +151,24 @@ CREATE TABLE IF NOT EXISTS application_events (
   detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_app_events ON application_events(application_id, at);
+
+-- Shortlists: named selections you build by hand and keep. A posting can sit in
+-- several at once (one to send to a friend, one for the dream jobs), so the item
+-- table is the relation, not a column on the posting.
+CREATE TABLE IF NOT EXISTS shortlists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS shortlist_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  shortlist_id INTEGER NOT NULL,
+  posting_id INTEGER NOT NULL,
+  added_at TEXT NOT NULL DEFAULT '',
+  UNIQUE(shortlist_id, posting_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sl_items ON shortlist_items(shortlist_id, id);
 """
 
 

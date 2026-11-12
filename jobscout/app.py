@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (api, backup as backupmod, db as dbm, scanner, shortlist,
-               update as updatemod, verify as verifymod)
+               shortlists, update as updatemod, verify as verifymod)
 from .config import load_config
 from .http import Fetcher
 
@@ -1041,23 +1041,68 @@ class JsApi:
         threading.Timer(0.3, _close).start()
         return {"ok": True}
 
-    def export_shortlist(self, ids: list[int]) -> dict:
-        """Write the picked adverts as a PDF and open it.
+    def _shortlist_state(self) -> dict:
+        """What the window needs to draw the bar and the screen, in one shape."""
+        active = shortlists.active(self.conn)
+        return {"lists": shortlists.all_lists(self.conn), "active": active,
+                "ids": shortlists.ids(self.conn, active)}
+
+    def shortlists(self) -> dict:
+        with dbm.LOCK:
+            return self._shortlist_state()
+
+    def shortlist_create(self, name: str) -> dict:
+        with dbm.LOCK:
+            shortlists.create(self.conn, name)
+            return self._shortlist_state()
+
+    def shortlist_rename(self, sid: int, name: str) -> dict:
+        with dbm.LOCK:
+            shortlists.rename(self.conn, int(sid), name)
+            return self._shortlist_state()
+
+    def shortlist_delete(self, sid: int) -> dict:
+        with dbm.LOCK:
+            shortlists.delete(self.conn, int(sid))
+            return self._shortlist_state()
+
+    def shortlist_select(self, sid: int) -> dict:
+        with dbm.LOCK:
+            shortlists.set_active(self.conn, int(sid))
+            return self._shortlist_state()
+
+    def shortlist_toggle(self, pid: int) -> dict:
+        """Add or remove one advert from the active list; returns the new state."""
+        with dbm.LOCK:
+            active = shortlists.active(self.conn)
+            on = shortlists.toggle(self.conn, active, int(pid))
+            state = self._shortlist_state()
+        state["on"] = on
+        return state
+
+    def shortlist_items(self, sid: int | None = None) -> list[dict]:
+        with dbm.LOCK:
+            target = int(sid) if sid is not None else shortlists.active(self.conn)
+            return api.shortlist_rows(self.conn, shortlists.ids(self.conn, target))
+
+    def export_shortlist(self, sid: int | None = None) -> dict:
+        """Write a shortlist as a PDF and open it.
 
         A file is the only shareable form the boards cannot break: no login wall,
         no session-bound link, no client-rendered page.
         """
-        wanted = [int(i) for i in (ids or []) if str(i).lstrip("-").isdigit()][:60]
-        if not wanted:
-            return {"error": "nothing selected"}
         with dbm.LOCK:
-            rows = api.shortlist_rows(self.conn, wanted)
+            target = int(sid) if sid is not None else shortlists.active(self.conn)
+            rows = api.shortlist_rows(self.conn, shortlists.ids(self.conn, target))
+            name_row = self.conn.execute("SELECT name FROM shortlists WHERE id=?",
+                                         (target,)).fetchone()
         if not rows:
-            return {"error": "those postings are gone"}
+            return {"error": "this shortlist is empty"}
         name = self.cfg.root.name
         profile = "Default" if name.startswith(".") else name
         path = shortlist.default_path(self.cfg.root)
-        shortlist.build_pdf(rows, profile, path)
+        shortlist.build_pdf(rows, f"{profile} · {name_row['name'] if name_row else 'Shortlist'}",
+                            path)
         _open_path(path)
         return {"path": str(path), "count": len(rows)}
 

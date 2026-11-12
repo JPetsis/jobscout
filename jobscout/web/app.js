@@ -13,9 +13,10 @@ let STATS = {};               // header numbers
  * board that hides it at that moment loses the role you care most about. */
 const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
             text: false, closing: false, isNew: false };
-// The shortlist is a selection you build by hand; ids, in the order you picked
-// them, because the PDF keeps that order.
+// The shortlist lives in the database -- named lists you keep -- and PICKED
+// mirrors the active one, so the grid can paint a card without a round trip.
 const PICKED = new Set();
+let SL = { lists: [], active: 0, ids: [] };
 // Icons, not glyphs: a plus or a tick sits on the font's math axis and baseline,
 // so a centred line box still looks off-centre inside a 24px circle. An SVG is
 // drawn where it says it is.
@@ -104,6 +105,7 @@ async function boot() {
     wireFilters();
     wirePanes();
     render();
+    loadShortlists();           // the bar and the screen, async and never blocking
     loadAppsCount();            // the header badge, async and never blocking
     loadClosingWatch();         // what closes soon, async and never blocking
     setInterval(pollFill, 2500); // background body completion
@@ -365,11 +367,10 @@ function wireFilters() {
   $('closing').addEventListener('change', (e) => { F.closing = e.target.checked; render(); });
   $('newonly').addEventListener('change', (e) => { F.isNew = e.target.checked; render(); });
   $('shortlist-share').addEventListener('click', async () => {
-    if (!PICKED.size) return;
     const btn = $('shortlist-share');
     btn.disabled = true;
     try {
-      const res = await pywebview.api.export_shortlist([...PICKED]);
+      const res = await pywebview.api.export_shortlist(SL.active);
       if (res && res.path) {
         $('footer-note').textContent = 'Shortlist saved to ' + res.path;
       } else {
@@ -381,10 +382,24 @@ function wireFilters() {
       btn.disabled = false;
     }
   });
-  $('shortlist-clear').addEventListener('click', () => {
-    PICKED.clear();
-    render();
+  $('shortlist-open').addEventListener('click', openShortlists);
+  $('shortlists-btn').addEventListener('click', openShortlists);
+  $('sl-close').addEventListener('click', closePanes);
+  $('sl-pick').addEventListener('change', async (e) => {
+    applyShortlistState(await pywebview.api.shortlist_select(Number(e.target.value)));
   });
+  $('sl-new').addEventListener('click', () => startSlEdit('new'));
+  $('sl-rename').addEventListener('click', () => startSlEdit('rename'));
+  $('sl-cancel').addEventListener('click', () => { $('sl-edit').hidden = true; });
+  $('sl-save').addEventListener('click', saveSlEdit);
+  $('sl-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveSlEdit();
+    if (e.key === 'Escape') $('sl-edit').hidden = true;
+  });
+  $('sl-export').addEventListener('click', async () => {
+    $('shortlist-share').click();
+  });
+  $('sl-delete').addEventListener('click', deleteSl);
 
   for (const b of document.querySelectorAll('#band button')) {
     b.addEventListener('click', () => {
@@ -513,11 +528,142 @@ function render() {
   updateShortlist();
 }
 
+function slName() {
+  const found = (SL.lists || []).find((l) => l.id === SL.active);
+  return found ? found.name : 'Shortlist';
+}
+
 function updateShortlist() {
   const n = PICKED.size;
-  const bar = $('shortlist-bar');
-  bar.hidden = n === 0;
-  $('shortlist-count').textContent = n === 1 ? '1 selected' : n + ' selected';
+  $('shortlist-bar').hidden = n === 0;
+  $('shortlist-count').textContent =
+    (n === 1 ? '1 advert' : n + ' adverts') + ' in ' + slName();
+}
+
+function applyShortlistState(st) {
+  if (!st) return;
+  SL = { lists: st.lists || [], active: st.active || 0, ids: st.ids || [] };
+  PICKED.clear();
+  for (const id of SL.ids) PICKED.add(id);
+  updateShortlist();
+  if (!$('shortlists').hidden) renderShortlists();
+}
+
+async function loadShortlists() {
+  try {
+    applyShortlistState(await pywebview.api.shortlists());
+  } catch (e) {
+    // the bar simply stays empty; the grid is unaffected
+  }
+}
+
+/* ---------- the shortlists screen ---------- */
+
+async function openShortlists() {
+  closePanes();
+  $('shortlists').hidden = false;
+  $('scrim').hidden = false;
+  await loadShortlists();
+  renderShortlists();
+}
+
+function renderShortlists() {
+  const pick = $('sl-pick');
+  pick.textContent = '';
+  for (const l of SL.lists) {
+    const o = document.createElement('option');
+    o.value = String(l.id);
+    o.textContent = l.name + ' (' + l.n + ')';
+    if (l.id === SL.active) o.selected = true;
+    pick.appendChild(o);
+  }
+  $('sl-export').disabled = PICKED.size === 0;
+  $('sl-count').textContent = PICKED.size === 1 ? '1 advert' : PICKED.size + ' adverts';
+  renderSlItems();
+}
+
+// Two renders can be in flight (open the pane, then change the list); only the
+// newest may paint, or the empty state is appended twice.
+let SL_RENDER = 0;
+
+async function renderSlItems() {
+  const token = ++SL_RENDER;
+  const box = $('sl-items');
+  box.textContent = '';
+  let rows = [];
+  try {
+    rows = await pywebview.api.shortlist_items(SL.active);
+  } catch (e) {
+    if (token === SL_RENDER) {
+      box.appendChild(el('p', 's-err', 'Could not read this list: ' + String(e)));
+    }
+    return;
+  }
+  if (token !== SL_RENDER) return;
+  rows = Array.isArray(rows) ? rows : [];
+  if (!rows.length) {
+    box.appendChild(el('p', 'loading',
+      'Nothing here yet. Press the + on a card to add it to this list.'));
+    return;
+  }
+  for (const r of rows) {
+    const row = el('div', 'sl-item');
+    const main = el('button', 'sl-main');
+    main.type = 'button';
+    main.appendChild(el('span', 'sl-title', r.title || 'Untitled'));
+    main.appendChild(el('span', 'sl-meta',
+      [r.company, r.location].filter(Boolean).join(' · ')));
+    main.addEventListener('click', () => openDetail(r));
+    const rm = el('button', 'sl-rm', '✕');
+    rm.type = 'button';
+    rm.title = 'Remove from this shortlist';
+    rm.setAttribute('aria-label', rm.title);
+    rm.addEventListener('click', async () => {
+      rm.disabled = true;
+      try {
+        applyShortlistState(await pywebview.api.shortlist_toggle(r.id));
+        renderShortlists();
+      } finally {
+        rm.disabled = false;
+      }
+    });
+    row.appendChild(main);
+    row.appendChild(rm);
+    box.appendChild(row);
+  }
+}
+
+function startSlEdit(mode) {
+  SL.editing = mode;
+  $('sl-name').value = mode === 'rename' ? slName() : '';
+  $('sl-edit').hidden = false;
+  $('sl-name').focus();
+  $('sl-name').select();
+}
+
+async function saveSlEdit() {
+  const name = $('sl-name').value.trim();
+  if (!name) return;
+  const st = SL.editing === 'rename'
+    ? await pywebview.api.shortlist_rename(SL.active, name)
+    : await pywebview.api.shortlist_create(name);
+  $('sl-edit').hidden = true;
+  applyShortlistState(st);
+  renderShortlists();
+}
+
+async function deleteSl() {
+  const btn = $('sl-delete');
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Confirm delete';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; }, 4000);
+    return;
+  }
+  btn.dataset.armed = '';
+  btn.textContent = 'Delete';
+  applyShortlistState(await pywebview.api.shortlist_delete(SL.active));
+  renderShortlists();
 }
 
 function card(r, strongTh) {
@@ -540,16 +686,23 @@ function card(r, strongTh) {
   pick.title = PICKED.has(r.id) ? 'Remove from the shortlist' : 'Add to the shortlist';
   pick.setAttribute('aria-pressed', PICKED.has(r.id) ? 'true' : 'false');
   pick.setAttribute('aria-label', pick.title);
-  pick.addEventListener('click', (e) => {
+  pick.addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (PICKED.has(r.id)) PICKED.delete(r.id); else PICKED.add(r.id);
-    const on = PICKED.has(r.id);
-    pick.classList.toggle('on', on);
-    pick.innerHTML = on ? PICK_TICK : PICK_PLUS;
-    pick.title = on ? 'Remove from the shortlist' : 'Add to the shortlist';
-    pick.setAttribute('aria-pressed', on ? 'true' : 'false');
-    c.classList.toggle('picked', on);
-    updateShortlist();
+    pick.disabled = true;
+    try {
+      const st = await pywebview.api.shortlist_toggle(r.id);
+      applyShortlistState(st);
+      const on = Boolean(st && st.on);
+      pick.classList.toggle('on', on);
+      pick.innerHTML = on ? PICK_TICK : PICK_PLUS;
+      pick.title = on ? 'Remove from the shortlist' : 'Add to the shortlist';
+      pick.setAttribute('aria-pressed', on ? 'true' : 'false');
+      c.classList.toggle('picked', on);
+    } catch (err) {
+      $('footer-note').textContent = 'Could not update the shortlist: ' + err;
+    } finally {
+      pick.disabled = false;
+    }
   });
   c.appendChild(pick);
 
@@ -862,6 +1015,7 @@ function closePanes() {
   $('detail').hidden = true;
   $('settings').hidden = true;
   $('apps').hidden = true;
+  $('shortlists').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = true;
 }
@@ -870,6 +1024,7 @@ function closePanes() {
 
 async function openDetail(r, refresh) {
   $('pay').hidden = true;
+  $('shortlists').hidden = true;
   CURRENT = r;
   $('detail').hidden = false;
   $('settings').hidden = true;
@@ -1242,6 +1397,7 @@ async function openSettings() {
   $('settings').hidden = false;
   $('detail').hidden = true;
   $('apps').hidden = true;
+  $('shortlists').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = false;
   setNote('');

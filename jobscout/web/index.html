@@ -60,6 +60,7 @@ document.documentElement.dataset.theme =
     <div class="bar-views" role="group" aria-label="Views">
       <button id="pay-btn" class="ghost" title="What the postings in your board advertise, per year">Pay</button>
       <button id="apps-btn" class="ghost" title="Every application you logged, and what came of it">Applications</button>
+      <button id="shortlists-btn" class="ghost" title="Named lists of adverts you keep, ready to share">Shortlists</button>
     </div>
     <span class="bar-div" aria-hidden="true"></span>
     <div class="bar-tools" role="group" aria-label="Display and settings">
@@ -186,8 +187,8 @@ any other board.">
 
 <div id="shortlist-bar" class="shortlist-bar" hidden role="status">
   <span id="shortlist-count">0 selected</span>
+  <button id="shortlist-open" class="ghost small">Open</button>
   <button id="shortlist-share" class="ghost cta small">Share PDF</button>
-  <button id="shortlist-clear" class="ghost small">Clear</button>
 </div>
 
 <footer class="foot">
@@ -233,6 +234,34 @@ any other board.">
     </div>
   </div>
   <div class="pane-body" id="apps-body"></div>
+</aside>
+
+<aside id="shortlists" class="pane sl" hidden aria-labelledby="sl-title">
+  <div class="pane-head">
+    <h2 id="sl-title">Shortlists</h2>
+    <div class="pane-tools">
+      <button id="sl-close" class="ghost small" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="pane-body">
+    <div class="sl-tools">
+      <select id="sl-pick" aria-label="Shortlist"></select>
+      <button id="sl-new" class="ghost small">New</button>
+      <button id="sl-rename" class="ghost small">Rename</button>
+      <button id="sl-delete" class="ghost small">Delete</button>
+    </div>
+    <div id="sl-edit" class="sl-edit" hidden>
+      <input id="sl-name" type="text" maxlength="60" placeholder="Name this list"
+             aria-label="Shortlist name">
+      <button id="sl-save" class="ghost cta small">Save</button>
+      <button id="sl-cancel" class="ghost small">Cancel</button>
+    </div>
+    <div id="sl-items" class="sl-items"></div>
+    <div class="sl-foot">
+      <span id="sl-count" class="muted"></span>
+      <button id="sl-export" class="ghost cta small">Export PDF</button>
+    </div>
+  </div>
 </aside>
 
 <div id="scrim" class="scrim" hidden></div>

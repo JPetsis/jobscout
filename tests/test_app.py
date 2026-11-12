@@ -250,10 +250,11 @@ def test_the_header_groups_verbs_views_and_tools():
     css = (base / "styles.css").read_text(encoding="utf-8")
     html = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
 
-    # Views are two buttons shaped like the work buttons, in their own group.
+    # Views are three buttons shaped like the work buttons, in their own group.
     views = html.split('class="bar-views"', 1)[1].split("</div>", 1)[0]
     assert 'id="apps-btn"' in views and 'id="pay-btn"' in views
-    assert views.count('class="ghost"') == 2, "same shape as Scan and Check"
+    assert 'id="shortlists-btn"' in views
+    assert views.count('class="ghost"') == 3, "same shape as Scan and Check"
 
     # Verbs sit together, apart from the views and from the tools.
     work = html.split('class="bar-work"', 1)[1].split("</div>", 1)[0]
