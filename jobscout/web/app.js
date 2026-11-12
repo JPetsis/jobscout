@@ -16,6 +16,15 @@ const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
 // The shortlist is a selection you build by hand; ids, in the order you picked
 // them, because the PDF keeps that order.
 const PICKED = new Set();
+// Icons, not glyphs: a plus or a tick sits on the font's math axis and baseline,
+// so a centred line box still looks off-centre inside a 24px circle. An SVG is
+// drawn where it says it is.
+const PICK_PLUS = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">' +
+  '<path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round"/></svg>';
+const PICK_TICK = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">' +
+  '<path d="M5 12.5l4.3 4.3L19 7" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
 let TEXT_TIMER = null;        // debounce for typing
@@ -523,8 +532,10 @@ function card(r, strongTh) {
   c.title = (r.reasons || []).map(([l, p]) => l + ' +' + p).join(' · ') || '';
 
   // Pick before open: sharing a shortlist is a different act from reading an ad.
-  const pick = el('button', 'pick' + (PICKED.has(r.id) ? ' on' : ''),
-                  PICKED.has(r.id) ? '\u2713' : '+');
+  const pick = el('button', 'pick' + (PICKED.has(r.id) ? ' on' : ''));
+  // PICK_PLUS / PICK_TICK are string constants defined in this file; no advert
+  // text or user input ever reaches innerHTML here.
+  pick.innerHTML = PICKED.has(r.id) ? PICK_TICK : PICK_PLUS;
   pick.type = 'button';
   pick.title = PICKED.has(r.id) ? 'Remove from the shortlist' : 'Add to the shortlist';
   pick.setAttribute('aria-pressed', PICKED.has(r.id) ? 'true' : 'false');
@@ -534,7 +545,7 @@ function card(r, strongTh) {
     if (PICKED.has(r.id)) PICKED.delete(r.id); else PICKED.add(r.id);
     const on = PICKED.has(r.id);
     pick.classList.toggle('on', on);
-    pick.textContent = on ? '\u2713' : '+';
+    pick.innerHTML = on ? PICK_TICK : PICK_PLUS;
     pick.title = on ? 'Remove from the shortlist' : 'Add to the shortlist';
     pick.setAttribute('aria-pressed', on ? 'true' : 'false');
     c.classList.toggle('picked', on);

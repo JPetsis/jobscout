@@ -236,15 +236,13 @@ body {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
   display: grid;
   place-items: center;
+  line-height: 0;
   cursor: pointer;
   transition: background .12s ease, border-color .12s ease, color .12s ease;
 }
+.card .pick svg { display: block; }
 .card .pick:hover { border-color: var(--cta); color: var(--cta); }
 .card .pick.on { background: var(--cta); border-color: var(--cta); color: var(--on-accent); }
 .card .pick:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
