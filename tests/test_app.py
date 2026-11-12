@@ -242,34 +242,39 @@ def test_the_result_ceiling_is_refused_outside_its_range(ws):
         api.write_setting(load_config().path, "preferences.max_results", -1)
 
 
-def test_the_header_groups_verbs_views_and_tools():
-    """Reported: six identical buttons in a row, so nothing told you which one
-    was a view and which one did work. Grouping is the whole UX answer here."""
+def test_the_rail_holds_the_views_and_the_header_holds_the_work():
+    """Asked for a left rail with the settings, the theme switch and the second
+    group, with the scan group still immediately available. A view has a name
+    and a place, so it lives in a column; Scan and Check stay in the header
+    because they are what the window does."""
     base = Path(__file__).resolve().parents[1] / "jobscout" / "web"
     page = (base / "index.html").read_text(encoding="utf-8")
     css = (base / "styles.css").read_text(encoding="utf-8")
-    html = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
+    rail = page.split('<aside class="rail"', 1)[1].split("</aside>", 1)[0]
+    head = page.split('<header class="bar">', 1)[1].split("</header>", 1)[0]
 
-    # Views are three buttons shaped like the work buttons, in their own group.
-    views = html.split('class="bar-views"', 1)[1].split("</div>", 1)[0]
-    assert 'id="apps-btn"' in views and 'id="pay-btn"' in views
-    assert 'id="shortlists-btn"' in views
-    assert views.count('class="ghost"') == 3, "same shape as Scan and Check"
+    # The workspace sits at the top of the rail: everything below it is read in
+    # that profile.
+    assert 'id="profile-btn"' in rail and 'id="profile-name"' in rail
+    assert rail.index('id="profile-btn"') < rail.index('id="matches-btn"')
 
-    # Verbs sit together, apart from the views and from the tools.
-    work = html.split('class="bar-work"', 1)[1].split("</div>", 1)[0]
-    assert 'id="scan-btn"' in work and 'id="check-btn"' in work
+    # Views, in the order asked for: Pay before Applications.
+    for key in ("matches-btn", "pay-btn", "apps-btn", "shortlists-btn"):
+        assert 'id="%s"' % key in rail, key
+    assert rail.index('id="pay-btn"') < rail.index('id="apps-btn"')
 
-    # Dividers are the grouping: two of them, three clusters, in the order
-    # asked for: work, then views, then tools.
-    assert html.count('class="bar-div"') == 2
-    assert html.index('class="bar-work"') < html.index('class="bar-views"')
-    assert html.index('id="pay-btn"') < html.index('id="apps-btn"')
+    # Settings and the theme switch are tools, below the views.
+    assert 'id="settings-btn"' in rail and 'id="theme"' in rail
+    assert rail.index('id="shortlists-btn"') < rail.index('id="settings-btn"')
 
-    # Settings is a tool at the edge, icon-only, and still announced.
-    assert 'id="settings-btn"' in html
-    assert 'aria-label="Settings"' in html
-    assert ".bar-div" in css and ".bar-views" in css
+    # The work stays in the header, immediately available; the views do not.
+    assert 'id="scan-btn"' in head and 'id="check-btn"' in head
+    assert 'id="pay-btn"' not in head and 'id="apps-btn"' not in head
+    assert 'id="settings-btn"' not in head
+
+    # And the rail is a real column, not a restyled row.
+    assert ".rail {" in css and ".rail-item" in css and ".workspace" in css
+    assert ".rail-item.on" in css
 
 
 def test_the_window_does_not_ask_for_a_fixed_number(ws):

@@ -150,6 +150,7 @@ function renderStats() {
   const box = $('stats');
   box.textContent = '';
   if (s.matches == null) { box.appendChild(el('span', 'muted', 'no data yet — run a scan')); return; }
+  $('matches-n').textContent = s.matches ? String(s.matches) : '';
   box.appendChild(el('b', null, String(s.matches)));
   box.append(' matches · ');
   box.appendChild(el('span', 'gold', String(s.strong)));
@@ -578,6 +579,7 @@ async function openShortlists() {
   closePanes();
   $('shortlists').hidden = false;
   $('scrim').hidden = false;
+  markView('shortlists-btn');
   await loadShortlists();
   renderShortlists();
 }
@@ -594,6 +596,7 @@ function renderShortlists() {
   }
   $('sl-export').disabled = PICKED.size === 0;
   $('sl-count').textContent = PICKED.size === 1 ? '1 advert' : PICKED.size + ' adverts';
+  $('sl-n').textContent = PICKED.size ? String(PICKED.size) : '';
   updateExportLabel();
   renderSlItems();
 }
@@ -886,6 +889,7 @@ let PAY_TIMER = null;
 
 function openPay() {
   $('pay').hidden = false;
+  markView('pay-btn');
   $('detail').hidden = true;
   $('settings').hidden = true;
   $('scrim').hidden = false;
@@ -1023,6 +1027,8 @@ function wirePanes() {
     if (CURRENT) openDetail(CURRENT, true);
   });
   $('settings-btn').addEventListener('click', openSettings);
+  $('matches-btn').addEventListener('click', closePanes);
+  $('profile-btn').addEventListener('click', () => openPicker());
   $('apps-btn').addEventListener('click', openApps);
   $('apps-close').addEventListener('click', closePanes);
   wirePay();
@@ -1038,6 +1044,17 @@ function wirePanes() {
   });
 }
 
+/* The rail says where you are. Only one destination can be current, and the
+   grid is a destination too: closing every pane is "Matches", not "nowhere". */
+const RAIL_VIEWS = ['matches-btn', 'pay-btn', 'apps-btn', 'shortlists-btn', 'settings-btn'];
+
+function markView(id) {
+  for (const key of RAIL_VIEWS) {
+    const btn = $(key);
+    if (btn) btn.classList.toggle('on', key === id);
+  }
+}
+
 function closePanes() {
   $('detail').hidden = true;
   $('settings').hidden = true;
@@ -1045,6 +1062,7 @@ function closePanes() {
   $('shortlists').hidden = true;
   $('pay').hidden = true;
   $('scrim').hidden = true;
+  markView('matches-btn');
 }
 
 /* ---------- detail ---------- */
@@ -1292,6 +1310,7 @@ function pickerError(msg) {
 
 function openPicker(state) {
   PROFILES = state || PROFILES;
+  paintProfile();
   const list = $('picker-list');
   list.textContent = '';
   for (const p of PROFILES.profiles || []) {
@@ -1365,7 +1384,17 @@ function wireProfiles(launch) {
       try { await pywebview.api.switch_profile(''); } catch (e) { /* not fatal */ }
     }
   });
+  paintProfile();
   if (launch && launch.ask) openPicker(launch);
+}
+
+/* Which workspace the window is in has to be readable at a glance, the same way
+   the app name was: it changes what every number below it means. */
+function paintProfile() {
+  const active = (PROFILES.profiles || []).find((p) => p.active);
+  const name = (active && active.label) || PROFILES.active || 'Default';
+  $('profile-name').textContent = name;
+  $('profile-btn').title = 'Profile: ' + name + ' — switch';
 }
 
 /* ---------- settings ---------- */
@@ -1422,6 +1451,7 @@ function setNote(text, bad) {
 
 async function openSettings() {
   $('settings').hidden = false;
+  markView('settings-btn');
   $('detail').hidden = true;
   $('apps').hidden = true;
   $('shortlists').hidden = true;
@@ -3202,7 +3232,7 @@ async function loadAppsCount() {
     const btn = $('apps-btn');
     if (btn) {
       const n = (stats && stats.total) || 0;
-      btn.textContent = n ? 'Applications ' + n : 'Applications';
+      $('apps-n').textContent = n ? String(n) : '';
       btn.classList.toggle('warn', !!(stats && stats.due));
       btn.title = n
         ? n + ' logged · ' + stats.open + ' still running' +
@@ -3220,6 +3250,7 @@ async function loadAppsCount() {
 
 async function openApps() {
   $('apps').hidden = false;
+  markView('apps-btn');
   $('detail').hidden = true;
   $('settings').hidden = true;
   $('pay').hidden = true;

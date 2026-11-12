@@ -30,6 +30,7 @@
      means saved, salary and "fresh from the source". What is left that still
      feels like a hand picking something up is clay. */
   --cta: #a8492b;
+  --cta-tint: rgba(168, 73, 43, .10);
   --on-cta: #fff8f4;
   --perm-bg: #93402a;
   --perm-fg: #fff4ee;
@@ -59,6 +60,7 @@
   --ok-tint: rgba(63, 185, 80, .16);
   --warn-tint: rgba(210, 153, 34, .18);
   --cta: #d3896a;
+  --cta-tint: rgba(211, 137, 106, .16);
   --on-cta: #1c0d06;
   --perm-bg: #cf8567;
   --perm-fg: #1c0d06;
@@ -86,12 +88,76 @@ html, body {
 
 body {
   display: flex;
-  flex-direction: column;
+  /* the rail is a sibling of the page, not an overlay: the grid keeps its own
+     scroll and the rail never moves */
+  flex-direction: row;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ---- rail ----
+   The workspace, then destinations, then the two things that set the window up.
+   It is a column of names rather than a row of buttons because a view has a
+   name and a place; a header full of equal-weight buttons made Pay look like an
+   action. Scan and Check stay in the header: they are what the window does. */
+.rail {
+  flex: 0 0 214px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  min-height: 0;
+}
+.workspace {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  border: 1px solid var(--line); background: var(--bg); border-radius: 10px;
+  padding: 7px 8px; cursor: pointer; font: inherit; color: var(--ink); text-align: left;
+}
+.workspace:hover { border-color: var(--muted); }
+.workspace:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.wmark {
+  width: 26px; height: 26px; flex: none; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line);
+  display: grid; place-items: center;
+}
+.workspace .who { min-width: 0; display: flex; flex-direction: column; }
+.workspace .who b { font-size: 13px; line-height: 1.25; white-space: nowrap;
+                    overflow: hidden; text-overflow: ellipsis; }
+.workspace .who span { font-size: 11px; color: var(--muted); }
+.workspace .cv { margin-left: auto; color: var(--muted); font-size: 10px; }
+.rail-cap { margin: 16px 10px 6px; font-size: 10.5px; letter-spacing: .09em;
+           text-transform: uppercase; color: var(--muted); }
+.rail-nav { display: flex; flex-direction: column; gap: 2px; }
+.rail-item {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  border: 0; background: transparent; color: var(--ink);
+  font: inherit; font-size: 13.5px; text-align: left;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.rail-item svg { width: 17px; height: 17px; color: var(--muted); flex: none; }
+.rail-item:hover { background: var(--bg); }
+.rail-item.on { background: var(--cta-tint); color: var(--cta); font-weight: 600; }
+.rail-item.on svg { color: var(--cta); }
+.rail-item .n { margin-left: auto; font-size: 11.5px; color: var(--muted);
+                font-weight: 500; font-variant-numeric: tabular-nums; }
+.rail-item.on .n { color: var(--cta); }
+.rail-grow { flex: 1; }
+/* Settings and the theme switch set the window up; the hairline keeps them out
+   of the list of places you can go. */
+.rail-foot { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line);
+             display: flex; flex-direction: column; gap: 8px; }
+.rail .seg { margin: 0 2px; }
+.rail .seg button { flex: 1; justify-content: center; height: 32px; padding: 0; font-size: 13.5px; }
+.rail .seg button.on { background: var(--cta-tint); color: var(--cta); }
+
+/* the page: header, filters, grid, footer. It owns the scroll, not the body. */
+.page { flex: 1; min-width: 0; display: flex; flex-direction: column;
+        height: 100%; overflow: hidden; }
 
 /* ---- header ---- */
 .bar {
@@ -100,15 +166,6 @@ body {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px 10px;
-}
-.brand { display: flex; align-items: center; gap: 9px; }
-.brand h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
-.mark {
-  display: block;
-  width: 18px; height: 18px;
-  /* the logo is a fixed-colour mark, so it does not repaint with the theme;
-     nudge the corner radius to sit with the panel's own rounding */
-  border-radius: 4px;
 }
 /* nowrap + ellipsis: at 800px the header is tight, and "5 strong" used to break
    across two lines mid-phrase. */
@@ -185,6 +242,8 @@ body {
 }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--chip); color: var(--blue); font-weight: 600; }
+/* In the rail the switch is a choice among equals, so the chosen one carries the
+   action colour; blue there would read as information, not as "this is on". */
 /* the theme switcher is icon-only: glyphs are narrower than words */
 .seg.theme button { padding: 0 9px; font-size: 13px; line-height: 1; }
 
@@ -491,7 +550,7 @@ body {
    disappears on the light theme's warm paper (checked at 3x). */
 .bar-div { width: 1px; align-self: stretch; margin: 2px 0;
            background: var(--muted); opacity: .35; }
-.bar-work, .bar-views, .bar-tools {
+.bar-work {
   display: flex; gap: 8px; align-items: center; flex: 0 0 auto;
 }
 /* ONE control height down the whole chrome. Mixed heights were visible at 3x
