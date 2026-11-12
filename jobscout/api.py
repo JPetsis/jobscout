@@ -226,6 +226,35 @@ def posting_dict(row, twins: list[dict] | None = None,
     return out
 
 
+def shortlist_rows(conn, ids: list[int]) -> list[dict]:
+    """The postings someone picked, in the order they picked them.
+
+    The order is the caller's, not the database's: a shortlist is a sequence you
+    arranged, and re-sorting it by id would undo that.
+    """
+    wanted = [int(i) for i in ids if str(i).lstrip("-").isdigit()]
+    if not wanted:
+        return []
+    marks = ",".join("?" * len(wanted))
+    rows = conn.execute(
+        f"SELECT p.*, "
+        f"  (SELECT e.detail FROM application_events e "
+        f"    WHERE e.application_id = a.id AND e.kind = 'note' "
+        f"    ORDER BY e.at DESC, e.id DESC LIMIT 1) AS note "
+        f"FROM postings p LEFT JOIN applications a ON a.posting_id = p.id "
+        f"WHERE p.id IN ({marks})", wanted).fetchall()
+    by_id = {int(r["id"]): r for r in rows}
+    out: list[dict] = []
+    for pid in wanted:
+        row = by_id.get(pid)
+        if row is None:
+            continue
+        item = posting_dict(row)
+        item["note"] = (row["note"] or "") if "note" in row.keys() else ""
+        out.append(item)
+    return out
+
+
 def list_matches(conn, *, min_score=None, status=None, source=None,
                  limit=None, new_hours: int = 24) -> list[dict]:
     """Stored postings that survived the rule engine, best first.

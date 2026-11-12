@@ -208,6 +208,7 @@ body {
 }
 
 .card {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -221,11 +222,55 @@ body {
 .card:hover { border-color: var(--blue); }
 .card:active { transform: scale(.995); }
 .card.done { opacity: .55; }
+/* A picked card is marked at the edge, not filled: the score and the chips keep
+   their own colour, and the selection is a state you can undo with one click. */
+.card.picked { border-color: var(--cta); box-shadow: inset 0 0 0 1px var(--cta); }
+.card .pick {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.card .pick:hover { border-color: var(--cta); color: var(--cta); }
+.card .pick.on { background: var(--cta); border-color: var(--cta); color: var(--on-accent); }
+.card .pick:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.shortlist-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px 7px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+  z-index: 45;
+}
+.shortlist-bar[hidden] { display: none; }
+.shortlist-bar .count, #shortlist-count { font-size: 13px; color: var(--ink); }
 
 .top {
   display: flex;
   align-items: center;
   gap: 7px;
+  padding-right: 26px;
   /* A card can hold six labels. Wrapping BETWEEN them is fine; wrapping
      INSIDE one is not, so each label keeps its width and the row moves on. */
   flex-wrap: wrap;
@@ -821,6 +866,13 @@ button.ghost:disabled:hover { border-color: var(--line); color: var(--ink); }
 .up-note.up-err { color: var(--warn); }
 /* the result of the manual "Check now" in Settings, which is not in the bar */
 .up-note { font-size: 12.5px; color: var(--muted); }
+
+/* The shortlist's action is clay, like every action in the app; blue is the
+   information colour and green is spoken for. */
+button.ghost.cta {
+  background: var(--cta); border-color: var(--cta); color: var(--on-accent);
+}
+button.ghost.cta:hover { filter: brightness(1.08); color: var(--on-accent); }
 
 /* the quit step is the primary action, so it should look like one */
 button.ghost.primary {

@@ -7,6 +7,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "certifi>=2024.2.2",
     "geonamescache>=3.0.2",
+    "reportlab>=5.1.0",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +31,10 @@ build-backend = "hatchling.build"
 packages = ["jobscout"]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pypdf>=7.0.1",
+    "pytest>=8.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

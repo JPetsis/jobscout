@@ -18,12 +18,25 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (api, backup as backupmod, db as dbm, scanner, update as updatemod,
-               verify as verifymod)
+from . import (api, backup as backupmod, db as dbm, scanner, shortlist,
+               update as updatemod, verify as verifymod)
 from .config import load_config
 from .http import Fetcher
 
 WEB = Path(__file__).resolve().parent / "web"
+
+
+def _open_path(path: Path) -> None:
+    """Hand a file to the desktop, whatever the desktop is."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        elif os.name == "nt":
+            os.startfile(str(path))                      # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 class RestoreOffer:
@@ -1027,6 +1040,26 @@ class JsApi:
 
         threading.Timer(0.3, _close).start()
         return {"ok": True}
+
+    def export_shortlist(self, ids: list[int]) -> dict:
+        """Write the picked adverts as a PDF and open it.
+
+        A file is the only shareable form the boards cannot break: no login wall,
+        no session-bound link, no client-rendered page.
+        """
+        wanted = [int(i) for i in (ids or []) if str(i).lstrip("-").isdigit()][:60]
+        if not wanted:
+            return {"error": "nothing selected"}
+        with dbm.LOCK:
+            rows = api.shortlist_rows(self.conn, wanted)
+        if not rows:
+            return {"error": "those postings are gone"}
+        name = self.cfg.root.name
+        profile = "Default" if name.startswith(".") else name
+        path = shortlist.default_path(self.cfg.root)
+        shortlist.build_pdf(rows, profile, path)
+        _open_path(path)
+        return {"path": str(path), "count": len(rows)}
 
     def open_url(self, url: str) -> dict:
         """Open in the real browser -- a job posting belongs in a browser tab."""

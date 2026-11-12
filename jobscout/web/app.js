@@ -13,6 +13,9 @@ let STATS = {};               // header numbers
  * board that hides it at that moment loses the role you care most about. */
 const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
             text: false, closing: false, isNew: false };
+// The shortlist is a selection you build by hand; ids, in the order you picked
+// them, because the PDF keeps that order.
+const PICKED = new Set();
 let TEXT = null;              // Map of id -> matched context, when searching text
 let TEXT_NOTE = '';           // what to say about the text search in the footer
 let TEXT_TIMER = null;        // debounce for typing
@@ -352,6 +355,27 @@ function wireFilters() {
   $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
   $('closing').addEventListener('change', (e) => { F.closing = e.target.checked; render(); });
   $('newonly').addEventListener('change', (e) => { F.isNew = e.target.checked; render(); });
+  $('shortlist-share').addEventListener('click', async () => {
+    if (!PICKED.size) return;
+    const btn = $('shortlist-share');
+    btn.disabled = true;
+    try {
+      const res = await pywebview.api.export_shortlist([...PICKED]);
+      if (res && res.path) {
+        $('footer-note').textContent = 'Shortlist saved to ' + res.path;
+      } else {
+        $('footer-note').textContent = (res && res.error) || 'Could not write the PDF.';
+      }
+    } catch (err) {
+      $('footer-note').textContent = 'Could not write the PDF: ' + err;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  $('shortlist-clear').addEventListener('click', () => {
+    PICKED.clear();
+    render();
+  });
 
   for (const b of document.querySelectorAll('#band button')) {
     b.addEventListener('click', () => {
@@ -477,6 +501,14 @@ function render() {
     : ALL.length + ' loaded \u00b7 ') +
     (F.text && TEXT_NOTE ? TEXT_NOTE + ' in the advert text \u00b7 ' : '') +
     'click a card for details \u00b7 S/A/X triage';
+  updateShortlist();
+}
+
+function updateShortlist() {
+  const n = PICKED.size;
+  const bar = $('shortlist-bar');
+  bar.hidden = n === 0;
+  $('shortlist-count').textContent = n === 1 ? '1 selected' : n + ' selected';
 }
 
 function card(r, strongTh) {
@@ -489,6 +521,26 @@ function card(r, strongTh) {
                       (expired ? ' expired' : ''));
   c.dataset.id = r.id;
   c.title = (r.reasons || []).map(([l, p]) => l + ' +' + p).join(' · ') || '';
+
+  // Pick before open: sharing a shortlist is a different act from reading an ad.
+  const pick = el('button', 'pick' + (PICKED.has(r.id) ? ' on' : ''),
+                  PICKED.has(r.id) ? '\u2713' : '+');
+  pick.type = 'button';
+  pick.title = PICKED.has(r.id) ? 'Remove from the shortlist' : 'Add to the shortlist';
+  pick.setAttribute('aria-pressed', PICKED.has(r.id) ? 'true' : 'false');
+  pick.setAttribute('aria-label', pick.title);
+  pick.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (PICKED.has(r.id)) PICKED.delete(r.id); else PICKED.add(r.id);
+    const on = PICKED.has(r.id);
+    pick.classList.toggle('on', on);
+    pick.textContent = on ? '\u2713' : '+';
+    pick.title = on ? 'Remove from the shortlist' : 'Add to the shortlist';
+    pick.setAttribute('aria-pressed', on ? 'true' : 'false');
+    c.classList.toggle('picked', on);
+    updateShortlist();
+  });
+  c.appendChild(pick);
 
   const top = el('div', 'top');
   top.appendChild(el('span', 'score' + (r.score >= strongTh ? ' strong' : ''), String(Math.round(r.score))));
