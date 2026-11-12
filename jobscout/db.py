@@ -686,6 +686,40 @@ def place_set(location: str) -> set[str]:
     return out
 
 
+def _places_agree(a_loc: str, b_loc: str) -> bool:
+    """Can two rows be the same job, judged by where they say it is?
+
+    A shared city is proof. A board that names only the country ("Switzerland",
+    "Germany") has no city to share, so the country is the evidence -- but only
+    when one side has no city at all: Bremen and Munich are both in Germany and
+    are not the same job.
+    """
+    if place_set(a_loc or "").intersection(place_set(b_loc or "")):
+        return True
+    if geo.place_key(a_loc or "") and geo.place_key(b_loc or ""):
+        return False
+    return bool(geo.countries_in(a_loc or "").intersection(geo.countries_in(b_loc or "")))
+
+
+#: The gloss a board appends to a title ("(m/w/d)", "(Archäologe/Archäologin)",
+#: "(80-100%)"). Not the job, and not part of the name.
+_TITLE_GLOSS = re.compile(r"\s*\([^()]{1,60}\)\s*$")
+
+
+def title_core(title: str) -> str:
+    """A title without its trailing gloss, normalised like `dedupe_title`.
+
+    Strip the gloss BEFORE normalising: normalisation removes the punctuation,
+    and "(Archäologe/Archäologin)" would become part of the word instead of a
+    removable tail.
+    """
+    text = html.unescape(title or "")
+    previous = None
+    while previous != text:
+        previous, text = text, _TITLE_GLOSS.sub("", text).strip()
+    return dedupe_title(text, "")
+
+
 def _title_twin(a: str, b: str) -> bool:
     """Same title, allowing a board that cuts one at 100 characters.
 
@@ -737,6 +771,69 @@ def dedupe_same_source(conn: sqlite3.Connection) -> int:
             marked += 1
             continue                     # a duplicate is not a yardstick itself
         bucket.append({"id": r["id"], "title": title, "company": company})
+    if marked:
+        conn.commit()
+    return marked
+
+
+def dedupe_missing_employer(conn: sqlite3.Connection, direct=()) -> int:
+    """Merge copies whose board gave no employer, using the advert text.
+
+    LinkedIn often stores an advert with no company at all. The strict
+    cross-source pass skips those rows -- it wants an employer before it calls
+    two adverts one -- so the same job stayed twice, once from LinkedIn and once
+    from EURES. When one side has no employer, the body is the evidence: a title
+    core equal after the trailing gloss is removed, a compatible place, and at
+    least 70% of the opening words shared. Measured on the archaeology store,
+    this proposed two merges and both were the same advert.
+    """
+    rows = conn.execute(
+        "SELECT id, source, title, company, location, score, "
+        "length(coalesce(description,'')) AS desc_len, description "
+        "FROM postings WHERE dup_of IS NULL AND status <> 'dismissed' ORDER BY id"
+    ).fetchall()
+    groups: dict[str, list] = {}
+    for r in rows:
+        key = title_core(r["title"])
+        if len(key) < 18:
+            continue
+        groups.setdefault(key, []).append({
+            "id": r["id"], "source": r["source"],
+            "company": norm(html.unescape(r["company"] or "")),
+            "loc": r["location"] or "", "desc_len": r["desc_len"] or 0,
+            "score": r["score"] or 0, "body": r["description"] or "",
+        })
+
+    rank = _keeper_rank(direct)
+    marked = 0
+    for items in groups.values():
+        if len(items) < 2 or all(len(it["company"]) >= 6 for it in items):
+            continue
+        gone: set[int] = set()
+        for it in items:
+            if it["id"] in gone or len(it["company"]) >= 6:
+                continue
+            partner = None
+            for other in items:
+                if other["id"] == it["id"] or other["source"] == it["source"]:
+                    continue
+                if other["id"] in gone:
+                    continue
+                if not _places_agree(it["loc"], other["loc"]):
+                    continue
+                if _text_overlap(it["body"], other["body"]) < 0.7:
+                    continue
+                partner = other
+                break
+            if partner is None:
+                continue
+            keeper, dup = (it, partner) if rank(it) >= rank(partner) else (partner, it)
+            conn.execute("UPDATE postings SET dup_of=? WHERE dup_of=?",
+                         (keeper["id"], dup["id"]))
+            conn.execute("UPDATE postings SET dup_of=? WHERE id=?",
+                         (keeper["id"], dup["id"]))
+            gone.add(dup["id"])
+            marked += 1
     if marked:
         conn.commit()
     return marked
@@ -847,6 +944,19 @@ def dedupe_title(title: str, place: str) -> str:
     return _NON_WORD.sub("", t)
 
 
+def _keeper_rank(direct):
+    """Which copy of a duplicated advert survives: the best, not the first.
+
+    A row with an employer beats one without (a LinkedIn copy often has none,
+    and keeping it would print a card with no company). Then the employer's own
+    board, then the fuller advert, then the higher score, then the older id.
+    "First stored" is an artefact of scan order.
+    """
+    return lambda it: (1 if len(it.get("company") or "") >= 6 else 0,
+                       1 if it["source"] in direct else 0, it["desc_len"],
+                       it["score"], -it["id"])
+
+
 def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
     """Boards advertising one post: keep a single row. Returns how many went.
 
@@ -887,8 +997,8 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
             continue
         groups.setdefault(title, []).append(
             {"id": r["id"], "source": r["source"], "company": company,
-             "cities": cities, "desc_len": r["desc_len"] or 0,
-             "score": r["score"] or 0})
+             "cities": cities, "loc": r["location"] or "",
+             "desc_len": r["desc_len"] or 0, "score": r["score"] or 0})
     marked = 0
     for items in groups.values():
         if len(items) < 2:
@@ -914,9 +1024,7 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
             # then the fullest advert, then the higher score, then the older id.
             # "First stored" is an artefact of scan order and picked the thinner
             # copy of a post as often as the better one.
-            keeper = max(bucket, key=lambda it: (
-                1 if it["source"] in direct else 0, it["desc_len"], it["score"],
-                -it["id"]))
+            keeper = max(bucket, key=_keeper_rank(direct))
             for it in bucket:
                 if it is keeper:
                     continue
@@ -926,8 +1034,9 @@ def dedupe_cross_source(conn: sqlite3.Connection, direct=()) -> int:
                 if it["source"] == keeper["source"]:
                     continue
                 # One advert open in several cities is one advert: the lists must
-                # share at least one place, but need not be identical.
-                if not (keeper["cities"] & it["cities"]):
+                # share at least one place, but need not be identical. A board
+                # that names only the country is read through the country.
+                if not _places_agree(keeper["loc"], it["loc"]):
                     continue
                 # Rows that pointed at this copy follow it to the keeper, or the
                 # table ends up with a chain the grid cannot resolve.
@@ -956,6 +1065,12 @@ def purge_dead(conn: sqlite3.Connection, keep_statuses=("saved", "applied")) -> 
         "AND id NOT IN (SELECT posting_id FROM applications)",
         (*keep_statuses,),
     )
+    # A keeper that is deleted leaves its copies pointing at nothing, hidden
+    # from the grid for good. Promote the oldest copy instead: the advert may
+    # still be live on that board, and the next check will judge it.
+    conn.execute(
+        "UPDATE postings SET dup_of=NULL WHERE dup_of IS NOT NULL "
+        "AND dup_of NOT IN (SELECT id FROM postings)")
     _drop_orphan_shortlist_items(conn)
     conn.commit()
     return cur.rowcount

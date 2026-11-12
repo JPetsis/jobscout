@@ -441,6 +441,7 @@ def scan(cfg, conn, fetcher, *,
     # the Cambridge museum directorship). Same-source passes cannot see that;
     # this one can, and prefers the employer's own board when either is direct.
     deduped += dbm.dedupe_cross_source(conn, set(DIRECT_SOURCES))
+    deduped += dbm.dedupe_missing_employer(conn, set(DIRECT_SOURCES))
     if deduped:
         stats["deduped"] = deduped
     # Housekeeping, once per scan and after the duplicates are settled: a row the
