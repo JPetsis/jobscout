@@ -46,10 +46,13 @@ document.documentElement.dataset.theme =
   <!-- The profile scopes everything below it, so it sits directly under the
        wordmark and reads as a menu, not as a card. -->
   <button id="profile-btn" class="workspace" title="Switch profile"
-          aria-haspopup="dialog">
+          aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
     <span id="profile-name">Default</span>
     <span class="cv" aria-hidden="true">▾</span>
   </button>
+  <!-- Choosing a workspace is a menu, not a journey: the full "who's using
+       jobscout?" screen is for Settings, where you go to manage profiles. -->
+  <div id="profile-menu" class="menu" role="menu" aria-labelledby="profile-name" hidden></div>
 
   <p class="rail-cap" id="rail-views">Views</p>
   <nav class="rail-nav" aria-labelledby="rail-views">

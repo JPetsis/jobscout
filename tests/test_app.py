@@ -275,6 +275,16 @@ def test_the_rail_holds_the_views_and_the_header_holds_the_work():
     assert 'id="pay-btn"' not in head and 'id="apps-btn"' not in head
     assert 'id="settings-btn"' not in head
 
+    # The selector is a menu, not the overlay: the full picker belongs to the
+    # path through Settings.
+    assert 'aria-haspopup="menu"' in rail
+    menu = page.split('id="profile-menu"', 1)[1].split(">", 1)[0]
+    assert 'role="menu"' in menu
+    js = (base / "app.js").read_text(encoding="utf-8")
+    assert "$('profile-btn').addEventListener('click', openProfileMenu)" in js
+    assert "function openProfileMenu()" in js
+    assert "openPicker(st)" in js, "Settings keeps the full screen"
+
     # And the rail is a real column, not a restyled row.
     assert ".rail {" in css and ".rail-item" in css and ".workspace" in css
     assert ".rail-item.on" in css and ".rail-theme" in css

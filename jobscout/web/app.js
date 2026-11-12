@@ -1030,7 +1030,7 @@ function wirePanes() {
   $('settings-btn').addEventListener('click', openSettings);
   $('matches-btn').addEventListener('click', closePanes);
   $('sources-btn').addEventListener('click', () => openSettings('boards', 'sources-btn'));
-  $('profile-btn').addEventListener('click', () => openPicker());
+  $('profile-btn').addEventListener('click', openProfileMenu);
   $('apps-btn').addEventListener('click', openApps);
   $('apps-close').addEventListener('click', closePanes);
   wirePay();
@@ -1347,15 +1347,16 @@ function openPicker(state) {
 
 function closePicker() { $('picker').hidden = true; }
 
-async function chooseProfile(p) {
+async function chooseProfile(p, report) {
+  const say = report || pickerError;
   if (p.active) { closePicker(); return; }   // already here: nothing to switch
   let out;
   try {
     out = await pywebview.api.switch_profile(p.name);
   } catch (e) {
-    return pickerError(String(e));
+    return say(String(e));
   }
-  if (!out || !out.ok) return pickerError((out && out.error) || 'could not switch');
+  if (!out || !out.ok) return say((out && out.error) || 'could not switch');
   // Reload rather than patching the page: the whole view is derived from the
   // workspace, so a fresh boot is both simpler and guaranteed consistent.
   window.location.reload();
@@ -1373,6 +1374,11 @@ async function createProfile(name) {
 }
 
 function wireProfiles(launch) {
+  // The boot answer is the state every profile surface reads from: the rail's
+  // name, its menu, and the picker. It used to be stored only when the picker
+  // opened, so a window that started without asking left the menu empty.
+  PROFILES = launch || PROFILES;
+  paintProfile();
   $('picker-new').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const name = $('picker-name').value.trim();
@@ -1387,9 +1393,84 @@ function wireProfiles(launch) {
       try { await pywebview.api.switch_profile(''); } catch (e) { /* not fatal */ }
     }
   });
-  paintProfile();
   if (launch && launch.ask) openPicker(launch);
 }
+
+/* The rail's profile menu. A list of two or three names is not a screen: the
+   overlay belongs to Settings, where profiles are managed. */
+function menuError(msg) {
+  let line = $('profile-menu').querySelector('.menu-err');
+  if (!line) {
+    line = el('p', 'menu-err');
+    $('profile-menu').appendChild(line);
+  }
+  line.textContent = msg;
+  line.hidden = false;
+}
+
+function closeProfileMenu() {
+  const menu = $('profile-menu');
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  $('profile-btn').setAttribute('aria-expanded', 'false');
+}
+
+function openProfileMenu() {
+  const menu = $('profile-menu');
+  const btn = $('profile-btn');
+  if (!menu.hidden) { closeProfileMenu(); return; }   // second press closes it
+  menu.textContent = '';
+  for (const p of PROFILES.profiles || []) {
+    const item = el('button', 'menu-item' + (p.active ? ' on' : ''));
+    item.type = 'button';
+    item.setAttribute('role', 'menuitemradio');
+    item.setAttribute('aria-checked', p.active ? 'true' : 'false');
+    item.appendChild(el('span', 'tick', p.active ? '\u2713' : ''));
+    item.appendChild(el('span', 'pi-name', p.label));
+    const n = p.postings;
+    item.appendChild(el('span', 'n',
+      Number.isInteger(n) && n > 0 ? n.toLocaleString('en') : ''));
+    item.addEventListener('click', () => {
+      if (p.active) { closeProfileMenu(); return; }
+      chooseProfile(p, menuError);
+    });
+    menu.appendChild(item);
+  }
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.round(r.left) + 'px';
+  menu.style.top = Math.round(r.bottom + 6) + 'px';
+  menu.style.width = Math.round(r.width) + 'px';
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  const current = menu.querySelector('.menu-item.on') || menu.querySelector('.menu-item');
+  if (current) current.focus();
+}
+
+/* A menu closes when you look away from it: a click elsewhere, Escape, or a
+   window that changes shape under it. */
+document.addEventListener('mousedown', (ev) => {
+  const menu = $('profile-menu');
+  if (!menu || menu.hidden) return;
+  if (menu.contains(ev.target) || $('profile-btn').contains(ev.target)) return;
+  closeProfileMenu();
+});
+document.addEventListener('keydown', (ev) => {
+  const menu = $('profile-menu');
+  if (!menu || menu.hidden) return;
+  if (ev.key === 'Escape') {
+    closeProfileMenu();
+    $('profile-btn').focus();
+    return;
+  }
+  if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+  const items = [...menu.querySelectorAll('.menu-item')];
+  if (!items.length) return;
+  ev.preventDefault();
+  const at = items.indexOf(document.activeElement);
+  const next = at + (ev.key === 'ArrowDown' ? 1 : -1);
+  items[(next + items.length) % items.length].focus();
+});
+window.addEventListener('resize', closeProfileMenu);
 
 /* Which workspace the window is in has to be readable at a glance, the same way
    the app name was: it changes what every number below it means. */
