@@ -1103,6 +1103,7 @@ button.ghost.primary:hover { filter: brightness(1.08); color: var(--on-accent); 
   border-radius: 10px; background: var(--panel); overflow: hidden;
 }
 .sl-item:hover { border-color: var(--cta); }
+.sl-check { margin: 0 2px 0 10px; align-self: center; accent-color: var(--cta); cursor: pointer; }
 .sl-main {
   flex: 1; display: flex; flex-direction: column; gap: 2px; text-align: left;
   padding: 9px 10px; background: none; border: 0; cursor: pointer; min-width: 0;

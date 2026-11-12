@@ -92,6 +92,11 @@ def set_active(conn: sqlite3.Connection, sid: int) -> None:
 
 def ids(conn: sqlite3.Connection, sid: int) -> list[int]:
     """Posting ids in the order they were added."""
+    return ids_in_order(conn, sid)
+
+
+def ids_in_order(conn: sqlite3.Connection, sid: int) -> list[int]:
+    """The list's posting ids in the order they were added."""
     return [int(r["posting_id"]) for r in conn.execute(
         "SELECT posting_id FROM shortlist_items WHERE shortlist_id=? ORDER BY id",
         (int(sid),))]
@@ -126,6 +131,20 @@ def toggle(conn: sqlite3.Connection, sid: int, pid: int) -> bool:
         return False
     add(conn, sid, pid)
     return True
+
+
+def chosen(conn: sqlite3.Connection, sid: int, ids=None) -> list[int]:
+    """The adverts to export: the ones asked for, in the list's own order.
+
+    No ids means the whole list. A selection that matches nothing also means the
+    whole list, because an empty PDF is never what anybody wanted.
+    """
+    everything = ids_in_order(conn, sid)
+    wanted = {int(i) for i in (ids or []) if str(i).lstrip("-").isdigit()}
+    if not wanted:
+        return everything
+    picked = [pid for pid in everything if pid in wanted]
+    return picked or everything
 
 
 def count(conn: sqlite3.Connection, sid: int) -> int:

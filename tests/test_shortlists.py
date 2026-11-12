@@ -109,3 +109,17 @@ def test_a_purged_advert_leaves_no_membership(tmp_path):
     dbm.purge_dead(conn)
     assert shortlists.ids(conn, sid) == [keep]
     assert shortlists.count(conn, sid) == 1
+
+
+def test_export_takes_the_selection_or_the_whole_list(tmp_path):
+    """No ticks means everything; ticks mean exactly those, in list order."""
+    conn = dbm.connect(tmp_path / "t.db")
+    sid = shortlists.ensure_default(conn)
+    a, b, c = (_posting(conn, i) for i in (1, 2, 3))
+    for pid in (a, b, c):
+        shortlists.add(conn, sid, pid)
+    assert shortlists.chosen(conn, sid) == [a, b, c]
+    assert shortlists.chosen(conn, sid, [c, a]) == [a, c]
+    assert shortlists.chosen(conn, sid, []) == [a, b, c]
+    # a selection of ids that are not in the list falls back to the whole list
+    assert shortlists.chosen(conn, sid, [999999]) == [a, b, c]

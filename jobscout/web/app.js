@@ -16,6 +16,9 @@ const F = { q: '', band: 'all', source: 'all', status: 'active', fresh: false,
 // The shortlist lives in the database -- named lists you keep -- and PICKED
 // mirrors the active one, so the grid can paint a card without a round trip.
 const PICKED = new Set();
+// Which adverts of the open list go into the next PDF. Empty means all of them,
+// so a glance at the button says exactly what will happen.
+const SL_PICK = new Set();
 let SL = { lists: [], active: 0, ids: [] };
 // Icons, not glyphs: a plus or a tick sits on the font's math axis and baseline,
 // so a centred line box still looks off-centre inside a 24px circle. An SVG is
@@ -515,12 +518,17 @@ function slName() {
   return found ? found.name : 'Shortlist';
 }
 
+function updateExportLabel() {
+  const n = SL_PICK.size;
+  $('sl-export').textContent = n ? 'Export ' + n + ' selected' : 'Export PDF';
+}
+
 async function exportShortlist() {
   const btn = $('sl-export');
   const label = $('sl-count');
   btn.disabled = true;
   try {
-    const res = await pywebview.api.export_shortlist(SL.active);
+    const res = await pywebview.api.export_shortlist(SL.active, [...SL_PICK]);
     if (res && res.path) {
       label.textContent = 'Saved to ' + res.path.split('/').pop();
     } else {
@@ -535,6 +543,7 @@ async function exportShortlist() {
 
 function applyShortlistState(st) {
   if (!st) return;
+  if (st.active && st.active !== SL.active) SL_PICK.clear();
   SL = { lists: st.lists || [], active: st.active || 0, ids: st.ids || [] };
   PICKED.clear();
   for (const id of SL.ids) PICKED.add(id);
@@ -585,6 +594,7 @@ function renderShortlists() {
   }
   $('sl-export').disabled = PICKED.size === 0;
   $('sl-count').textContent = PICKED.size === 1 ? '1 advert' : PICKED.size + ' adverts';
+  updateExportLabel();
   renderSlItems();
 }
 
@@ -614,6 +624,15 @@ async function renderSlItems() {
   }
   for (const r of rows) {
     const row = el('div', 'sl-item');
+    const tick = document.createElement('input');
+    tick.type = 'checkbox';
+    tick.className = 'sl-check';
+    tick.checked = SL_PICK.has(r.id);
+    tick.setAttribute('aria-label', 'Include this advert in the PDF');
+    tick.addEventListener('change', () => {
+      if (tick.checked) SL_PICK.add(r.id); else SL_PICK.delete(r.id);
+      updateExportLabel();
+    });
     const main = el('button', 'sl-main');
     main.type = 'button';
     main.appendChild(el('span', 'sl-title', r.title || 'Untitled'));
@@ -633,6 +652,7 @@ async function renderSlItems() {
         rm.disabled = false;
       }
     });
+    row.appendChild(tick);
     row.appendChild(main);
     row.appendChild(rm);
     box.appendChild(row);

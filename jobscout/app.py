@@ -1085,15 +1085,18 @@ class JsApi:
             target = int(sid) if sid is not None else shortlists.active(self.conn)
             return api.shortlist_rows(self.conn, shortlists.ids(self.conn, target))
 
-    def export_shortlist(self, sid: int | None = None) -> dict:
+    def export_shortlist(self, sid: int | None = None,
+                         ids: list[int] | None = None) -> dict:
         """Write a shortlist as a PDF and open it.
 
-        A file is the only shareable form the boards cannot break: no login wall,
-        no session-bound link, no client-rendered page.
+        `ids` narrows the export to the adverts ticked on the screen; no ids
+        means the whole list. A file is the only shareable form the boards cannot
+        break: no login wall, no session-bound link, no client-rendered page.
         """
         with dbm.LOCK:
             target = int(sid) if sid is not None else shortlists.active(self.conn)
-            rows = api.shortlist_rows(self.conn, shortlists.ids(self.conn, target))
+            rows = api.shortlist_rows(self.conn,
+                                      shortlists.chosen(self.conn, target, ids))
             name_row = self.conn.execute("SELECT name FROM shortlists WHERE id=?",
                                          (target,)).fetchone()
         if not rows:
