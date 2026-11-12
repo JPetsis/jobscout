@@ -368,23 +368,6 @@ function wireFilters() {
   $('fresh').addEventListener('change', (e) => { F.fresh = e.target.checked; render(); });
   $('closing').addEventListener('change', (e) => { F.closing = e.target.checked; render(); });
   $('newonly').addEventListener('change', (e) => { F.isNew = e.target.checked; render(); });
-  $('shortlist-share').addEventListener('click', async () => {
-    const btn = $('shortlist-share');
-    btn.disabled = true;
-    try {
-      const res = await pywebview.api.export_shortlist(SL.active);
-      if (res && res.path) {
-        $('footer-note').textContent = 'Shortlist saved to ' + res.path;
-      } else {
-        $('footer-note').textContent = (res && res.error) || 'Could not write the PDF.';
-      }
-    } catch (err) {
-      $('footer-note').textContent = 'Could not write the PDF: ' + err;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-  $('shortlist-open').addEventListener('click', openShortlists);
   $('shortlists-btn').addEventListener('click', openShortlists);
   $('sl-close').addEventListener('click', closePanes);
   $('sl-pick').addEventListener('change', async (e) => {
@@ -398,9 +381,7 @@ function wireFilters() {
     if (e.key === 'Enter') saveSlEdit();
     if (e.key === 'Escape') $('sl-edit').hidden = true;
   });
-  $('sl-export').addEventListener('click', async () => {
-    $('shortlist-share').click();
-  });
+  $('sl-export').addEventListener('click', exportShortlist);
   $('sl-delete').addEventListener('click', deleteSl);
 
   for (const b of document.querySelectorAll('#band button')) {
@@ -527,7 +508,6 @@ function render() {
     : ALL.length + ' loaded \u00b7 ') +
     (F.text && TEXT_NOTE ? TEXT_NOTE + ' in the advert text \u00b7 ' : '') +
     'click a card for details \u00b7 S/A/X triage';
-  updateShortlist();
 }
 
 function slName() {
@@ -535,11 +515,22 @@ function slName() {
   return found ? found.name : 'Shortlist';
 }
 
-function updateShortlist() {
-  const n = PICKED.size;
-  $('shortlist-bar').hidden = n === 0;
-  $('shortlist-count').textContent =
-    (n === 1 ? '1 advert' : n + ' adverts') + ' in ' + slName();
+async function exportShortlist() {
+  const btn = $('sl-export');
+  const label = $('sl-count');
+  btn.disabled = true;
+  try {
+    const res = await pywebview.api.export_shortlist(SL.active);
+    if (res && res.path) {
+      label.textContent = 'Saved to ' + res.path.split('/').pop();
+    } else {
+      label.textContent = (res && res.error) || 'Could not write the PDF.';
+    }
+  } catch (err) {
+    label.textContent = 'Could not write the PDF: ' + err;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function applyShortlistState(st) {
@@ -547,7 +538,6 @@ function applyShortlistState(st) {
   SL = { lists: st.lists || [], active: st.active || 0, ids: st.ids || [] };
   PICKED.clear();
   for (const id of SL.ids) PICKED.add(id);
-  updateShortlist();
   syncPickButtons();
   if (!$('shortlists').hidden) renderShortlists();
 }
