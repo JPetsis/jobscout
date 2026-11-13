@@ -104,6 +104,18 @@ class Fetcher:
 
     def get(self, url: str, headers: dict | None = None,
             host_delay: float | None = None) -> tuple[int, str]:
+        status, text, _final = self.get_final(url, headers=headers,
+                                              host_delay=host_delay)
+        return status, text
+
+    def get_final(self, url: str, headers: dict | None = None,
+                  host_delay: float | None = None) -> tuple[int, str, str]:
+        """(status, text, the URL the request ended on).
+
+        urllib follows redirects, and a board that sends an expired advert to its
+        city page answers 200 with a page that is not the advert. Status and body
+        cannot tell the two apart; the final URL can.
+        """
         host = urllib.parse.urlsplit(url).netloc
         # Held across the wait AND the request: the delay must be measured from
         # the end of the previous request to that host, not from its start.
@@ -134,7 +146,7 @@ class Fetcher:
                         text = data.decode(charset, "replace")
                     except LookupError:
                         text = data.decode("utf-8", "replace")
-                    return r.status, text
+                    return r.status, text, r.geturl()
             except urllib.error.HTTPError as e:
                 body = b""
                 try:
@@ -144,7 +156,8 @@ class Fetcher:
                 if e.code >= 500 and attempt <= self.retries:
                     time.sleep(1.5 * attempt)
                     continue
-                return e.code, body.decode("utf-8", "replace")
+                return (e.code, body.decode("utf-8", "replace"),
+                        getattr(e, "url", "") or url)
             except Exception as e:  # URLError, timeout, ssl, ...
                 if attempt <= self.retries:
                     time.sleep(1.5 * attempt)

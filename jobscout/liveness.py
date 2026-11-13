@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import urllib.parse
 
 from .http import FetchError, Fetcher
 
@@ -81,6 +82,31 @@ _AMS_RE = re.compile(rf"jobs\.ams\.at/public/emps/jobs/({_UUID})")
 _EURES_RE = re.compile(r"europa\.eu/eures/portal/jv-se/jv-details/([^/?#]+)")
 _LARAJOBS_RE = re.compile(r"larajobs\.com/job/(\d+)")
 _LARAJOBS_API = "https://larajobs.com/api/jobs"
+
+
+#: An identifier a board puts in the advert's path ("/jobs/10032227").
+_ID_IN_PATH = re.compile(r"(?:^|[/-])(\d{4,})(?:[/?#-]|$)")
+
+
+def _redirected_away(url: str, final: str) -> str:
+    """The page a board served INSTEAD of the advert, or "" when it is the one.
+
+    A board that answers 200 and sends an expired advert to a place page is a
+    soft 404: the status is fine, the body has none of the usual phrases, and
+    the advert is gone. The evidence is the identifier -- the requested path had
+    one and the page we landed on does not.
+    """
+    if not final or final == url:
+        return ""
+    asked = urllib.parse.urlsplit(url)
+    got = urllib.parse.urlsplit(final)
+    ids = set(_ID_IN_PATH.findall(asked.path))
+    if not ids:
+        return ""
+    hay = got.path + ("?" + got.query if got.query else "")
+    if any(pid in hay for pid in ids):
+        return ""
+    return got.path or got.netloc
 
 
 def _probe(fetcher: Fetcher, url: str, headers: dict | None = None) -> tuple[int, str] | tuple[None, str]:
@@ -227,7 +253,14 @@ def check(fetcher: Fetcher, url: str, expires_at: str = "") -> tuple[str, str]:
     if targeted is not None:
         return targeted
     try:
-        status, text = fetcher.get(url)
+        # A fetcher that cannot say where it landed (a test double, or a caller
+        # that only implements the two-value get) is treated as never redirected.
+        getter = getattr(fetcher, "get_final", None)
+        if getter is not None:
+            status, text, final = getter(url)
+        else:
+            status, text = fetcher.get(url)
+            final = url
     except FetchError as e:
         return "unknown", f"fetch error ({e.message[:60]})"
     if status in DEAD_STATUS:
@@ -246,5 +279,10 @@ def check(fetcher: Fetcher, url: str, expires_at: str = "") -> tuple[str, str]:
     m = DEAD_MARKERS.search(text or "")
     if m:
         return "dead", f"page says: {m.group(0)[:48]}"
+    moved = _redirected_away(url, final)
+    if moved:
+        # 200 + none of the dead markers, but the advert is not at that URL any
+        # more: karriere.at answers an expired ad with its city page.
+        return "dead", f"redirected to {moved}"
     return "ok", ""
 

@@ -216,3 +216,36 @@ def test_old_ams_jobdetails_url_is_not_treated_as_a_job():
     # the retired /jobDetails?jobId= route has no uuid, so no targeted probe
     # applies and it falls through to the generic page check
     assert liveness._ats_check(RouteFetcher({}), "https://jobs.ams.at/public/emps/jobDetails?jobId=22875584") is None
+
+class RedirectFetcher:
+    def __init__(self, final):
+        self.final = final
+
+    def get_final(self, url, headers=None):
+        return 200, "<html>Jobs in Brunn am Gebirge</html>", self.final
+
+
+def test_a_redirect_to_a_place_page_is_a_dead_advert():
+    """Reported on karriere.at: an expired advert answers 200 and lands on
+    /jobs/brunn-am-gebirge, so status and dead markers both said alive."""
+    state, note = liveness.check(
+        RedirectFetcher("https://www.karriere.at/jobs/brunn-am-gebirge"),
+        "https://www.karriere.at/jobs/10032227")
+    assert state == "dead"
+    assert "brunn-am-gebirge" in note
+
+
+def test_a_redirect_that_keeps_the_identifier_is_alive():
+    """A canonical/regional redirect is not a dead advert."""
+    state, _ = liveness.check(
+        RedirectFetcher("https://www.karriere.at/en/jobs/10032227?ref=list"),
+        "https://www.karriere.at/jobs/10032227")
+    assert state == "ok"
+
+
+def test_a_url_without_an_identifier_is_never_judged_by_the_redirect():
+    """Only an identifier makes the comparison meaningful."""
+    state, _ = liveness.check(
+        RedirectFetcher("https://example.test/jobs/linz"),
+        "https://example.test/jobs/karriere")
+    assert state == "ok"

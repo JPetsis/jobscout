@@ -65,6 +65,16 @@ class _Paced:
             kw.setdefault("host_delay", self.delays[host])
         return self.fetcher.get(url, headers=headers, **kw)
 
+    def get_final(self, url: str, headers: dict | None = None, **kw):
+        host = urllib.parse.urlsplit(url).netloc
+        if host in self.delays:
+            kw.setdefault("host_delay", self.delays[host])
+        inner = getattr(self.fetcher, "get_final", None)
+        if inner is not None:
+            return inner(url, headers=headers, **kw)
+        status, text = self.fetcher.get(url, headers=headers, **kw)
+        return status, text, url
+
 
 def _get_json(fetcher: Fetcher, url: str):
     try:
