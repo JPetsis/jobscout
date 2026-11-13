@@ -62,6 +62,10 @@ def clean_html_lines(s: str) -> str:
         return ""
     s = _SCRIPT.sub(" ", s)
     s = re.sub(r"<br\s*/?>", "\n", s, flags=re.I)
+    # A list item is a line with a marker. The tag alone gives a newline, which
+    # reads as an ordinary line of prose: that is how a bulleted advert arrived
+    # as one paragraph per item with nothing saying it was a list.
+    s = re.sub(r"<li\b[^>]*>", "\n• ", s, flags=re.I)
     s = _BLOCK_TAGS.sub("\n", s)
     s = _TAG.sub("", s)
     s = html.unescape(s)

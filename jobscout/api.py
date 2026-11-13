@@ -1299,7 +1299,11 @@ def show_posting(conn, cfg, pid: int, *, refresh: bool = False) -> dict | None:
                 fresh = alt
             else:
                 note = why
-        if fresh and len(fresh) > len(desc):
+        # Compare WORDS, not characters: a re-read that restores the paragraphs
+        # is the same advert with the same words and knocks out a few blank
+        # lines, so a length check called it "no better" and kept the blob. A
+        # teaser is shorter in words, which is what the guard is for.
+        if fresh and len(fresh.split()) >= len(desc.split()):
             with dbm.LOCK:
                 dbm.set_description(conn, row["id"], fresh)
             desc = fresh

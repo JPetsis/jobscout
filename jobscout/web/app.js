@@ -1252,15 +1252,37 @@ function pushParagraph(wrap, text) {
   }
 }
 
+/* A section label, not a sentence: short, few words, no final punctuation.
+   Stepstone puts "Einleitung" and "About the company" on their own lines and the
+   renderer used to run them into the next paragraph. */
+const LABEL_MAX = 60;
+/* A line that finished its thought: punctuation, or a domain/address, which is
+   how an advert ends a paragraph when the last thing it says is an email. */
+const COMPLETE = /(?:[.!?…]|\.[a-z]{2,3})$/i;
+
+function isLabel(line) {
+  return line.length <= LABEL_MAX && line.split(/\s+/).length <= 6 &&
+         !SENTENCE_END.test(line) && !BULLET.test(line) && !/^\d+$/.test(line);
+}
+
 function renderDescription(raw) {
   const wrap = el('div', 'd-desc');
-  const lines = String(raw).split('\n');
+  // Some boards lose the space after a full stop ("anbieten.Heute"); restoring
+  // it changes no word and makes the paragraph readable. Presentation only.
+  const text = String(raw).replace(/([.!?])([A-ZÄÖÜ])/g, '$1 $2');
+  const lines = text.split('\n');
   let para = [];
   let list = null;
 
   const flushPara = () => {
     if (!para.length) return;
-    pushParagraph(wrap, para.join(' '));
+    if (para.every(isLabel)) {
+      // A block of labels only ("Ihre Aufgaben" / "Responsibilities") is a
+      // heading for what follows, not the first line of the paragraph.
+      wrap.appendChild(el('h4', null, para.join(' · ')));
+    } else {
+      pushParagraph(wrap, para.join(' '));
+    }
     para = [];
   };
   const flushList = () => {
@@ -1293,6 +1315,15 @@ function renderDescription(raw) {
       wrap.appendChild(el('h4', null, line.replace(/:$/, '')));
       continue;
     }
+    // A label after a finished paragraph starts its own block, or the label
+    // glues itself to the sentence before it ("…rockstardevelopers.de Job
+    // description Wer wir sind"). A wrapped sentence does not end in
+    // punctuation, so it is not flushed here.
+    if (isLabel(line) && para.length && COMPLETE.test(para[para.length - 1])) {
+      flushPara();
+    }
+    // Labels followed by prose: close the heading before the prose joins it.
+    if (para.length && para.every(isLabel) && !isLabel(line)) flushPara();
     para.push(line);
     if (SENTENCE_END.test(line) || BARE_LINK.test(line)) flushPara();
   }

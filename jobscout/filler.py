@@ -30,6 +30,10 @@ MAX_HOSTS = 3
 #: A description shorter than this is a teaser or nothing, not an advert.
 MIN_BODY = 200
 
+#: One-shot marker: bodies stored before the extractor kept block boundaries are
+#: one long line, and only a re-read can give them their paragraphs back.
+FLAT_KEY = "flat_bodies_reset"
+
 
 def queue(conn, limit: int = BATCH) -> list[dict]:
     """Rows that still need a body, best-scoring first.
@@ -38,9 +42,13 @@ def queue(conn, limit: int = BATCH) -> list[dict]:
     longer lists. Everything else with no body and no earlier attempt is fair
     game, whatever the board and however old.
     """
+    # A body with no line break at all is either a teaser or one the old
+    # extractor flattened; both deserve one read, and detail_fetched_at means
+    # once ever.
     rows = conn.execute(
         "SELECT id, source, url, title, company, location, external_id, score "
-        "FROM postings WHERE length(description) < ? AND detail_fetched_at IS NULL "
+        "FROM postings WHERE (length(description) < ? OR instr(description, char(10)) = 0) "
+        "AND detail_fetched_at IS NULL "
         "AND (filtered_reason IS NULL OR filtered_reason NOT LIKE 'no_title_hit%') "
         "AND dup_of IS NULL AND verify_status != 'dead' "
         "ORDER BY score DESC, id DESC LIMIT ?", (MIN_BODY, int(limit))).fetchall()
@@ -124,9 +132,31 @@ def _host(url: str) -> str:
     return urllib.parse.urlsplit(url or "").netloc
 
 
+def reset_flat_bodies(conn) -> int:
+    """One-time: let the queue re-read the bodies stored without line breaks.
+
+    Before `detail.py` used `clean_html_lines`, every JSON-LD advert was stored
+    as one paragraph, so the pane could not show its sections. The text cannot be
+    un-flattened, only fetched again; clearing the stamp puts those rows in the
+    queue, and the pacer that already exists decides how fast. Runs once per
+    store, whatever starts the filler first.
+    """
+    if conn.execute("SELECT 1 FROM meta WHERE key=?", (FLAT_KEY,)).fetchone():
+        return 0
+    n = conn.execute(
+        "UPDATE postings SET detail_fetched_at=NULL "
+        "WHERE detail_fetched_at IS NOT NULL AND length(description) >= 400 "
+        "AND instr(description, char(10)) = 0").rowcount
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                 (FLAT_KEY, "1"))
+    conn.commit()
+    return n
+
+
 def run(cfg, conn, fetcher, *, limit: int = BATCH, seconds: float = SECONDS,
         progress=None, cancel=None, pacer: Pacer | None = None) -> dict:
     """Work the queue until it is empty, the budget is spent or time is up."""
+    reset_flat_bodies(conn)
     # Only postings this profile could match: filling bodies for the other
     # fourteen thousand would spend hours on adverts that can never appear.
     rows = [r for r in queue(conn, 100000) if _title_hit(cfg.prefs, r)][:int(limit)]

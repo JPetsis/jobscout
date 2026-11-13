@@ -189,3 +189,17 @@ def test_xing_counts_what_it_dropped():
     # or the scan summary into "XING is broken".
     assert any("no link" in n for n in f.notes), f.notes
     assert not any("no link" in e for e in f.errors), f.errors
+
+
+def test_the_adverts_paragraphs_and_bullets_survive_extraction():
+    """Reported: adverts arrived as one continuous blob. The JSON-LD carries
+    <p>/<ul>/<li>, and clean_html flattened all of it into spaces."""
+    import json
+    from jobscout.detail import html_detail_page
+    ld = json.dumps({"@type": "JobPosting", "description":
+                     "<p>Über uns</p><p>Wir bauen Software.</p>"
+                     "<ul><li>PHP</li><li>Symfony</li></ul>"})
+    text, why, _raw = html_detail_page("https://example.test/job",
+                                       FakeFetcher(body=_page(ld=ld, og="")))
+    assert why == ""
+    assert text.splitlines() == ["Über uns", "Wir bauen Software.", "• PHP", "• Symfony"]

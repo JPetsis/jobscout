@@ -76,3 +76,10 @@ def test_balanced_json():
     obj, end = balanced_json('var x = {"a": {"b": "}"}}; more', 0)
     assert json.loads(obj) == {"a": {"b": "}"}}
     assert "more" in 'var x = {"a": {"b": "}"}}; more'[end:]
+
+
+def test_a_list_item_keeps_its_marker():
+    """`<li>` gave only a newline, so a bulleted advert arrived as ordinary
+    lines and the pane joined them into one paragraph."""
+    out = clean_html_lines("<p>Aufgaben</p><ul><li>PHP</li><li>Symfony</li></ul>")
+    assert out.splitlines() == ["Aufgaben", "• PHP", "• Symfony"]

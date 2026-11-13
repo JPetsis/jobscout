@@ -5,7 +5,7 @@ import json
 import re
 
 from .http import Fetcher
-from .textutil import clean_html, strip_null_runs
+from .textutil import clean_html, clean_html_lines, strip_null_runs
 
 # Any attributes may sit before `type=`. XING ships
 # `<script data-ch type="application/ld+json">`, and the previous pattern
@@ -92,12 +92,15 @@ def html_detail_page(url: str, fetcher: Fetcher) -> tuple[str, str, str]:
         except ValueError:
             continue
         for posting in _walk(data):
-            desc = strip_null_runs(clean_html(str(posting.get("description") or "")))
+            # clean_html_lines, not clean_html: the block boundaries are the
+            # advert's formatting. Flattening them is what turned every Stepstone
+            # and XING advert into one unreadable paragraph.
+            desc = strip_null_runs(clean_html_lines(str(posting.get("description") or "")))
             if desc:
                 return desc, "", text
     m = _OG.search(text)
     if m:
-        desc = strip_null_runs(clean_html(m.group(1)))
+        desc = strip_null_runs(clean_html_lines(m.group(1)))
         if desc:
             return desc, "", text
     return "", ("The page loads, but it does not publish the full text of this "

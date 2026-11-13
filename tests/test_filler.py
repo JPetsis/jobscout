@@ -25,7 +25,7 @@ def _store(conn, title, description="", source="jobup", dead=False):
 def test_the_queue_takes_what_needs_text_and_skips_the_dead(tmp_path):
     conn = dbm.connect(tmp_path / "t.db")
     _store(conn, "Developer one")
-    _store(conn, "Developer two", description="x" * 400)
+    _store(conn, "Developer two", description=("x" * 200) + "\n" + ("y" * 200))
     _store(conn, "Developer three", dead=True)
     rows = filler.queue(conn)
     assert [r["title"] for r in rows] == ["Developer one"]
@@ -87,3 +87,23 @@ def test_two_hosts_write_without_a_thread_error(tmp_path, monkeypatch):
     out = filler.run(type("C", (), {"prefs": PREFS})(), conn, F(), limit=10,
                      pacer=filler.Pacer(interval=0.0))
     assert out["filled"] == 2 and out["done"] == 2
+
+
+def test_a_long_body_without_a_line_break_is_read_again(tmp_path):
+    """A flat body may be one the old extractor glued together; one read, once
+    ever, is cheap and is the only way to get its paragraphs back."""
+    conn = dbm.connect(tmp_path / "t.db")
+    pid = _store(conn, "Developer flat", description="x" * 400)
+    assert [r["id"] for r in filler.queue(conn)] == [pid]
+
+
+def test_flat_bodies_are_stamped_for_one_re_read(tmp_path):
+    conn = dbm.connect(tmp_path / "t.db")
+    pid = _store(conn, "Developer flat", description="x" * 400)
+    conn.execute("UPDATE postings SET detail_fetched_at='2026-11-01T00:00:00+00:00' "
+                 "WHERE id=?", (pid,))
+    conn.commit()
+    assert [r["id"] for r in filler.queue(conn)] == []
+    assert filler.reset_flat_bodies(conn) == 1
+    assert [r["id"] for r in filler.queue(conn)] == [pid]
+    assert filler.reset_flat_bodies(conn) == 0       # once per store
