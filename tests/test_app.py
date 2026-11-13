@@ -1153,3 +1153,31 @@ def test_the_grid_is_painted_knowing_the_shortlist():
     assert "await loadShortlists();" in boot
     assert boot.index("await loadShortlists();") < boot.index("    render();")
     assert "syncPickButtons();" in js
+
+
+def test_the_description_splitter_cuts_sentences_not_words():
+    """Reported: "Gehalt ab 70.000 EUR" was cut into "70." and "000 EUR", and
+    "Node.js" into "Node." and "js/Express". The pattern allowed a full stop with
+    no space after it to end a sentence, and a thousands separator is not one."""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is needed to run the page's own splitter")
+    js = (Path(__file__).resolve().parent.parent / "jobscout" / "web" / "app.js"
+          ).read_text(encoding="utf-8")
+    snippet = js[js.index("const LONG_PARA"):js.index("\nfunction pushParagraph")]
+    text = ("Gehalt ab 70.000 EUR jährlich. " * 8 +
+            "Node.js/Express Backend, REST APIs. " * 8 +
+            "Craft CMS (inkl. Stripe-Integration) und mehr. " * 6)
+    script = snippet + "\nconsole.log(JSON.stringify(splitSentences(" + json.dumps(text) + ")));"
+    run = subprocess.run([node, "-e", script], capture_output=True, text=True, check=True)
+    chunks = json.loads(run.stdout)
+
+    assert chunks
+    assert not any(c.startswith(("000", "js/", "Stripe")) for c in chunks), chunks
+    assert not any(c.endswith(("70.", "Node.", "inkl.")) for c in chunks), chunks
+    assert any("70.000 EUR" in c for c in chunks)
+    assert any("Node.js/Express" in c for c in chunks)

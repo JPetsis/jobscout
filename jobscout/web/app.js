@@ -1229,8 +1229,34 @@ function appendInline(node, text) {
 const LONG_PARA = 620;
 const PARA_TARGET = 420;
 
+/* Cut a wall of text at sentence ends, and only at sentence ends.
+
+   The old pattern allowed a full stop with NO space after it, so it cut inside
+   "70.000 EUR" and inside "Node.js", and the second half started the next
+   paragraph ("000 EUR jährlich", "js/Express Backend"). A boundary now needs
+   whitespace after the mark and a capital, digit or quote after that, and a
+   full stop between digits is a thousands separator, never a full stop. */
+/* A full stop after one of these ends a word, not a sentence. Without the list,
+   "(inkl. Stripe-Integration)" was cut between "inkl." and "Stripe". */
+const ABBREV = /(?:^|[\s(])(?:inkl|exkl|zzgl|bzw|ca|evtl|ggf|mind|max|usw|etc|bspw|vgl|sog|nr|abs|art|stk|z\.\s?b|d\.\s?h|u\.\s?a|o\.\s?ä)\.$/i;
+
 function splitSentences(text) {
-  const parts = text.match(/[^.!?]+(?:[.!?]+["')\]]*\s*|$)/g) || [text];
+  const parts = [];
+  const boundary = /[.!?]+["')\]]*\s+/g;
+  let start = 0;
+  let m;
+  while ((m = boundary.exec(text)) !== null) {
+    const at = m.index + m[0].length;
+    const after = text[at] || '';
+    if (!/[A-ZÄÖÜ0-9"'(\[]/.test(after)) continue;         // wrapped mid-sentence
+    if (ABBREV.test(text.slice(0, m.index + 1))) continue;   // "inkl." / "z.B."
+    if (text[m.index] === '.' && /\d/.test(text[m.index - 1] || '') &&
+        /\d/.test(after)) continue;                        // 70.000
+    parts.push(text.slice(start, at).trim());
+    start = at;
+  }
+  if (start < text.length) parts.push(text.slice(start).trim());
+  if (!parts.length) parts.push(text);
   const out = [];
   let cur = '';
   for (const part of parts) {
@@ -1274,6 +1300,14 @@ function renderDescription(raw) {
   let para = [];
   let list = null;
 
+  // The next non-empty line, so a paragraph is only ended when the next line
+  // actually starts a new thought. "Node." + "js/Express" is one word.
+  const nextLine = [];
+  for (let i = lines.length - 1, seen = ''; i >= 0; i--) {
+    nextLine[i] = seen;
+    if (lines[i].trim()) seen = lines[i].trim();
+  }
+
   const flushPara = () => {
     if (!para.length) return;
     if (para.every(isLabel)) {
@@ -1291,8 +1325,8 @@ function renderDescription(raw) {
     list = null;
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     if (!line) {
       flushPara();
       flushList();
@@ -1324,8 +1358,18 @@ function renderDescription(raw) {
     }
     // Labels followed by prose: close the heading before the prose joins it.
     if (para.length && para.every(isLabel) && !isLabel(line)) flushPara();
-    para.push(line);
-    if (SENTENCE_END.test(line) || BARE_LINK.test(line)) flushPara();
+    // "Gehalt ab 70." then "000 EUR": the full stop was a thousands separator,
+    // and joining the lines with a space would write "70. 000".
+    const prev = para[para.length - 1];
+    if (prev && /\d\.$/.test(prev) && /^\d/.test(line)) {
+      para[para.length - 1] = prev + line;
+    } else {
+      para.push(line);
+    }
+    // A line ending in a full stop only ends the paragraph when the next line
+    // starts a new thought; a lowercase or digit start means it was wrapped.
+    const continues = /^[a-zäöü0-9]/.test(nextLine[i] || '');
+    if ((SENTENCE_END.test(line) && !continues) || BARE_LINK.test(line)) flushPara();
   }
   flushPara();
   flushList();
